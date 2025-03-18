@@ -25,3 +25,5 @@ go.work.sum
 .env
 
 .idea
+target.txt
+main.out

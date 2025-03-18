@@ -5,18 +5,20 @@ import (
 )
 
 type Options struct {
-	Target           string
+	Exclude          []string
+	Target           chan string
 	Username         string
 	Password         string
 	Domain           string
+	List             bool
 	Search           string
 	LocalAuth        bool
-	List             bool
 	DomainController net.IP
 }
 
-func NewOptions(target, username, password, domain, search string, localAuth, list bool, domainController net.IP) *Options {
+func NewOptions(exclude []string, target chan string, username, password, domain, search string, localAuth, list bool, domainController net.IP) *Options {
 	return &Options{
+		Exclude:          exclude,
 		Target:           target,
 		Username:         username,
 		Password:         password,
