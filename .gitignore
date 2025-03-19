@@ -27,3 +27,4 @@ go.work.sum
 .idea
 target.txt
 main.out
+.DS_Store
