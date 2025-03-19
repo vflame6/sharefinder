@@ -9,17 +9,11 @@ import (
 var (
 	app         = kingpin.New("sharefinder", "Sharefinder is a network share discovery tool that enumerates shares, permissions, files and vulnerabilities in networks and domains.")
 	outputFlag  = app.Flag("output", "file to write output to").Short('o').Default("").String()
-	threadsFlag = app.Flag("threads", "number of threads (default 10)").Default("10").Int()
-	timeoutFlag = app.Flag("timeout", "seconds to wait for connection (default: 5)").Default("5s").Duration()
-	excludeFlag = app.Flag("exclude", "share names to exclude (default: ADMIN$,IPC$").Short('e').Default("ADMIN$,IPC$").String()
-
-	// audit everything
-	//allCommand      = app.Command("all", "")
-	//allTargetFlag   = allCommand.Flag("target", "").Short('t').Required().String()
-	//allUsernameFlag = allCommand.Flag("username", "").Short('u').Required().String()
-	//allPasswordFlag = allCommand.Flag("password", "").Short('p').Required().String()
-	//allDomainFlag   = allCommand.Flag("domain", "").Short('d').Required().String()
-	//allDcFlag       = allCommand.Flag("dc", "").Required().IP()
+	threadsFlag = app.Flag("threads", "number of threads (default 10)").Default("1").Int()
+	timeoutFlag = app.Flag("timeout", "seconds to wait for connection (default 5)").Default("5s").Duration()
+	excludeFlag = app.Flag("exclude", "share names to exclude (default ADMIN$,IPC$").Short('e').Default("ADMIN$,IPC$").String()
+	listFlag    = app.Flag("list", "attempt to list shares (default false)").Default("false").Bool()
+	searchFlag  = app.Flag("search", "pattern to search through files").Short('s').String()
 
 	// find anonymous shares and permissions
 	//anonCommand    = app.Command("anon", "")
@@ -31,38 +25,29 @@ var (
 	authUsernameFlag  = authCommand.Flag("username", "username in format DOMAIN\\username, except for local auth").Short('u').Required().String()
 	authPasswordFlag  = authCommand.Flag("password", "").Short('p').Required().String()
 	authLocalAuthFlag = authCommand.Flag("local-auth", "enable local authentication, the username is passed without domain").Bool()
-	authListFlag      = authCommand.Flag("list", "list shares recursively (default: No)").Default("false").Bool()
-	authSearchFlag    = authCommand.Flag("search", "").Short('s').String()
 
 	// hunt for targets from AD and find shares and permissions, also check for AD vulnerabilities
 	//huntCommand      = app.Command("hunt", "")
 	//huntUsernameFlag = huntCommand.Flag("username", "").Short('u').Required().String()
 	//huntPasswordFlag = huntCommand.Flag("password", "").Short('p').Required().String()
 	//huntDcFlag       = huntCommand.Flag("dc", "").Required().IP()
-
-	// search for vulnerabilities and coerce attacks
-	//vulnCommand       = app.Command("vuln", "")
-	//vulnTargetFlag    = vulnCommand.Arg("target", "").Required().String()
-	//vulnUsernameFlag  = vulnCommand.Flag("username", "").Short('u').String()
-	//vulnPasswordFlag  = vulnCommand.Flag("password", "").Short('p').String()
-	//vulnLocalAuthFlag = vulnCommand.Flag("local-auth", "").Bool()
 )
 
 func main() {
-	kingpin.Version("0.0.1")
-	kingpin.CommandLine.HelpFlag.Short('h')
+	app.Version("0.0.1")
+	app.HelpFlag.Short('h')
 	app.UsageTemplate(kingpin.CompactUsageTemplate)
 
-	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
-	//case allCommand.FullCommand():
-	//	cmd.ExecuteAll()
+	command := kingpin.MustParse(app.Parse(os.Args[1:]))
+	cmd.PrintBanner()
+
 	//case anonCommand.FullCommand():
-	//	cmd.ExecuteAnon(outputFlag, threadsFlag, timeoutFlag, anonTargetFlag, anonListFlag)
-	case authCommand.FullCommand():
-		cmd.ExecuteAuth(*outputFlag, *threadsFlag, *timeoutFlag, *excludeFlag, *authTargetFlag, *authUsernameFlag, *authPasswordFlag, *authLocalAuthFlag, *authListFlag, *authSearchFlag)
-		//case huntCommand.FullCommand():
-		//	cmd.ExecuteHunt()
-		//case vulnCommand.FullCommand():
-		//	cmd.ExecuteVuln()
+	//	cmd.PrintBanner()
+	//	cmd.ExecuteAnon()
+	if command == authCommand.FullCommand() {
+		cmd.ExecuteAuth(*outputFlag, *threadsFlag, *timeoutFlag, *excludeFlag, *authTargetFlag, *authUsernameFlag, *authPasswordFlag, *authLocalAuthFlag, *listFlag, *searchFlag)
 	}
+	//case huntCommand.FullCommand():
+	//	cmd.PrintBanner()
+	//	cmd.ExecuteHunt()
 }

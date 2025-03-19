@@ -4,28 +4,22 @@ import (
 	"bufio"
 	"errors"
 	"github.com/vflame6/sharefinder/utils"
-	"log"
 	"os"
 	"strings"
 	"sync"
-	"time"
 )
 
 type Scanner struct {
 	Options *Options
-	Output  string
 	Threads int
-	Timeout time.Duration
 	Exclude []string
 	Stop    chan bool
 }
 
-func NewScanner(options *Options, output string, threads int, timeout time.Duration) *Scanner {
+func NewScanner(options *Options, threads int) *Scanner {
 	return &Scanner{
 		Options: options,
-		Output:  output,
 		Threads: threads,
-		Timeout: timeout,
 		Stop:    make(chan bool),
 	}
 }
@@ -45,7 +39,6 @@ func (s *Scanner) ParseTargets(target string) error {
 		close(s.Options.Target)
 		return nil
 	}
-	log.Printf("Using targets from %s", target)
 	file, err := os.Open(target)
 	if err != nil {
 		return err
@@ -77,12 +70,15 @@ func (s *Scanner) ParseTargets(target string) error {
 //}
 
 func (s *Scanner) RunAuthEnumeration(wg *sync.WaitGroup) {
-	log.Println("Starting auth enumeration")
 	for i := 0; i < s.Threads; i++ {
 		wg.Add(1)
 		go authThread(s.Stop, s.Options, wg)
 	}
 }
+
+//func (s *Scanner) RunHuntEnumeration() {
+//
+//}
 
 func (s *Scanner) Shutdown() {
 	for i := 0; i < s.Threads; i++ {

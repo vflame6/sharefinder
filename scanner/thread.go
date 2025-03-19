@@ -2,8 +2,9 @@ package scanner
 
 import (
 	"fmt"
-	"github.com/jfjallid/go-smb/smb/dcerpc"
+	"github.com/vflame6/sharefinder/logger"
 	"github.com/vflame6/sharefinder/utils"
+	"log"
 	"slices"
 	"strings"
 	"sync"
@@ -21,51 +22,32 @@ func authThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
 				wg.Done()
 				return
 			}
-			smbOptions := GetNTLMOptions(host, options.Username, options.Password, options.Domain)
-			session, err := GetSession(smbOptions)
+			var hostResult string
+			var readableShares []string
+
+			conn, err := NewNTLMConnection(host, options.Username, options.Password, options.Domain, options.Timeout)
 			if err != nil {
-				fmt.Printf("Error getting session: %v\n", err)
+				log.Println(err)
 				continue
 			}
-			defer session.Close()
+			defer conn.Close()
 
-			isSigningRequired := session.IsSigningRequired()
-
-			if !session.IsAuthenticated() {
-				fmt.Printf("[-] Login failed on %s\n", host)
-			}
-
-			share := "IPC$"
-			err = session.TreeConnect(share)
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-			defer session.TreeDisconnect(share)
-			f, err := session.OpenFile(share, "srvsvc")
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-			defer f.CloseFile()
-
-			bind, err := dcerpc.Bind(f, dcerpc.MSRPCUuidSrvSvc, 3, 0, dcerpc.MSRPCUuidNdr)
-			if err != nil {
-				fmt.Println(err)
+			isSigningRequired := conn.session.IsSigningRequired()
+			if !conn.session.IsAuthenticated() {
+				log.Printf("[-] Login failed on %s\n", host)
 				continue
 			}
 
-			shares, err := bind.NetShareEnumAll(host)
+			targetInfo := conn.GetTargetInfo()
+			hostResult += utils.SPrintHostInfo(host, targetInfo.GuessedOSVersion, targetInfo.DnsComputerName, targetInfo.DnsDomainName, isSigningRequired, false)
+			hostResult += fmt.Sprintf("%-16s %-16s %-16s\n", "Share", "Permissions", "Decription")
+			hostResult += fmt.Sprintf("%-16s %-16s %-16s\n", strings.Repeat("-", 5), strings.Repeat("-", 11), strings.Repeat("-", 10))
+
+			shares, err := conn.ListShares()
 			if err != nil {
-				fmt.Println(err)
+				log.Println(err)
 				continue
 			}
-
-			targetInfo := session.GetTargetInfo()
-
-			fmt.Println(utils.SPrintHostInfo(host, targetInfo.GuessedOSVersion, targetInfo.DnsComputerName, targetInfo.DnsDomainName, isSigningRequired, false))
-			fmt.Printf("%-16s %-16s %-16s\n", "Share", "Permissions", "Decription")
-			fmt.Printf("%-16s %-16s %-16s\n", strings.Repeat("-", 5), strings.Repeat("-", 11), strings.Repeat("-", 10))
 
 			for _, share := range shares {
 				var permissions []string
@@ -74,31 +56,37 @@ func authThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
 					continue
 				}
 
-				session.TreeConnect(share.Name)
-				_, err := session.ListShare(share.Name, "", false)
+				err := conn.CheckReadAccess(share.Name)
 				if err == nil {
 					permissions = append(permissions, "READ")
-				} else {
-					continue
+					readableShares = append(readableShares, share.Name)
+				}
+				if conn.CheckWriteAccess(share.Name) {
+					permissions = append(permissions, "WRITE")
 				}
 
-				fmt.Printf("%-16s %-16s %-16s\n", share.Name, strings.Join(permissions, ","), share.Comment)
+				hostResult += fmt.Sprintf("%-16s %-16s %-16s\n", share.Name, strings.Join(permissions, ","), share.Comment)
+			}
+			logger.Info(hostResult)
 
-				// TODO: implement a check for write permission
-				//if share.Writable {
-				//	permissions = append(permissions, "WRITE")
-				//}
+			if options.List {
+				for _, share := range readableShares {
+					var shareListResult string
 
-				// list directories recursively if enabled
-				if options.List {
-					fmt.Println("List share")
-					listShare(session, share.Name, false)
+					if slices.Contains(options.Exclude, share) {
+						continue
+					}
 
-					fmt.Println("List share recursively")
-					listShare(session, share.Name, true)
+					files, err := conn.ListShare(share)
+					if err != nil {
+						log.Printf("Failed to list share %s\\%s: %s\n", conn.host, share, err)
+					}
+
+					shareListResult += fmt.Sprintf("Listing share %s\\%s\n", host, share)
+					shareListResult += utils.SprintFilesExt(files)
+
+					logger.Info(shareListResult)
 				}
-
-				session.TreeDisconnect(share.Name)
 			}
 		}
 	}

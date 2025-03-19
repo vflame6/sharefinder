@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/vflame6/sharefinder/logger"
 	"github.com/vflame6/sharefinder/scanner"
 	"log"
 	"net"
@@ -9,7 +10,8 @@ import (
 	"time"
 )
 
-//func ExecuteAll() {
+// TODO: implement function to enter global flags once and then add flags from commands
+//func CreateScanner() *scanner.Scanner {
 //
 //}
 
@@ -26,11 +28,12 @@ import (
 //	//s := scanner.NewScanner(options, *output, *threads, *timeout)
 //	//err := s.RunAnonEnumeration()
 //	//if err != nil {
-//	//	log.Fatal(err)
+//	//	logger.Fatal(err)
 //	//}
 //}
 
 func ExecuteAuth(output string, threads int, timeout time.Duration, exclude string, target, username, password string, localauth, list bool, search string) {
+	logger.Info("Executing auth module")
 	var targetDomain string
 	var targetUsername string
 	if localauth {
@@ -44,17 +47,20 @@ func ExecuteAuth(output string, threads int, timeout time.Duration, exclude stri
 	excludeList := strings.Split(exclude, ",")
 
 	options := scanner.NewOptions(
+		output,
+		timeout,
 		excludeList,
 		make(chan string, 256),
 		targetUsername,
 		password,
 		targetDomain,
-		search,
+		search, // TODO: implement search
 		localauth,
 		list,
-		net.IPv4zero,
+		net.IPv4zero, // not used here
 	)
-	s := scanner.NewScanner(options, output, threads, timeout)
+	s := scanner.NewScanner(options, threads)
+
 	var wg sync.WaitGroup
 	s.RunAuthEnumeration(&wg)
 	err := s.ParseTargets(target)
@@ -68,6 +74,3 @@ func ExecuteAuth(output string, threads int, timeout time.Duration, exclude stri
 //
 //}
 //
-//func ExecuteVuln() {
-//
-//}

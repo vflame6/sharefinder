@@ -1,18 +1,29 @@
 package scanner
 
 import (
-	"fmt"
 	"github.com/jfjallid/go-smb/smb"
+	"github.com/jfjallid/go-smb/smb/dcerpc"
 	"github.com/jfjallid/go-smb/spnego"
+	"github.com/vflame6/sharefinder/utils"
+	"io"
+	"log"
 	"time"
 )
+
+// Windows versions
+const ()
 
 var (
 	fileSizeThreshold = uint64(0)
 )
 
-func GetNTLMOptions(host, username, password, domain string) smb.Options {
-	smbOptions := smb.Options{
+type Connection struct {
+	host    string
+	session *smb.Connection
+}
+
+func NewNTLMConnection(host, username, password, domain string, timeout time.Duration) (*Connection, error) {
+	options := smb.Options{
 		Host: host,
 		Port: 445,
 		Initiator: &spnego.NTLMInitiator{
@@ -20,110 +31,111 @@ func GetNTLMOptions(host, username, password, domain string) smb.Options {
 			Password: password,
 			Domain:   domain,
 		},
+		DialTimeout: timeout,
 	}
-	return smbOptions
-}
-
-func GetSession(options smb.Options) (*smb.Connection, error) {
 	session, err := smb.NewConnection(options)
 	if err != nil {
 		return nil, err
 	}
-	return session, nil
+	conn := &Connection{
+		host:    host,
+		session: session,
+	}
+	return conn, nil
 }
 
-//func GetShares() {
-//
+func (conn *Connection) Close() {
+	conn.session.Close()
+}
+
+func (conn *Connection) GetTargetInfo() *smb.TargetInfo {
+	return conn.session.GetTargetInfo()
+}
+
+// TODO: implement admin check - https://github.com/Pennyw0rth/NetExec/blob/91c339ea30bc87118fefa8236cb86a95c1717643/nxc/protocols/smb.py#L637
+//func CheckAdmin(session *smb.Connection) bool {
+//	return false
 //}
-//
 
-func listShare(session *smb.Connection, share string, recurse bool) error {
-	fmt.Printf("Attempting to open share: %s and list content\n", share)
+func (conn *Connection) ListShares() ([]dcerpc.NetShare, error) {
+	share := "IPC$"
+	err := conn.session.TreeConnect(share)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.session.TreeDisconnect(share)
+	f, err := conn.session.OpenFile(share, "srvsvc")
+	if err != nil {
+		return nil, err
+	}
+	defer f.CloseFile()
+	bind, err := dcerpc.Bind(f, dcerpc.MSRPCUuidSrvSvc, 3, 0, dcerpc.MSRPCUuidNdr)
+	if err != nil {
+		return nil, err
+	}
+	shares, err := bind.NetShareEnumAll(conn.host)
+	if err != nil {
+		return nil, err
+	}
+	return shares, nil
+}
+
+func (conn *Connection) CheckReadAccess(share string) error {
+	conn.session.TreeConnect(share)
+	defer conn.session.TreeDisconnect(share)
+
+	_, err := conn.session.ListShare(share, "", false)
+	return err
+}
+
+func (conn *Connection) CheckWriteAccess(share string) bool {
+	tempFile := "\\" + utils.RandSeq(16)
+	tempData := utils.RandSeq(32)
+	tempDir := "\\" + utils.RandSeq(16)
+	conn.session.TreeConnect(share)
+	defer conn.session.TreeDisconnect(share)
+
+	err := conn.session.Mkdir(share, tempFile)
+	if err == nil {
+		err = conn.session.DeleteDir(share, tempFile)
+		if err != nil {
+			log.Printf("[!] Failed to delete created directory %s on share %s\\%s", tempDir, conn.host, share)
+		}
+		return true
+	}
+
+	// if failed to create directory, try to write a file
+	dataSent := false // Track if data has been sent
+	err = conn.session.PutFile(share, tempFile, 0, func(buffer []byte) (int, error) {
+		if dataSent {
+			return 0, io.EOF // Indicate end of file
+		}
+		copy(buffer, tempData) // Copy data into buffer
+		dataSent = true        // Mark as sent
+		return len(tempData), nil
+	})
+	if err == nil {
+		err = conn.session.DeleteFile(share, tempFile)
+		if err != nil {
+			log.Printf("[!] Failed to delete created file %s on share %s\\%s", tempFile, conn.host, share)
+		}
+		return true
+	}
+
+	return false
+}
+
+func (conn *Connection) ListShare(share string) ([]smb.SharedFile, error) {
 	// Connect to share
-	err := session.TreeConnect(share)
+	err := conn.session.TreeConnect(share)
 	if err != nil {
-		if err == smb.StatusMap[smb.StatusBadNetworkName] {
-			fmt.Printf("Share %s can not be found!\n", share)
-			return err
-		}
-		return err
+		return nil, err
 	}
-	files, err := session.ListDirectory(share, "", "")
+	defer conn.session.TreeDisconnect(share)
+
+	files, err := conn.session.ListDirectory(share, "", "")
 	if err != nil {
-		if err == smb.StatusMap[smb.StatusAccessDenied] {
-			session.TreeDisconnect(share)
-			fmt.Printf("Could connect to [%s] but listing files was prohibited\n", share)
-			return err
-		}
-
-		session.TreeDisconnect(share)
-		return err
+		return nil, err
 	}
-
-	fmt.Printf("\n#### Listing files for share (%s) ####\n", share)
-	printFilesExt(files)
-	if recurse {
-		for _, file := range files {
-			if file.IsDir && !file.IsJunction {
-				err = listFilesRecursively(session, share, file.Name, file.FullPath)
-				if err != nil {
-					session.TreeDisconnect(share)
-					return err
-				}
-			}
-		}
-	}
-	session.TreeDisconnect(share)
-	return nil
-}
-
-func printFilesExt(files []smb.SharedFile) {
-	if len(files) > 0 {
-		for _, file := range files {
-			fileType := "file"
-			if file.IsDir {
-				fileType = "dir"
-			} else if file.IsJunction {
-				fileType = "link"
-			}
-			if (fileType == "file") && (file.Size < fileSizeThreshold) {
-				// Skip displaying file
-				continue
-			}
-			// Microsoft handles time as number of 100-nanosecond intervals since January 1, 1601 UTC
-			// So to get a timestamp with unix time, subtract difference in 100-nanosecond intervals
-			// and divide by 10 to convert to microseconds
-			lastWriteTime := time.UnixMicro(int64((file.LastWriteTime - 116444736000000000) / 10))
-			lastWrite := lastWriteTime.Format("Mon Jan 2 15:04:05 MST 2006")
-			fmt.Printf("%-4s  %10d  %-30s  %s\n", fileType, file.Size, lastWrite, file.Name)
-		}
-	}
-	fmt.Println()
-}
-
-func listFilesRecursively(session *smb.Connection, share, parent, dir string) error {
-	parent = fmt.Sprintf("%s\\%s", share, parent)
-	files, err := session.ListDirectory(share, dir, "*")
-	if err != nil {
-		fmt.Printf("Failed to list files in directory (%s) with error: %s\n", dir, err)
-		return nil
-	}
-
-	if len(files) == 0 {
-		return nil
-	}
-
-	fmt.Printf("%s:\n", parent)
-	printFilesExt(files)
-
-	for _, file := range files {
-		if file.IsDir && !file.IsJunction {
-			// Check if folder is filtered
-			err = listFilesRecursively(session, share, file.FullPath, file.FullPath)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return files, nil
 }
