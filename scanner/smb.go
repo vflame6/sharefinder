@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Windows versions
+// TODO: implement Windows versions check
 const ()
 
 var (

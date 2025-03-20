@@ -1,10 +1,12 @@
-# sharefinder
+<h1 align="center">
+  sharefinder
+</h1>
 
-**Active network shares enumeration tool.**
+<h4 align="center">Active network shares enumeration tool.</h4>
 
 ---
 
-`sharefinder` is a network share discovery tool that enumerates shares, permissions, files and vulnerabilities in networks and domains.
+`sharefinder` is a network share discovery tool that enumerates shares, permissions and files in networks and domains.
 
 ## Features
 
@@ -34,7 +36,6 @@ Flags:
   --timeout=5s             seconds to wait for connection (default 5)
   -e, --exclude="ADMIN$,IPC$"  share names to exclude (default ADMIN$,IPC$
   --[no-]list              attempt to list shares (default false)
-  -s, --search=SEARCH          pattern to search through files
   --[no-]version           Show application version.
 
 Commands:

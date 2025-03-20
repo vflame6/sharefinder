@@ -10,10 +10,25 @@ import (
 	"time"
 )
 
-// TODO: implement function to enter global flags once and then add flags from commands
-//func CreateScanner() *scanner.Scanner {
-//
-//}
+func CreateScanner(output string, threads int, timeout time.Duration, exclude string, list bool) *scanner.Scanner {
+	excludeList := strings.Split(exclude, ",")
+
+	options := scanner.NewOptions(
+		output,
+		timeout,
+		excludeList,
+		make(chan string, 256),
+		"",
+		"",
+		"",
+		false,
+		list,
+		net.IPv4zero,
+	)
+	s := scanner.NewScanner(options, threads)
+
+	return s
+}
 
 //func ExecuteAnon(output *string, threads *int, timeout *time.Duration, target *string) {
 //	//options := scanner.NewOptions(
@@ -32,7 +47,7 @@ import (
 //	//}
 //}
 
-func ExecuteAuth(output string, threads int, timeout time.Duration, exclude string, target, username, password string, localauth, list bool, search string) {
+func ExecuteAuth(s *scanner.Scanner, target, username, password string, localauth bool) {
 	logger.Info("Executing auth module")
 	var targetDomain string
 	var targetUsername string
@@ -44,22 +59,11 @@ func ExecuteAuth(output string, threads int, timeout time.Duration, exclude stri
 		targetDomain = trySplit[0]
 		targetUsername = trySplit[1]
 	}
-	excludeList := strings.Split(exclude, ",")
 
-	options := scanner.NewOptions(
-		output,
-		timeout,
-		excludeList,
-		make(chan string, 256),
-		targetUsername,
-		password,
-		targetDomain,
-		search, // TODO: implement search
-		localauth,
-		list,
-		net.IPv4zero, // not used here
-	)
-	s := scanner.NewScanner(options, threads)
+	s.Options.Username = targetUsername
+	s.Options.Password = password
+	s.Options.Domain = targetDomain
+	s.Options.LocalAuth = localauth
 
 	var wg sync.WaitGroup
 	s.RunAuthEnumeration(&wg)

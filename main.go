@@ -13,7 +13,10 @@ var (
 	timeoutFlag = app.Flag("timeout", "seconds to wait for connection (default 5)").Default("5s").Duration()
 	excludeFlag = app.Flag("exclude", "share names to exclude (default ADMIN$,IPC$").Short('e').Default("ADMIN$,IPC$").String()
 	listFlag    = app.Flag("list", "attempt to list shares (default false)").Default("false").Bool()
-	searchFlag  = app.Flag("search", "pattern to search through files").Short('s').String()
+	// TODO: implement recursive list through shares
+	// TODO: implement file search through shares
+	//searchFlag  = app.Flag("search", "pattern to search through files").Short('s').String()
+	// TODO: implement proxy support
 
 	// find anonymous shares and permissions
 	//anonCommand    = app.Command("anon", "")
@@ -41,13 +44,15 @@ func main() {
 	command := kingpin.MustParse(app.Parse(os.Args[1:]))
 	cmd.PrintBanner()
 
-	//case anonCommand.FullCommand():
-	//	cmd.PrintBanner()
+	scanner := cmd.CreateScanner(*outputFlag, *threadsFlag, *timeoutFlag, *excludeFlag, *listFlag)
+
+	//if command == anonCommand.FullCommand() {
 	//	cmd.ExecuteAnon()
+	//}
 	if command == authCommand.FullCommand() {
-		cmd.ExecuteAuth(*outputFlag, *threadsFlag, *timeoutFlag, *excludeFlag, *authTargetFlag, *authUsernameFlag, *authPasswordFlag, *authLocalAuthFlag, *listFlag, *searchFlag)
+		cmd.ExecuteAuth(scanner, *authTargetFlag, *authUsernameFlag, *authPasswordFlag, *authLocalAuthFlag)
 	}
-	//case huntCommand.FullCommand():
-	//	cmd.PrintBanner()
+	//if command == huntCommand.FullCommand() {
 	//	cmd.ExecuteHunt()
+	//}
 }
