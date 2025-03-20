@@ -7,16 +7,18 @@ import (
 )
 
 var (
-	app         = kingpin.New("sharefinder", "Sharefinder is a network share discovery tool that enumerates shares, permissions, files and vulnerabilities in networks and domains.")
-	outputFlag  = app.Flag("output", "file to write output to").Short('o').Default("").String()
+	app        = kingpin.New("sharefinder", "Sharefinder is a network share discovery tool that enumerates shares, permissions, files and vulnerabilities in networks and domains.")
+	outputFlag = app.Flag("output", "file to write output to").Short('o').Default("").String()
+	// TODO: implement raw output
+	// TODO: implement HTML output
 	threadsFlag = app.Flag("threads", "number of threads (default 10)").Default("1").Int()
 	timeoutFlag = app.Flag("timeout", "seconds to wait for connection (default 5)").Default("5s").Duration()
 	excludeFlag = app.Flag("exclude", "share names to exclude (default ADMIN$,IPC$").Short('e').Default("ADMIN$,IPC$").String()
 	listFlag    = app.Flag("list", "attempt to list shares (default false)").Default("false").Bool()
-	// TODO: implement recursive list through shares
-	// TODO: implement file search through shares
+	// TODO: implement recursive list through shares (--recurse)
+	// TODO: implement file search through shares (--search)
 	//searchFlag  = app.Flag("search", "pattern to search through files").Short('s').String()
-	// TODO: implement proxy support
+	// TODO: implement proxy support (--proxy)
 
 	// find anonymous shares and permissions
 	//anonCommand    = app.Command("anon", "")
@@ -34,10 +36,11 @@ var (
 	//huntUsernameFlag = huntCommand.Flag("username", "").Short('u').Required().String()
 	//huntPasswordFlag = huntCommand.Flag("password", "").Short('p').Required().String()
 	//huntDcFlag       = huntCommand.Flag("dc", "").Required().IP()
+	// TODO: add kerberos support (-k and --no-pass)
 )
 
 func main() {
-	app.Version("0.0.1")
+	app.Version("1.0.0")
 	app.HelpFlag.Short('h')
 	app.UsageTemplate(kingpin.CompactUsageTemplate)
 

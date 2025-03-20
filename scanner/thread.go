@@ -67,10 +67,10 @@ func authThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
 
 				hostResult += fmt.Sprintf("%-16s %-16s %-16s\n", share.Name, strings.Join(permissions, ","), share.Comment)
 			}
-			logger.Info(hostResult)
 
 			if options.List {
 				for _, share := range readableShares {
+					hostResult += "\n"
 					var shareListResult string
 
 					if slices.Contains(options.Exclude, share) {
@@ -85,7 +85,14 @@ func authThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
 					shareListResult += fmt.Sprintf("Listing share %s\\%s\n", host, share)
 					shareListResult += utils.SprintFilesExt(files)
 
-					logger.Info(shareListResult)
+					hostResult += shareListResult
+				}
+			}
+			logger.Info(hostResult)
+			if options.Output {
+				err := options.Writer.Write(hostResult, options.File)
+				if err != nil {
+					log.Println(err)
 				}
 			}
 		}

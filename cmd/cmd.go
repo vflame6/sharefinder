@@ -5,16 +5,32 @@ import (
 	"github.com/vflame6/sharefinder/scanner"
 	"log"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"time"
 )
 
 func CreateScanner(output string, threads int, timeout time.Duration, exclude string, list bool) *scanner.Scanner {
+	outputOption := false
+	var outputWriter *scanner.OutputWriter
+	var file *os.File
+	var err error
+	if output != "" {
+		outputOption = true
+		outputWriter = scanner.NewOutputWriter(false)
+		file, err = outputWriter.CreateFile(output, false)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	excludeList := strings.Split(exclude, ",")
 
 	options := scanner.NewOptions(
-		output,
+		outputOption,
+		outputWriter,
+		file,
 		timeout,
 		excludeList,
 		make(chan string, 256),
@@ -72,6 +88,10 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password string, localaut
 		log.Fatal(err)
 	}
 	wg.Wait()
+
+	if s.Options.Output {
+		s.Options.File.Close()
+	}
 }
 
 //func ExecuteHunt() {
