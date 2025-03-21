@@ -16,6 +16,8 @@
 
 ## Features
 
+![sharefinder](static/sharefinder_demo.jpg)
+
 Main commands:
 
 - `hunt`: hunt network shares inside Active Directory domain
