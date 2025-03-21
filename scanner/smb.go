@@ -10,11 +10,11 @@ import (
 )
 
 // TODO: implement Windows versions check
-const ()
-
-var (
-	fileSizeThreshold = uint64(0)
-)
+//const ()
+//
+//var (
+//	fileSizeThreshold = uint64(0)
+//)
 
 type Connection struct {
 	host    string
@@ -50,6 +50,9 @@ func (conn *Connection) Close() {
 func (conn *Connection) GetTargetInfo() *smb.TargetInfo {
 	return conn.session.GetTargetInfo()
 }
+
+// TODO: implement Guest check
+// func CheckGuest() bool {}
 
 // TODO: implement admin check - https://github.com/Pennyw0rth/NetExec/blob/91c339ea30bc87118fefa8236cb86a95c1717643/nxc/protocols/smb.py#L637
 //func CheckAdmin(session *smb.Connection) bool {
@@ -88,24 +91,15 @@ func (conn *Connection) CheckReadAccess(share string) error {
 }
 
 func (conn *Connection) CheckWriteAccess(share string) bool {
-	tempFile := "\\" + RandSeq(16)
+	tempFile := RandSeq(16) + ".txt"
 	tempData := RandSeq(32)
-	tempDir := "\\" + RandSeq(16)
+	//tempDir := RandSeq(16)
 	conn.session.TreeConnect(share)
 	defer conn.session.TreeDisconnect(share)
 
-	err := conn.session.Mkdir(share, tempFile)
-	if err == nil {
-		err = conn.session.DeleteDir(share, tempFile)
-		if err != nil {
-			log.Printf("[!] Failed to delete created directory %s on share %s\\%s", tempDir, conn.host, share)
-		}
-		return true
-	}
-
-	// if failed to create directory, try to write a file
+	// try to write a file
 	dataSent := false // Track if data has been sent
-	err = conn.session.PutFile(share, tempFile, 0, func(buffer []byte) (int, error) {
+	err := conn.session.PutFile(share, tempFile, 0, func(buffer []byte) (int, error) {
 		if dataSent {
 			return 0, io.EOF // Indicate end of file
 		}
@@ -120,6 +114,17 @@ func (conn *Connection) CheckWriteAccess(share string) bool {
 		}
 		return true
 	}
+
+	// TODO: review why it works bad. The library outputs error 0xc0000061 and I can't get it silent
+	// if failed to create a file, try create a directory
+	//err = conn.session.MkdirAll(share, tempDir)
+	//if err == nil {
+	//	err = conn.session.DeleteDir(share, tempDir)
+	//	if err != nil {
+	//		log.Printf("[!] Failed to delete created directory %s on share %s\\%s", tempDir, conn.host, share)
+	//	}
+	//	return true
+	//}
 
 	return false
 }

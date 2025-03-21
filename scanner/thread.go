@@ -4,16 +4,40 @@ import (
 	"fmt"
 	"github.com/vflame6/sharefinder/logger"
 	"log"
+	"net"
 	"slices"
 	"strings"
 	"sync"
 )
 
+func scanThread(s <-chan bool, wg *sync.WaitGroup, targets, results chan net.IP, options *Options) {
+	defer wg.Done()
+	for {
+		select {
+		case <-s:
+			return
+		default:
+			host, ok := <-targets
+			if !ok {
+				return
+			}
+			address := host.String() + ":445"
+			conn, err := net.Dial("tcp", address)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			conn.Close()
+			results <- host
+		}
+	}
+}
+
 func enumerateHost(host string, options *Options) (string, error) {
 	var hostResult string
 	var readableShares []string
 
-	conn, err := NewNTLMConnection(host, "a", "", "", options.Timeout)
+	conn, err := NewNTLMConnection(host, options.Username, options.Password, options.Domain, options.Timeout)
 	if err != nil {
 		return "", err
 	}

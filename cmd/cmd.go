@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"github.com/vflame6/sharefinder/logger"
 	"github.com/vflame6/sharefinder/scanner"
@@ -76,6 +77,9 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password string, localaut
 		targetUsername = username
 	} else {
 		trySplit := strings.Split(username, "\\")
+		if len(trySplit) != 2 {
+			log.Fatal(errors.New("Invalid username. Try DOMAIN\\username"))
+		}
 		targetDomain = trySplit[0]
 		targetUsername = trySplit[1]
 	}
@@ -98,7 +102,43 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password string, localaut
 	}
 }
 
-//func ExecuteHunt() {
-//
-//}
-//
+func ExecuteHunt(s *scanner.Scanner, username, password string, dc net.IP) {
+	logger.Info("Executing hunt module")
+	var targetDomain string
+	var targetUsername string
+	trySplit := strings.Split(username, "\\")
+	if len(trySplit) != 2 {
+		log.Fatal(errors.New("Invalid username. Try DOMAIN\\username"))
+	}
+	targetDomain = strings.ToLower(trySplit[0])
+	targetUsername = strings.ToLower(trySplit[1])
+
+	s.Options.Username = targetUsername
+	s.Options.Password = password
+	s.Options.Domain = targetDomain
+	s.Options.LocalAuth = false
+	s.Options.DomainController = dc
+
+	var wg sync.WaitGroup
+
+	// enumerate possible targets via domain controller
+	possibleTargets, err := s.RunEnumerateDomainComputers()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// scan every possible target for opened port 445
+	targets := s.RunHuntDomainTargets(&wg, possibleTargets)
+
+	// check for shares and permissions on identified targets
+	s.RunAuthEnumeration(&wg)
+	err = s.ParseTargetsInMemory(targets)
+	if err != nil {
+		log.Fatal(err)
+	}
+	wg.Wait()
+
+	if s.Options.Output {
+		s.Options.File.Close()
+	}
+}
