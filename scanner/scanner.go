@@ -63,11 +63,6 @@ func (s *Scanner) ParseTargets(target string) error {
 	return nil
 }
 
-//func (s *Scanner) RunAnonEnumeration() error {
-//
-//	return nil
-//}
-
 func (s *Scanner) RunAuthEnumeration(wg *sync.WaitGroup) {
 	for i := 0; i < s.Threads; i++ {
 		wg.Add(1)
