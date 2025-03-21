@@ -3,7 +3,6 @@ package scanner
 import (
 	"bufio"
 	"errors"
-	"github.com/vflame6/sharefinder/utils"
 	"os"
 	"strings"
 	"sync"
@@ -29,7 +28,7 @@ func (s *Scanner) ParseTargets(target string) error {
 	if _, err := os.Stat(target); errors.Is(err, os.ErrNotExist) {
 		// target file does not exist
 		// try to parse as IP/CIDR
-		targets, err = utils.ParseIPOrCIDR(target)
+		targets, err = ParseIPOrCIDR(target)
 		if err != nil {
 			return err
 		}
@@ -52,7 +51,7 @@ func (s *Scanner) ParseTargets(target string) error {
 			continue
 		}
 
-		targets, err = utils.ParseIPOrCIDR(line)
+		targets, err = ParseIPOrCIDR(line)
 		if err != nil {
 			return err
 		}

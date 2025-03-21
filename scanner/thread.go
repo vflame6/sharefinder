@@ -3,7 +3,6 @@ package scanner
 import (
 	"fmt"
 	"github.com/vflame6/sharefinder/logger"
-	"github.com/vflame6/sharefinder/utils"
 	"log"
 	"slices"
 	"strings"
@@ -39,7 +38,7 @@ func authThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
 			}
 
 			targetInfo := conn.GetTargetInfo()
-			hostResult += utils.SPrintHostInfo(host, targetInfo.GuessedOSVersion, targetInfo.DnsComputerName, targetInfo.DnsDomainName, isSigningRequired, false)
+			hostResult += SPrintHostInfo(host, targetInfo.GuessedOSVersion, targetInfo.DnsComputerName, targetInfo.DnsDomainName, isSigningRequired, false)
 			hostResult += fmt.Sprintf("%-16s %-16s %-16s\n", "Share", "Permissions", "Decription")
 			hostResult += fmt.Sprintf("%-16s %-16s %-16s\n", strings.Repeat("-", 5), strings.Repeat("-", 11), strings.Repeat("-", 10))
 
@@ -83,7 +82,7 @@ func authThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
 					}
 
 					shareListResult += fmt.Sprintf("Listing share %s\\%s\n", host, share)
-					shareListResult += utils.SprintFilesExt(files)
+					shareListResult += SprintFilesExt(files)
 
 					hostResult += shareListResult
 				}

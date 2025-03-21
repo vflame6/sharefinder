@@ -4,7 +4,6 @@ import (
 	"github.com/jfjallid/go-smb/smb"
 	"github.com/jfjallid/go-smb/smb/dcerpc"
 	"github.com/jfjallid/go-smb/spnego"
-	"github.com/vflame6/sharefinder/utils"
 	"io"
 	"log"
 	"time"
@@ -89,9 +88,9 @@ func (conn *Connection) CheckReadAccess(share string) error {
 }
 
 func (conn *Connection) CheckWriteAccess(share string) bool {
-	tempFile := "\\" + utils.RandSeq(16)
-	tempData := utils.RandSeq(32)
-	tempDir := "\\" + utils.RandSeq(16)
+	tempFile := "\\" + RandSeq(16)
+	tempData := RandSeq(32)
+	tempDir := "\\" + RandSeq(16)
 	conn.session.TreeConnect(share)
 	defer conn.session.TreeDisconnect(share)
 
