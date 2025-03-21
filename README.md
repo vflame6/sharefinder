@@ -14,7 +14,7 @@
 
 `sharefinder` is a network share discovery tool that enumerates shares, permissions and files in networks and domains.
 
-## Features
+# Features
 
 ![sharefinder](static/sharefinder_demo.jpg)
 
@@ -24,7 +24,7 @@ Main commands:
 - `auth`: scan network for shares with specified credentials
 - `anon`: search for shares accessible by anonymous/guest account
 
-## Usage
+# Usage
 
 ```shell
 sharefinder -h
@@ -55,7 +55,7 @@ Commands:
   hunt --username=USERNAME --password=PASSWORD <dc>
 ```
 
-## Installation
+# Installation
 
 `sharefinder` requires **go1.24** to install successfully.
 
