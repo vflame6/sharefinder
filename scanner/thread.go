@@ -22,12 +22,11 @@ func scanThread(s <-chan bool, wg *sync.WaitGroup, targets, results chan net.IP,
 				return
 			}
 			address := host.String() + ":445"
-			conn, err := net.Dial("tcp", address)
+			conn, err := net.DialTimeout("tcp", address, options.Timeout)
 			if err != nil {
-				log.Println(err)
 				continue
 			}
-			conn.Close()
+			_ = conn.Close()
 			results <- host
 		}
 	}
@@ -60,10 +59,6 @@ func enumerateHost(host string, options *Options) (string, error) {
 
 	for _, share := range shares {
 		var permissions []string
-
-		if slices.Contains(options.Exclude, share.Name) {
-			continue
-		}
 
 		err := conn.CheckReadAccess(share.Name)
 		if err == nil {

@@ -64,7 +64,7 @@ func ExecuteAnon(s *scanner.Scanner, target string) {
 	wg.Wait()
 
 	if s.Options.Output {
-		s.Options.File.Close()
+		_ = s.Options.File.Close()
 	}
 }
 
@@ -78,7 +78,7 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password string, localaut
 	} else {
 		trySplit := strings.Split(username, "\\")
 		if len(trySplit) != 2 {
-			log.Fatal(errors.New("Invalid username. Try DOMAIN\\username"))
+			log.Fatal(errors.New("invalid username. Try DOMAIN\\username"))
 		}
 		targetDomain = trySplit[0]
 		targetUsername = trySplit[1]
@@ -98,7 +98,7 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password string, localaut
 	wg.Wait()
 
 	if s.Options.Output {
-		s.Options.File.Close()
+		_ = s.Options.File.Close()
 	}
 }
 
@@ -129,6 +129,7 @@ func ExecuteHunt(s *scanner.Scanner, username, password string, dc net.IP) {
 
 	// scan every possible target for opened port 445
 	targets := s.RunHuntDomainTargets(&wg, possibleTargets)
+	logger.Info(fmt.Sprintf("Found %d targets to enumerate", len(targets)))
 
 	// check for shares and permissions on identified targets
 	s.RunAuthEnumeration(&wg)
@@ -139,6 +140,6 @@ func ExecuteHunt(s *scanner.Scanner, username, password string, dc net.IP) {
 	wg.Wait()
 
 	if s.Options.Output {
-		s.Options.File.Close()
+		_ = s.Options.File.Close()
 	}
 }

@@ -7,21 +7,24 @@ import (
 )
 
 var (
-	app        = kingpin.New("sharefinder", "Sharefinder is a network share discovery tool that enumerates shares, permissions, files and vulnerabilities in networks and domains.")
+	app = kingpin.New("sharefinder", "Sharefinder is a network share discovery tool that enumerates shares, permissions, files and vulnerabilities in networks and domains.")
+
+	// global flags
 	outputFlag = app.Flag("output", "file to write output to").Short('o').Default("").String()
 	// TODO: implement HTML output
 	threadsFlag = app.Flag("threads", "number of threads (default 1)").Default("1").Int()
 	timeoutFlag = app.Flag("timeout", "seconds to wait for connection (default 5s)").Default("5s").Duration()
-	excludeFlag = app.Flag("exclude", "share names to exclude (default None)").Short('e').Default("").String()
+	excludeFlag = app.Flag("exclude", "share names to exclude (default IPC$)").Short('e').Default("IPC$").String()
 	listFlag    = app.Flag("list", "attempt to list shares (default false)").Default("false").Bool()
 	// TODO: implement recursive list through shares (--recurse)
 	// TODO: implement file search through shares (--search)
 	//searchFlag  = app.Flag("search", "pattern to search through files").Short('s').String()
 	// TODO: implement proxy support (--proxy)
 
-	// find anonymous shares and permissions
+	// find anonymous (guest) shares and permissions
 	anonCommand    = app.Command("anon", "anonymous module")
 	anonTargetFlag = anonCommand.Arg("target", "target, IP range or filename").Required().String()
+	// TODO: implement null session check
 
 	// find authenticated shares and permissions
 	authCommand       = app.Command("auth", "authenticated module")
