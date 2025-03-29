@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -21,7 +22,7 @@ func scanThread(s <-chan bool, wg *sync.WaitGroup, targets, results chan net.IP,
 			if !ok {
 				return
 			}
-			address := host.String() + ":445"
+			address := host.String() + ":" + strconv.Itoa(options.SmbPort)
 			conn, err := net.DialTimeout("tcp", address, options.Timeout)
 			if err != nil {
 				continue
@@ -36,7 +37,7 @@ func enumerateHost(host string, options *Options) (string, error) {
 	var hostResult string
 	var readableShares []string
 
-	conn, err := NewNTLMConnection(host, options.Username, options.Password, options.Domain, options.Timeout)
+	conn, err := NewNTLMConnection(host, options.Username, options.Password, options.Domain, options.Timeout, options.SmbPort)
 	if err != nil {
 		return "", err
 	}

@@ -40,3 +40,18 @@ func Info(msg string) {
 		Log.logger.Println(msg)
 	}
 }
+
+// Infof works like Info with format string parsing
+func Infof(format string, args ...interface{}) {
+	Log.mutex.Lock()
+	defer Log.mutex.Unlock()
+	lines := strings.Split(fmt.Sprintf(format, args...), "\n")
+	if len(lines) > 1 {
+		firstLine := lines[0]
+		Log.logger.Println(firstLine)
+		padding := strings.Repeat(" ", 20)
+		for _, line := range lines[1:] {
+			fmt.Println(padding + line)
+		}
+	}
+}

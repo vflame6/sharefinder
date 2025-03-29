@@ -21,10 +21,10 @@ type Connection struct {
 	session *smb.Connection
 }
 
-func NewNTLMConnection(host, username, password, domain string, timeout time.Duration) (*Connection, error) {
+func NewNTLMConnection(host, username, password, domain string, timeout time.Duration, smbPort int) (*Connection, error) {
 	options := smb.Options{
 		Host: host,
-		Port: 445,
+		Port: smbPort,
 		Initiator: &spnego.NTLMInitiator{
 			User:     username,
 			Password: password,

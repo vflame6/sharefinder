@@ -12,12 +12,11 @@ import (
 var mu sync.Mutex
 
 type OutputWriter struct {
-	HTML bool
 }
 
 // NewOutputWriter creates a new OutputWriter
-func NewOutputWriter(html bool) *OutputWriter {
-	return &OutputWriter{HTML: html}
+func NewOutputWriter() *OutputWriter {
+	return &OutputWriter{}
 }
 
 func (o *OutputWriter) CreateFile(filename string, appendToFile bool) (*os.File, error) {

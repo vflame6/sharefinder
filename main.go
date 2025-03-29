@@ -18,13 +18,15 @@ var (
 	listFlag    = app.Flag("list", "attempt to list shares (default false)").Default("false").Bool()
 	// TODO: implement recursive list through shares (--recurse)
 	// TODO: implement file search through shares (--search)
+	// TODO: implement search for interesting files through shares
 	//searchFlag  = app.Flag("search", "pattern to search through files").Short('s').String()
 	// TODO: implement proxy support (--proxy)
+	smbPortFlag = app.Flag("smb-port", "target port of SMB service").Default("445").Int()
 
 	// find anonymous (guest) shares and permissions
 	anonCommand    = app.Command("anon", "anonymous module")
 	anonTargetFlag = anonCommand.Arg("target", "target, IP range or filename").Required().String()
-	// TODO: implement null session check
+	// TODO: implement null session check - https://sensepost.com/blog/2024/guest-vs-null-session-on-windows/#:~:text=To%20begin%20with%2C%20let's%20clarify,on%20a%20built-in%20group
 
 	// find authenticated shares and permissions
 	authCommand       = app.Command("auth", "authenticated module")
@@ -46,14 +48,14 @@ var (
 )
 
 func main() {
-	app.Version("1.0.0")
+	app.Version("1.1.0")
 	app.HelpFlag.Short('h')
 	app.UsageTemplate(kingpin.CompactUsageTemplate)
 
 	command := kingpin.MustParse(app.Parse(os.Args[1:]))
 	cmd.PrintBanner()
 
-	scanner := cmd.CreateScanner(*outputFlag, *threadsFlag, *timeoutFlag, *excludeFlag, *listFlag)
+	scanner := cmd.CreateScanner(*outputFlag, *threadsFlag, *timeoutFlag, *excludeFlag, *listFlag, *smbPortFlag)
 
 	if command == anonCommand.FullCommand() {
 		cmd.ExecuteAnon(scanner, *anonTargetFlag)

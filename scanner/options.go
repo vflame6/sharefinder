@@ -7,6 +7,7 @@ import (
 )
 
 type Options struct {
+	SmbPort          int
 	Output           bool
 	Writer           *OutputWriter
 	File             *os.File
@@ -22,8 +23,9 @@ type Options struct {
 	DomainController net.IP
 }
 
-func NewOptions(output bool, writer *OutputWriter, file *os.File, timeout time.Duration, exclude []string, target chan string, username, password, domain string, localAuth, list bool, domainController net.IP) *Options {
+func NewOptions(smbPort int, output bool, writer *OutputWriter, file *os.File, timeout time.Duration, exclude []string, target chan string, username, password, domain string, localAuth, list bool, domainController net.IP) *Options {
 	return &Options{
+		SmbPort:          smbPort,
 		Output:           output,
 		Writer:           writer,
 		File:             file,

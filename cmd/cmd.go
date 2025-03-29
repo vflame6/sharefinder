@@ -13,14 +13,14 @@ import (
 	"time"
 )
 
-func CreateScanner(output string, threads int, timeout time.Duration, exclude string, list bool) *scanner.Scanner {
+func CreateScanner(output string, threads int, timeout time.Duration, exclude string, list bool, smbPort int) *scanner.Scanner {
 	outputOption := false
 	var outputWriter *scanner.OutputWriter
 	var file *os.File
 	var err error
 	if output != "" {
 		outputOption = true
-		outputWriter = scanner.NewOutputWriter(false)
+		outputWriter = scanner.NewOutputWriter()
 		file, err = outputWriter.CreateFile(output, false)
 		if err != nil {
 			log.Fatal(err)
@@ -30,6 +30,7 @@ func CreateScanner(output string, threads int, timeout time.Duration, exclude st
 	excludeList := strings.Split(exclude, ",")
 
 	options := scanner.NewOptions(
+		smbPort,
 		outputOption,
 		outputWriter,
 		file,
@@ -121,13 +122,16 @@ func ExecuteHunt(s *scanner.Scanner, username, password string, dc net.IP) {
 
 	var wg sync.WaitGroup
 
+	logger.Infof("Starting %s domain enumeration", s.Options.Domain)
+
 	// enumerate possible targets via domain controller
 	possibleTargets, err := s.RunEnumerateDomainComputers()
 	if err != nil {
 		log.Fatal(err)
 	}
+	logger.Infof("Found %d possible targets", len(possibleTargets))
 
-	// scan every possible target for opened port 445
+	// scan every possible target for opened SMB port
 	targets := s.RunHuntDomainTargets(&wg, possibleTargets)
 	logger.Info(fmt.Sprintf("Found %d targets to enumerate", len(targets)))
 
