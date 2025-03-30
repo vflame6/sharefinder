@@ -28,3 +28,6 @@ go.work.sum
 target.txt
 main.out
 .DS_Store
+/result
+/result.xml
+/result.html

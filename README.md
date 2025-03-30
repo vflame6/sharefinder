@@ -5,7 +5,7 @@
 <h4 align="center">Active network shares enumeration tool.</h4>
 
 <p align="center">
-<a href="https://goreportcard.com/report/github.com/vflame6/sharefinder"><img src="https://goreportcard.com/badge/github.com/vflame6/sharefinder"></a>
+<a href="https://goreportcard.com/report/github.com/vflame6/sharefinder" target="_blank"><img src="https://goreportcard.com/badge/github.com/vflame6/sharefinder"></a>
 <a href="https://github.com/vflame6/sharefinder/issues"><img src="https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat"></a>
 <a href="https://github.com/vflame6/sharefinder/releases"><img src="https://img.shields.io/github/release/vflame6/sharefinder"></a>
 </p>

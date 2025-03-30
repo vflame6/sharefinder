@@ -4,29 +4,32 @@ import (
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/vflame6/sharefinder/cmd"
 	"os"
+	"time"
 )
 
 var (
-	app = kingpin.New("sharefinder", "Sharefinder is a network share discovery tool that enumerates shares, permissions, files and vulnerabilities in networks and domains.")
+	app = kingpin.New("sharefinder", "sharefinder is a network share discovery tool that enumerates shares, permissions and files in networks and domains.")
 
 	// global flags
 	outputFlag = app.Flag("output", "file to write output to").Short('o').Default("").String()
 	// TODO: implement HTML output
+	// TODO: separate outputs
 	threadsFlag = app.Flag("threads", "number of threads (default 1)").Default("1").Int()
 	timeoutFlag = app.Flag("timeout", "seconds to wait for connection (default 5s)").Default("5s").Duration()
 	excludeFlag = app.Flag("exclude", "share names to exclude (default IPC$)").Short('e').Default("IPC$").String()
-	listFlag    = app.Flag("list", "attempt to list shares (default false)").Default("false").Bool()
+	listFlag    = app.Flag("list", "list readable shares (default false)").Default("false").Bool()
 	// TODO: implement recursive list through shares (--recurse)
-	// TODO: implement file search through shares (--search)
+	//recurseFlag = app.Flag("recurse", "list readable shares recursively (default false)").Default("false").Bool()
 	// TODO: implement search for interesting files through shares
-	//searchFlag  = app.Flag("search", "pattern to search through files").Short('s').String()
+	// TODO: implement file search through shares (--filter)
+	//filterFlag  = app.Flag("filter", "pattern to filter through files while listing (default none)").Default("").String()
 	// TODO: implement proxy support (--proxy)
-	smbPortFlag = app.Flag("smb-port", "target port of SMB service").Default("445").Int()
+	smbPortFlag = app.Flag("smb-port", "target port of SMB service (default 445)").Default("445").Int()
 
 	// find anonymous (guest) shares and permissions
 	anonCommand    = app.Command("anon", "anonymous module")
 	anonTargetFlag = anonCommand.Arg("target", "target, IP range or filename").Required().String()
-	// TODO: implement null session check - https://sensepost.com/blog/2024/guest-vs-null-session-on-windows/#:~:text=To%20begin%20with%2C%20let's%20clarify,on%20a%20built-in%20group
+	// TODO: implement null session check - https://sensepost.com/blog/2024/guest-vs-null-session-on-windows/
 
 	// find authenticated shares and permissions
 	authCommand       = app.Command("auth", "authenticated module")
@@ -49,13 +52,23 @@ var (
 
 func main() {
 	app.Version("1.1.0")
+	app.Author("vflame6")
 	app.HelpFlag.Short('h')
 	app.UsageTemplate(kingpin.CompactUsageTemplate)
 
 	command := kingpin.MustParse(app.Parse(os.Args[1:]))
 	cmd.PrintBanner()
 
-	scanner := cmd.CreateScanner(*outputFlag, *threadsFlag, *timeoutFlag, *excludeFlag, *listFlag, *smbPortFlag)
+	scanner := cmd.CreateScanner(
+		os.Args[1:],
+		time.Now(),
+		*outputFlag,
+		*threadsFlag,
+		*timeoutFlag,
+		*excludeFlag,
+		*listFlag,
+		*smbPortFlag,
+	)
 
 	if command == anonCommand.FullCommand() {
 		cmd.ExecuteAnon(scanner, *anonTargetFlag)

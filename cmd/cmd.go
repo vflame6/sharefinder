@@ -13,10 +13,12 @@ import (
 	"time"
 )
 
-func CreateScanner(output string, threads int, timeout time.Duration, exclude string, list bool, smbPort int) *scanner.Scanner {
+func CreateScanner(commandLine []string, timeStart time.Time, output string, threads int, timeout time.Duration, exclude string, list bool, smbPort int) *scanner.Scanner {
 	outputOption := false
 	var outputWriter *scanner.OutputWriter
 	var file *os.File
+	var fileXML *os.File
+	//var fileHTML *os.File
 	var err error
 	if output != "" {
 		outputOption = true
@@ -25,6 +27,18 @@ func CreateScanner(output string, threads int, timeout time.Duration, exclude st
 		if err != nil {
 			log.Fatal(err)
 		}
+		fileXML, err = outputWriter.CreateFile(output+".xml", false)
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = outputWriter.WriteXMLHeader(commandLine, timeStart, fileXML)
+		if err != nil {
+			log.Fatal(err)
+		}
+		//fileHTML, err = outputWriter.CreateFile(output+".html", false)
+		//if err != nil {
+		//	log.Fatal(err)
+		//}
 	}
 
 	excludeList := strings.Split(exclude, ",")
@@ -34,6 +48,7 @@ func CreateScanner(output string, threads int, timeout time.Duration, exclude st
 		outputOption,
 		outputWriter,
 		file,
+		fileXML,
 		timeout,
 		excludeList,
 		make(chan string, 256),
@@ -44,7 +59,7 @@ func CreateScanner(output string, threads int, timeout time.Duration, exclude st
 		list,
 		net.IPv4zero,
 	)
-	s := scanner.NewScanner(options, threads)
+	s := scanner.NewScanner(options, commandLine, timeStart, threads)
 
 	return s
 }
@@ -64,16 +79,18 @@ func ExecuteAnon(s *scanner.Scanner, target string) {
 	}
 	wg.Wait()
 
+	s.TimeEnd = time.Now()
+
 	if s.Options.Output {
-		_ = s.Options.File.Close()
+		s.CloseOutputter()
 	}
 }
 
-func ExecuteAuth(s *scanner.Scanner, target, username, password string, localauth bool) {
+func ExecuteAuth(s *scanner.Scanner, target, username, password string, localAuth bool) {
 	logger.Info("Executing auth module")
 	var targetDomain string
 	var targetUsername string
-	if localauth {
+	if localAuth {
 		targetDomain = ""
 		targetUsername = username
 	} else {
@@ -88,7 +105,7 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password string, localaut
 	s.Options.Username = targetUsername
 	s.Options.Password = password
 	s.Options.Domain = targetDomain
-	s.Options.LocalAuth = localauth
+	s.Options.LocalAuth = localAuth
 
 	var wg sync.WaitGroup
 	s.RunAuthEnumeration(&wg)
@@ -98,8 +115,10 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password string, localaut
 	}
 	wg.Wait()
 
+	s.TimeEnd = time.Now()
+
 	if s.Options.Output {
-		_ = s.Options.File.Close()
+		s.CloseOutputter()
 	}
 }
 
@@ -143,7 +162,9 @@ func ExecuteHunt(s *scanner.Scanner, username, password string, dc net.IP) {
 	}
 	wg.Wait()
 
+	s.TimeEnd = time.Now()
+
 	if s.Options.Output {
-		_ = s.Options.File.Close()
+		s.CloseOutputter()
 	}
 }

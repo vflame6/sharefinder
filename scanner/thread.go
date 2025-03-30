@@ -7,8 +7,8 @@ import (
 	"net"
 	"slices"
 	"strconv"
-	"strings"
 	"sync"
+	"time"
 )
 
 func scanThread(s <-chan bool, wg *sync.WaitGroup, targets, results chan net.IP, options *Options) {
@@ -33,66 +33,96 @@ func scanThread(s <-chan bool, wg *sync.WaitGroup, targets, results chan net.IP,
 	}
 }
 
-func enumerateHost(host string, options *Options) (string, error) {
-	var hostResult string
-	var readableShares []string
+func enumerateHost(host string, options *Options) (Host, error) {
+	var hostResult Host
+	var shareResult []Share
 
 	conn, err := NewNTLMConnection(host, options.Username, options.Password, options.Domain, options.Timeout, options.SmbPort)
 	if err != nil {
-		return "", err
+		return hostResult, err
 	}
 	defer conn.Close()
 
 	isSigningRequired := conn.session.IsSigningRequired()
 	if !conn.session.IsAuthenticated() {
-		return "", err
+		return hostResult, err
 	}
 
 	targetInfo := conn.GetTargetInfo()
-	hostResult += SPrintHostInfo(host, targetInfo.GuessedOSVersion, targetInfo.NBComputerName, targetInfo.DnsDomainName, isSigningRequired, false)
-	hostResult += fmt.Sprintf("%-16s %-16s %-16s\n", "Share", "Permissions", "Decription")
-	hostResult += fmt.Sprintf("%-16s %-16s %-16s\n", strings.Repeat("-", 5), strings.Repeat("-", 11), strings.Repeat("-", 10))
+	hostResult.IP = host
+	hostResult.Time = time.Now()
+	hostResult.Version = targetInfo.GuessedOSVersion
+	hostResult.Hostname = targetInfo.NBComputerName
+	hostResult.Domain = targetInfo.DnsDomainName
+	hostResult.Signing = isSigningRequired
+	// TODO implement SMBv1 check
 
 	shares, err := conn.ListShares()
 	if err != nil {
-		return "", err
+		return hostResult, err
 	}
 
 	for _, share := range shares {
-		var permissions []string
+		var singleShare Share
+		singleShare.Name = share.Name
+		singleShare.Description = share.Comment
 
 		err := conn.CheckReadAccess(share.Name)
 		if err == nil {
-			permissions = append(permissions, "READ")
-			readableShares = append(readableShares, share.Name)
+			singleShare.ReadPermission = true
 		}
 		if conn.CheckWriteAccess(share.Name) {
-			permissions = append(permissions, "WRITE")
+			singleShare.WritePermission = true
 		}
 
-		hostResult += fmt.Sprintf("%-16s %-16s %-16s\n", share.Name, strings.Join(permissions, ","), share.Comment)
+		shareResult = append(shareResult, singleShare)
 	}
 
 	if options.List {
-		for _, share := range readableShares {
-			hostResult += "\n"
-			var shareListResult string
-
-			if slices.Contains(options.Exclude, share) {
+		for i := 0; i < len(shareResult); i++ {
+			if !shareResult[i].ReadPermission {
+				continue
+			}
+			if slices.Contains(options.Exclude, shareResult[i].Name) {
 				continue
 			}
 
-			files, err := conn.ListShare(share)
+			files, err := conn.ListShare(shareResult[i].Name)
 			if err != nil {
-				log.Printf("Failed to list share %s\\%s: %s\n", conn.host, share, err)
+				log.Printf("Failed to list share %s\\%s: %s\n", conn.host, shareResult[i].Name, err)
 			}
+			for _, file := range files {
+				// Microsoft handles time as number of 100-nanosecond intervals since January 1, 1601 UTC
+				// So to get a timestamp with unix time, subtract difference in 100-nanosecond intervals
+				// and divide by 10 to convert to microseconds
+				lastWriteTime := time.UnixMicro(int64((file.LastWriteTime - 116444736000000000) / 10))
 
-			shareListResult += fmt.Sprintf("Listing share %s\\%s\n", host, share)
-			shareListResult += SprintFilesExt(files)
+				fileType := "file"
+				if file.IsDir {
+					fileType = "dir"
+					// TODO
+					// if options.Recurse {}
 
-			hostResult += shareListResult
+					singleDirectory := NewDirectory(
+						fileType,
+						file.Name,
+						file.Size,
+						lastWriteTime,
+						nil,
+						nil,
+					)
+
+					shareResult[i].Directories = append(shareResult[i].Directories, *singleDirectory)
+					continue
+				} else if file.IsJunction {
+					fileType = "link"
+				}
+				singleFile := NewFile(fileType, file.Name, file.Size, lastWriteTime)
+				shareResult[i].Files = append(shareResult[i].Files, *singleFile)
+			}
 		}
 	}
+	hostResult.Shares = append(hostResult.Shares, shareResult...)
 	return hostResult, nil
 }
 
@@ -113,9 +143,21 @@ func authThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
 				logger.Info(fmt.Sprintf("[-] %s: %s", host, err.Error()))
 				continue
 			}
-			logger.Info(hostResult)
+
+			printResult := SprintHost(hostResult, options.Exclude)
+			if options.List {
+				printResult += SprintShares(hostResult, options.Exclude)
+			}
+
+			logger.Info(printResult)
+
 			if options.Output {
-				err := options.Writer.Write(hostResult, options.File)
+				err := options.Writer.Write(printResult, options.File)
+				if err != nil {
+					log.Println(err)
+				}
+
+				err = options.Writer.WriteXMLHost(hostResult, options.FileXML)
 				if err != nil {
 					log.Println(err)
 				}

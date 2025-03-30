@@ -8,21 +8,36 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Scanner struct {
-	Options *Options
-	Threads int
-	Exclude []string
-	Stop    chan bool
+	Options     *Options
+	CommandLine []string
+	TimeStart   time.Time
+	TimeEnd     time.Time
+	Threads     int
+	Stop        chan bool
 }
 
-func NewScanner(options *Options, threads int) *Scanner {
+func NewScanner(options *Options, commandLine []string, timeStart time.Time, threads int) *Scanner {
 	return &Scanner{
-		Options: options,
-		Threads: threads,
-		Stop:    make(chan bool),
+		Options:     options,
+		CommandLine: commandLine,
+		TimeStart:   timeStart,
+		Threads:     threads,
+		Stop:        make(chan bool),
 	}
+}
+
+func (s *Scanner) CloseOutputter() {
+	_ = s.Options.File.Close()
+
+	err := s.Options.Writer.WriteXMLFooter(s.TimeEnd, s.Options.FileXML)
+	if err != nil {
+		log.Println("Error writing XML Footer:", err)
+	}
+	_ = s.Options.FileXML.Close()
 }
 
 func (s *Scanner) ParseTargets(target string) error {

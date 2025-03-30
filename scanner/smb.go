@@ -143,3 +143,8 @@ func (conn *Connection) ListShare(share string) ([]smb.SharedFile, error) {
 	}
 	return files, nil
 }
+
+// TODO
+//func (conn *Connection) ListDirectoryRecursively(share string) error {
+//	return nil
+//}
