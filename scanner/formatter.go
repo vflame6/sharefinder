@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	letters        = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	dateTimeFormat = "02/01/2006 15:04"
+	letters               = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	dateTimeFormat        = "02/01/2006 15:04"
+	dateTimeSecondsFormat = "02/01/2006 15:04:05"
 )
 
 func logn(n, b float64) float64 {
@@ -66,14 +67,17 @@ func SprintFiles(files []File) string {
 	return shareListResult
 }
 
-func SprintDirectories(files []Directory) string {
+func SprintDirectories(ip, share string, dirs []Directory) string {
 	var shareListResult string
 
-	if len(files) > 0 {
-		for _, file := range files {
-			lastWrite := time.Time.Format(time.Time(file.LastModified), dateTimeFormat)
-			fileSize := BytesToHumanReadableSize(file.Size)
-			shareListResult += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", file.Type, fileSize, lastWrite, file.Name)
+	if len(dirs) > 0 {
+		for _, dir := range dirs {
+			shareListResult += fmt.Sprintf("Listing directory %s\\%s\\%s\n", ip, share, dir.Name)
+			for _, file := range dir.Files {
+				lastWrite := time.Time.Format(file.LastModified, dateTimeFormat)
+				fileSize := BytesToHumanReadableSize(file.Size)
+				shareListResult += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", file.Type, fileSize, lastWrite, file.Name)
+			}
 		}
 	}
 	return shareListResult
@@ -120,8 +124,9 @@ func SprintShares(h Host, exclude []string) string {
 		result += fmt.Sprintf("Listing share %s\\%s\n", h.IP, share.ShareName)
 		result += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "Type", "Size", "LastWriteTime", "ShareName")
 		result += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "----", "----", "-------------", "----")
-		result += SprintDirectories(share.Directories)
 		result += SprintFiles(share.Files)
+		result += "\n"
+		result += SprintDirectories(h.IP, share.ShareName, share.Directories)
 	}
 
 	return result

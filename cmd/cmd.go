@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-func CreateScanner(version string, commandLine []string, timeStart time.Time, output string, outputHTML bool, threads int, timeout time.Duration, exclude string, list bool, smbPort int) *scanner.Scanner {
+func CreateScanner(version string, commandLine []string, timeStart time.Time, output string, outputHTML bool, threads int, timeout time.Duration, exclude string, list, recurse bool, smbPort int) *scanner.Scanner {
 	outputOption := false
 	var outputWriter *scanner.OutputWriter
 	var file *os.File
@@ -57,6 +57,7 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 		"",
 		false,
 		list,
+		recurse,
 		net.IPv4zero,
 	)
 	s := scanner.NewScanner(options, commandLine, timeStart, threads)

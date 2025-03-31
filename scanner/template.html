@@ -107,8 +107,8 @@
         <p id="summary-time" class="lead"></p>
     </div>
     <script>
-        let timeStart = {{ .FormattedTimeStart }};
-        let timeEnd = {{ .TimeEnd.FormattedTime }};
+        let timeStart = "{{ .FormattedTimeStart }}";
+        let timeEnd = "{{ .TimeEnd.FormattedTime }}";
 
         document.getElementById("summary-time").textContent = `${timeStart} - ${timeEnd}`;
     </script>
@@ -221,8 +221,8 @@
                                 </div>
 
                                 {{ range $directory := $share.Directories }}
-                                <h6>Listing directory {{ $share.Name }}\{{ $directory.Parent }}\{{ $directory.Name }}</h6>
-                                <div style="white-space:pre-wrap; word-wrap:break-word;">
+                                <h6>Listing directory {{ $share.ShareName }}\{{ $directory.Name }}</h6>
+                                <div>
                                     <table class="table table-hover table-sm">
                                         <thead>
                                         <tr>

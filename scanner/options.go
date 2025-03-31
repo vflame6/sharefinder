@@ -21,12 +21,12 @@ type Options struct {
 	Password         string
 	Domain           string
 	List             bool
-	RecurseList      bool
+	Recurse          bool
 	LocalAuth        bool
 	DomainController net.IP
 }
 
-func NewOptions(smbPort int, output, outputHTML bool, outputFile string, writer *OutputWriter, file, fileXML *os.File, timeout time.Duration, exclude []string, target chan string, username, password, domain string, localAuth, list bool, domainController net.IP) *Options {
+func NewOptions(smbPort int, output, outputHTML bool, outputFile string, writer *OutputWriter, file, fileXML *os.File, timeout time.Duration, exclude []string, target chan string, username, password, domain string, localAuth, list, recurse bool, domainController net.IP) *Options {
 	return &Options{
 		SmbPort:          smbPort,
 		Output:           output,
@@ -43,6 +43,7 @@ func NewOptions(smbPort int, output, outputHTML bool, outputFile string, writer 
 		Domain:           domain,
 		LocalAuth:        localAuth,
 		List:             list,
+		Recurse:          recurse,
 		DomainController: domainController,
 	}
 }

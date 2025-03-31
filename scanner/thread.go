@@ -104,18 +104,13 @@ func enumerateHost(host string, options *Options) (Host, error) {
 					singleFile := NewFile(fileType, file.Name, file.Size, lastWriteTime)
 					shareResult[i].Files = append(shareResult[i].Files, *singleFile)
 
-					// TODO: implement recursive search
-					// if options.Recurse {}
-					//singleDirectory := NewDirectory(
-					//	fileType,
-					//	file.ShareName,
-					//	file.Size,
-					//	lastWriteTime,
-					//	nil,
-					//)
-					//
-					//shareResult[i].Directories = append(shareResult[i].Directories, *singleDirectory)
-					//continue
+					if options.Recurse {
+						recurseDirectory, err := conn.ListDirectoryRecursively(shareResult[i].ShareName, file)
+						if err != nil {
+							log.Printf("Failed to list directory %s\\%s\\%s: %s\n", conn.host, shareResult[i].ShareName, file.Name, err)
+						}
+						shareResult[i].Directories = append(shareResult[i].Directories, recurseDirectory...)
+					}
 				} else {
 					continue
 				}

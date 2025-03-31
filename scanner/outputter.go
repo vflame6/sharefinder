@@ -86,7 +86,7 @@ func (o *OutputWriter) WriteXMLHeader(version string, commandLine []string, star
 	cmd := escapeXML(strings.Join(commandLine, " "))
 
 	content := xml.Header
-	content += fmt.Sprintf("<SharefinderRun version=\"%s\" command=\"%s\" time_start=\"%s\" formatted_time_start=\"%s\">\n", version, cmd, startTime.Format("2006-01-02T15:04:05Z07:00"), startTime.Format(dateTimeFormat))
+	content += fmt.Sprintf("<SharefinderRun version=\"%s\" command=\"%s\" time_start=\"%s\" formatted_time_start=\"%s\">\n", version, cmd, startTime.Format("2006-01-02T15:04:05Z07:00"), startTime.Format(dateTimeSecondsFormat))
 	content += "<hosts>\n"
 
 	bufWriter := bufio.NewWriter(writer)
@@ -117,7 +117,7 @@ func (o *OutputWriter) WriteXMLHost(host Host, writer io.Writer) error {
 
 func (o *OutputWriter) WriteXMLFooter(timeEnd time.Time, writer io.Writer) error {
 	content := "</hosts>\n"
-	content += fmt.Sprintf("<time_end time=\"%s\" formatted_time=\"%s\"></time_end>", timeEnd.Format("2006-01-02T15:04:05Z07:00"), timeEnd.Format(dateTimeFormat)) + "\n"
+	content += fmt.Sprintf("<time_end time=\"%s\" formatted_time=\"%s\"></time_end>", timeEnd.Format("2006-01-02T15:04:05Z07:00"), timeEnd.Format(dateTimeSecondsFormat)) + "\n"
 	content += "</SharefinderRun>"
 
 	bufWriter := bufio.NewWriter(writer)

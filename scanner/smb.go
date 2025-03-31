@@ -144,7 +144,67 @@ func (conn *Connection) ListShare(share string) ([]smb.SharedFile, error) {
 	return files, nil
 }
 
-// TODO
-//func (conn *Connection) ListDirectoryRecursively(share string) error {
-//	return nil
-//}
+func (conn *Connection) ListDirectoryRecursively(share string, dir smb.SharedFile) ([]Directory, error) {
+	var result []Directory
+	var currentFiles []File
+	lastWriteTime := time.UnixMicro(int64((dir.LastWriteTime - 116444736000000000) / 10))
+
+	currentDir := NewDirectory(
+		dir.FullPath,
+		dir.Size,
+		lastWriteTime,
+		currentFiles,
+	)
+
+	conn.session.TreeConnect(share)
+	defer conn.session.TreeDisconnect(share)
+
+	files, err := conn.session.ListDirectory(share, dir.FullPath, "*")
+	if err != nil {
+		return nil, err
+	}
+
+	// process current directory
+	for _, file := range files {
+		if file.IsDir {
+			lastWriteTime := time.UnixMicro(int64((file.LastWriteTime - 116444736000000000) / 10))
+
+			fileType := "dir"
+			singleFile := NewFile(fileType, file.Name, file.Size, lastWriteTime)
+			currentDir.Files = append(currentDir.Files, *singleFile)
+		} else {
+			continue
+		}
+	}
+
+	for _, file := range files {
+		if !file.IsDir {
+			lastWriteTime := time.UnixMicro(int64((file.LastWriteTime - 116444736000000000) / 10))
+			fileType := "file"
+			if file.IsJunction {
+				fileType = "link"
+			}
+			singleFile := NewFile(fileType, file.Name, file.Size, lastWriteTime)
+			currentDir.Files = append(currentDir.Files, *singleFile)
+		} else {
+			continue
+		}
+	}
+
+	result = append(result, *currentDir)
+
+	// recurse all directories
+	for _, file := range files {
+		if file.IsDir {
+			recurseDirectory, err := conn.ListDirectoryRecursively(share, file)
+			if err != nil {
+				log.Printf("Failed to list directory %s\\%s\\%s: %s\n", conn.host, share, file.Name, err)
+			}
+			result = append(result, recurseDirectory...)
+		} else {
+			continue
+		}
+	}
+
+	return result, nil
+}

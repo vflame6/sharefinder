@@ -43,7 +43,6 @@ type Share struct {
 
 type Directory struct {
 	Parent       string    `xml:"parent,attr"`
-	Type         string    `xml:"type,attr"`
 	Name         string    `xml:"name,attr"`
 	Size         uint64    `xml:"size,attr"`
 	LastModified time.Time `xml:"last_modified,attr"`
@@ -82,9 +81,8 @@ func NewFile(filetype, filename string, size uint64, lastModified time.Time) *Fi
 	}
 }
 
-func NewDirectory(filetype, filename string, size uint64, lastModified time.Time, files []File) *Directory {
+func NewDirectory(filename string, size uint64, lastModified time.Time, files []File) *Directory {
 	return &Directory{
-		Type:         filetype,
 		Name:         filename,
 		Size:         size,
 		LastModified: lastModified,

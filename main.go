@@ -17,8 +17,7 @@ var (
 	timeoutFlag    = app.Flag("timeout", "seconds to wait for connection (default 5s)").Default("5s").Duration()
 	excludeFlag    = app.Flag("exclude", "share names to exclude (default IPC$,ADMIN$)").Short('e').Default("IPC$,ADMIN$").String()
 	listFlag       = app.Flag("list", "list readable shares (default false)").Default("false").Bool()
-	// TODO: implement recursive list through shares (--recurse)
-	//recurseFlag = app.Flag("recurse", "list readable shares recursively (default false)").Default("false").Bool()
+	recurseFlag    = app.Flag("recurse", "list readable shares recursively (default false)").Default("false").Bool()
 	// TODO: implement search for interesting files through shares
 	// TODO: implement file search through shares (--filter)
 	//filterFlag  = app.Flag("filter", "pattern to filter through files while listing (default none)").Default("").String()
@@ -70,6 +69,7 @@ func main() {
 		*timeoutFlag,
 		*excludeFlag,
 		*listFlag,
+		*recurseFlag,
 		*smbPortFlag,
 	)
 
