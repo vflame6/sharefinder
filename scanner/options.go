@@ -9,6 +9,8 @@ import (
 type Options struct {
 	SmbPort          int
 	Output           bool
+	OutputHTML       bool
+	OutputFile       string
 	Writer           *OutputWriter
 	File             *os.File
 	FileXML          *os.File
@@ -24,10 +26,12 @@ type Options struct {
 	DomainController net.IP
 }
 
-func NewOptions(smbPort int, output bool, writer *OutputWriter, file, fileXML *os.File, timeout time.Duration, exclude []string, target chan string, username, password, domain string, localAuth, list bool, domainController net.IP) *Options {
+func NewOptions(smbPort int, output, outputHTML bool, outputFile string, writer *OutputWriter, file, fileXML *os.File, timeout time.Duration, exclude []string, target chan string, username, password, domain string, localAuth, list bool, domainController net.IP) *Options {
 	return &Options{
 		SmbPort:          smbPort,
 		Output:           output,
+		OutputHTML:       outputHTML,
+		OutputFile:       outputFile,
 		Writer:           writer,
 		File:             file,
 		FileXML:          fileXML,

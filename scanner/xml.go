@@ -7,18 +7,22 @@ import (
 )
 
 type Timestamp struct {
-	Time time.Time `xml:"time,attr"`
+	Time          time.Time `xml:"time,attr"`
+	FormattedTime string    `xml:"formatted_time,attr"`
 }
 
 // SharefinderRun contains all data for a single scan
 type SharefinderRun struct {
-	Command   string    `xml:"command,attr"`
-	TimeStart time.Time `xml:"time_start,attr"`
-	Hosts     []Host    `xml:"hosts"`
-	TimeEnd   Timestamp `xml:"time_end"`
+	Version            string    `xml:"version,attr"`
+	Command            string    `xml:"command,attr"`
+	TimeStart          time.Time `xml:"time_start,attr"`
+	FormattedTimeStart string    `xml:"formatted_time_start,attr"`
+	Hosts              []Host    `xml:"hosts>host"`
+	TimeEnd            Timestamp `xml:"time_end"`
 }
 
 type Host struct {
+	XMLName  xml.Name  `xml:"host"`
 	Time     time.Time `xml:"time,attr"`
 	IP       string    `xml:"ip,attr"`
 	Version  string    `xml:"version,attr"`
@@ -29,7 +33,7 @@ type Host struct {
 }
 
 type Share struct {
-	Name            string      `xml:"name,attr"`
+	ShareName       string      `xml:"share_name,attr"`
 	Description     string      `xml:"description,attr"`
 	ReadPermission  bool        `xml:"read_permission,attr"`
 	WritePermission bool        `xml:"write_permission,attr"`
@@ -38,13 +42,12 @@ type Share struct {
 }
 
 type Directory struct {
-	Parent       string      `xml:"parent,attr"`
-	Type         string      `xml:"type,attr"`
-	Name         string      `xml:"name,attr"`
-	Size         uint64      `xml:"size,attr"`
-	LastModified time.Time   `xml:"last_modified,attr"`
-	Directories  []Directory `xml:"directory"`
-	Files        []File      `xml:"file"`
+	Parent       string    `xml:"parent,attr"`
+	Type         string    `xml:"type,attr"`
+	Name         string    `xml:"name,attr"`
+	Size         uint64    `xml:"size,attr"`
+	LastModified time.Time `xml:"last_modified,attr"`
+	Files        []File    `xml:"file"`
 }
 
 type File struct {
@@ -79,13 +82,12 @@ func NewFile(filetype, filename string, size uint64, lastModified time.Time) *Fi
 	}
 }
 
-func NewDirectory(filetype, filename string, size uint64, lastModified time.Time, directories []Directory, files []File) *Directory {
+func NewDirectory(filetype, filename string, size uint64, lastModified time.Time, files []File) *Directory {
 	return &Directory{
 		Type:         filetype,
 		Name:         filename,
 		Size:         size,
 		LastModified: lastModified,
-		Directories:  directories,
 		Files:        files,
 	}
 }

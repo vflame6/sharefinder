@@ -13,12 +13,11 @@ import (
 	"time"
 )
 
-func CreateScanner(commandLine []string, timeStart time.Time, output string, threads int, timeout time.Duration, exclude string, list bool, smbPort int) *scanner.Scanner {
+func CreateScanner(version string, commandLine []string, timeStart time.Time, output string, outputHTML bool, threads int, timeout time.Duration, exclude string, list bool, smbPort int) *scanner.Scanner {
 	outputOption := false
 	var outputWriter *scanner.OutputWriter
 	var file *os.File
 	var fileXML *os.File
-	//var fileHTML *os.File
 	var err error
 	if output != "" {
 		outputOption = true
@@ -31,14 +30,13 @@ func CreateScanner(commandLine []string, timeStart time.Time, output string, thr
 		if err != nil {
 			log.Fatal(err)
 		}
-		err = outputWriter.WriteXMLHeader(commandLine, timeStart, fileXML)
+		err = outputWriter.WriteXMLHeader(version, commandLine, timeStart, fileXML)
 		if err != nil {
 			log.Fatal(err)
 		}
-		//fileHTML, err = outputWriter.CreateFile(output+".html", false)
-		//if err != nil {
-		//	log.Fatal(err)
-		//}
+	}
+	if outputHTML && output == "" {
+		log.Fatal(errors.New("cannot use --html without --output"))
 	}
 
 	excludeList := strings.Split(exclude, ",")
@@ -46,6 +44,8 @@ func CreateScanner(commandLine []string, timeStart time.Time, output string, thr
 	options := scanner.NewOptions(
 		smbPort,
 		outputOption,
+		outputHTML,
+		output,
 		outputWriter,
 		file,
 		fileXML,

@@ -11,13 +11,12 @@ var (
 	app = kingpin.New("sharefinder", "sharefinder is a network share discovery tool that enumerates shares, permissions and files in networks and domains.")
 
 	// global flags
-	outputFlag = app.Flag("output", "file to write output to").Short('o').Default("").String()
-	// TODO: implement HTML output
-	// TODO: separate outputs
-	threadsFlag = app.Flag("threads", "number of threads (default 1)").Default("1").Int()
-	timeoutFlag = app.Flag("timeout", "seconds to wait for connection (default 5s)").Default("5s").Duration()
-	excludeFlag = app.Flag("exclude", "share names to exclude (default IPC$)").Short('e').Default("IPC$").String()
-	listFlag    = app.Flag("list", "list readable shares (default false)").Default("false").Bool()
+	outputFlag     = app.Flag("output", "file to write output to (raw and xml)").Short('o').Default("").String()
+	outputHTMLFlag = app.Flag("html", "output HTML (default false)").Default("false").Bool()
+	threadsFlag    = app.Flag("threads", "number of threads (default 1)").Default("1").Int()
+	timeoutFlag    = app.Flag("timeout", "seconds to wait for connection (default 5s)").Default("5s").Duration()
+	excludeFlag    = app.Flag("exclude", "share names to exclude (default IPC$,ADMIN$)").Short('e').Default("IPC$,ADMIN$").String()
+	listFlag       = app.Flag("list", "list readable shares (default false)").Default("false").Bool()
 	// TODO: implement recursive list through shares (--recurse)
 	//recurseFlag = app.Flag("recurse", "list readable shares recursively (default false)").Default("false").Bool()
 	// TODO: implement search for interesting files through shares
@@ -51,7 +50,9 @@ var (
 )
 
 func main() {
-	app.Version("1.1.0")
+	VERSION := "1.1.0"
+
+	app.Version(VERSION)
 	app.Author("vflame6")
 	app.HelpFlag.Short('h')
 	app.UsageTemplate(kingpin.CompactUsageTemplate)
@@ -60,9 +61,11 @@ func main() {
 	cmd.PrintBanner()
 
 	scanner := cmd.CreateScanner(
+		VERSION,
 		os.Args[1:],
 		time.Now(),
 		*outputFlag,
+		*outputHTMLFlag,
 		*threadsFlag,
 		*timeoutFlag,
 		*excludeFlag,

@@ -63,8 +63,12 @@ func enumerateHost(host string, options *Options) (Host, error) {
 	}
 
 	for _, share := range shares {
+		if slices.Contains(options.Exclude, share.Name) {
+			continue
+		}
+
 		var singleShare Share
-		singleShare.Name = share.Name
+		singleShare.ShareName = share.Name
 		singleShare.Description = share.Comment
 
 		err := conn.CheckReadAccess(share.Name)
@@ -83,42 +87,52 @@ func enumerateHost(host string, options *Options) (Host, error) {
 			if !shareResult[i].ReadPermission {
 				continue
 			}
-			if slices.Contains(options.Exclude, shareResult[i].Name) {
-				continue
-			}
 
-			files, err := conn.ListShare(shareResult[i].Name)
+			// here we loop over all files 2 times to process directories at first and files at second
+			files, err := conn.ListShare(shareResult[i].ShareName)
 			if err != nil {
-				log.Printf("Failed to list share %s\\%s: %s\n", conn.host, shareResult[i].Name, err)
+				log.Printf("Failed to list share %s\\%s: %s\n", conn.host, shareResult[i].ShareName, err)
 			}
 			for _, file := range files {
-				// Microsoft handles time as number of 100-nanosecond intervals since January 1, 1601 UTC
-				// So to get a timestamp with unix time, subtract difference in 100-nanosecond intervals
-				// and divide by 10 to convert to microseconds
-				lastWriteTime := time.UnixMicro(int64((file.LastWriteTime - 116444736000000000) / 10))
-
-				fileType := "file"
 				if file.IsDir {
-					fileType = "dir"
-					// TODO
+					// Microsoft handles time as number of 100-nanosecond intervals since January 1, 1601 UTC
+					// So to get a timestamp with unix time, subtract difference in 100-nanosecond intervals
+					// and divide by 10 to convert to microseconds
+					lastWriteTime := time.UnixMicro(int64((file.LastWriteTime - 116444736000000000) / 10))
+
+					fileType := "dir"
+					singleFile := NewFile(fileType, file.Name, file.Size, lastWriteTime)
+					shareResult[i].Files = append(shareResult[i].Files, *singleFile)
+
+					// TODO: implement recursive search
 					// if options.Recurse {}
-
-					singleDirectory := NewDirectory(
-						fileType,
-						file.Name,
-						file.Size,
-						lastWriteTime,
-						nil,
-						nil,
-					)
-
-					shareResult[i].Directories = append(shareResult[i].Directories, *singleDirectory)
+					//singleDirectory := NewDirectory(
+					//	fileType,
+					//	file.ShareName,
+					//	file.Size,
+					//	lastWriteTime,
+					//	nil,
+					//)
+					//
+					//shareResult[i].Directories = append(shareResult[i].Directories, *singleDirectory)
+					//continue
+				} else {
 					continue
-				} else if file.IsJunction {
-					fileType = "link"
 				}
-				singleFile := NewFile(fileType, file.Name, file.Size, lastWriteTime)
-				shareResult[i].Files = append(shareResult[i].Files, *singleFile)
+			}
+
+			for _, file := range files {
+				if !file.IsDir {
+					lastWriteTime := time.UnixMicro(int64((file.LastWriteTime - 116444736000000000) / 10))
+					fileType := "file"
+					if file.IsJunction {
+						fileType = "link"
+					}
+					singleFile := NewFile(fileType, file.Name, file.Size, lastWriteTime)
+					shareResult[i].Files = append(shareResult[i].Files, *singleFile)
+				} else {
+					continue
+				}
 			}
 		}
 	}

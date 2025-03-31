@@ -38,6 +38,18 @@ func (s *Scanner) CloseOutputter() {
 		log.Println("Error writing XML Footer:", err)
 	}
 	_ = s.Options.FileXML.Close()
+
+	if s.Options.OutputHTML {
+		xmlFile, err := s.Options.Writer.ReadFile(s.Options.OutputFile + ".xml")
+		if err != nil {
+			log.Println("Error reading output file:", err)
+		}
+
+		err = s.OutputHTML(xmlFile)
+		if err != nil {
+			log.Println(err)
+		}
+	}
 }
 
 func (s *Scanner) ParseTargets(target string) error {
@@ -175,6 +187,24 @@ func (s *Scanner) RunHuntDomainTargets(wg *sync.WaitGroup, possibleTargets []net
 	wg.Wait()
 
 	return liveTargets
+}
+
+func (s *Scanner) OutputHTML(data []byte) error {
+	result, err := ParseSharefinderRun(data)
+	if err != nil {
+		return err
+	}
+
+	fileXML, err := s.Options.Writer.CreateFile(s.Options.OutputFile+".html", false)
+	if err != nil {
+		return err
+	}
+	err = s.Options.Writer.WriteHTML(*result, fileXML)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Scanner) Shutdown() {

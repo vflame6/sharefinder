@@ -87,7 +87,7 @@ func SprintHost(h Host, exclude []string) string {
 	result += fmt.Sprintf("%-16s %-16s %-16s\n", strings.Repeat("-", 5), strings.Repeat("-", 11), strings.Repeat("-", 10))
 
 	for _, share := range h.Shares {
-		if slices.Contains(exclude, share.Name) {
+		if slices.Contains(exclude, share.ShareName) {
 			continue
 		}
 
@@ -99,7 +99,7 @@ func SprintHost(h Host, exclude []string) string {
 			permissions = append(permissions, "WRITE")
 		}
 
-		result += fmt.Sprintf("%-16s %-16s %-16s\n", share.Name, strings.Join(permissions, ","), share.Description)
+		result += fmt.Sprintf("%-16s %-16s %-16s\n", share.ShareName, strings.Join(permissions, ","), share.Description)
 	}
 	result += "\n"
 
@@ -113,12 +113,12 @@ func SprintShares(h Host, exclude []string) string {
 		if !share.ReadPermission {
 			continue
 		}
-		if slices.Contains(exclude, share.Name) {
+		if slices.Contains(exclude, share.ShareName) {
 			continue
 		}
 
-		result += fmt.Sprintf("Listing share %s\\%s\n", h.IP, share.Name)
-		result += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "Type", "Size", "LastWriteTime", "Name")
+		result += fmt.Sprintf("Listing share %s\\%s\n", h.IP, share.ShareName)
+		result += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "Type", "Size", "LastWriteTime", "ShareName")
 		result += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "----", "----", "-------------", "----")
 		result += SprintDirectories(share.Directories)
 		result += SprintFiles(share.Files)
