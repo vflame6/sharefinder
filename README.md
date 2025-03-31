@@ -35,18 +35,19 @@ Here is the help menu for the tool.
 ```yaml
 usage: sharefinder [<flags>] <command> [<args> ...]
 
-  Sharefinder is a network share discovery tool that enumerates shares,
-  permissions, files and vulnerabilities in networks and domains.
+  sharefinder is a network share discovery tool that enumerates shares, permissions and files in networks and domains.
 
 Flags:
-  -h, --[no-]help     Show context-sensitive help (also try --help-long and
-  --help-man).
-  -o, --output=""     file to write output to
-  --threads=1     number of threads (default 1)
-  --timeout=5s    seconds to wait for connection (default 5s)
-  -e, --exclude=""    share names to exclude (default None)
-  --[no-]list     attempt to list shares (default false)
-  --[no-]version  Show application version.
+  -h, --[no-]help              Show context-sensitive help (also try --help-long and --help-man).
+  -o, --output=""              file to write output to (raw and xml)
+  --[no-]html              output HTML (default false)
+  --threads=1              number of threads (default 1)
+  --timeout=5s             seconds to wait for connection (default 5s)
+  -e, --exclude="IPC$,ADMIN$"  share names to exclude (default IPC$,ADMIN$)
+  --[no-]list              list readable shares (default false)
+  --[no-]recurse           list readable shares recursively (default false)
+  --smb-port=445           target port of SMB service (default 445)
+  --[no-]version           Show application version.
 
 Commands:
   help [<command>...]
