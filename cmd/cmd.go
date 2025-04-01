@@ -38,6 +38,9 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 	if outputHTML && output == "" {
 		log.Fatal(errors.New("cannot use --html without --output"))
 	}
+	if recurse && !list {
+		log.Fatal(errors.New("cannot use --recurse without --list"))
+	}
 
 	excludeList := strings.Split(exclude, ",")
 

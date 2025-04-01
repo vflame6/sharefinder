@@ -78,6 +78,7 @@ func SprintDirectories(ip, share string, dirs []Directory) string {
 				fileSize := BytesToHumanReadableSize(file.Size)
 				shareListResult += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", file.Type, fileSize, lastWrite, file.Name)
 			}
+			shareListResult += "\n"
 		}
 	}
 	return shareListResult

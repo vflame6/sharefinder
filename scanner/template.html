@@ -102,16 +102,10 @@
 
 <div id="content" class="container">
     <div id="summary" class="mt-4 p-5 bg-light rounded">
-        <h1>Shares Scan Report</h1>
+        <h1>Sharefinder Scan Report</h1>
         <h2 class="text-muted pt-0">sharefinder {{ .Version }}</h2>
-        <p id="summary-time" class="lead"></p>
+        <p id="summary-time" class="lead">{{ .FormattedTimeStart }} - {{ .TimeEnd.FormattedTime }}</p>
     </div>
-    <script>
-        let timeStart = "{{ .FormattedTimeStart }}";
-        let timeEnd = "{{ .TimeEnd.FormattedTime }}";
-
-        document.getElementById("summary-time").textContent = `${timeStart} - ${timeEnd}`;
-    </script>
 
     <!-- Summary of identified hosts with version number, hostname, domain name, signing, SMBv1, number of shares -->
     <h2>Identified Hosts</h2>
@@ -160,7 +154,7 @@
             </div>
             <div class="panel-body collapse in show bg-white px-3 border-top border-bottom" id="{{ $host.IP }}" aria-expanded="true">
                 <h5>Host information</h5>
-
+                <p>{{ $host.Version }} (name:{{ $host.Hostname }}) (domain:{{ $host.Domain }}) (signing:{{ $host.Signing }})</p>
                 <h5>Shares</h5>
                 <table id="hostShares" class="table table-bordered">
                     <thead>
@@ -173,7 +167,7 @@
                     </thead>
                     <tbody>
                         {{ range $share := $host.Shares }}
-                        <tr {{ if $share.ReadPermission }}class="table-success"{{ end }}>
+                        <tr {{ if $share.WritePermission }}class="table-danger"{{ else }} {{ if $share.ReadPermission }}class="table-warning"{{ end }}{{ end }}>
                             <td>{{ $share.ShareName }}</td>
                             <td>{{ $share.Description }}</td>
                             <td>{{ $share.ReadPermission }}</td>
@@ -183,7 +177,7 @@
                         {{ if $share.Files }}
                         <tr>
                             <td colspan="4">
-                                <h6>Listing {{ $share.ShareName }}:</h6>
+                                <h6>Share: {{ $share.ShareName }}</h6>
                                 <div>
                                     <table class="table table-hover table-sm">
                                         <thead>
@@ -221,7 +215,7 @@
                                 </div>
 
                                 {{ range $directory := $share.Directories }}
-                                <h6>Listing directory {{ $share.ShareName }}\{{ $directory.Name }}</h6>
+                                <h6>Directory: {{ $share.ShareName }}\{{ $directory.Name }}</h6>
                                 <div>
                                     <table class="table table-hover table-sm">
                                         <thead>

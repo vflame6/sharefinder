@@ -49,7 +49,7 @@ var (
 )
 
 func main() {
-	VERSION := "1.1.0"
+	VERSION := "1.1.1"
 
 	app.Version(VERSION)
 	app.Author("vflame6")
