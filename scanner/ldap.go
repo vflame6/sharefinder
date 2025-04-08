@@ -21,13 +21,20 @@ func GetBaseDN(domain string) string {
 }
 
 func NewLDAPConnection(host net.IP, username, password, domain string) (*LDAPConnection, error) {
-	dialURL := fmt.Sprintf("ldaps://%s:636", host.String())
-
-	l, err := ldap.DialURL(dialURL, ldap.DialWithTLSConfig(&tls.Config{InsecureSkipVerify: true}))
+	dialLDAPS := fmt.Sprintf("ldaps://%s:636", host.String())
+	l, err := ldap.DialURL(dialLDAPS, ldap.DialWithTLSConfig(&tls.Config{InsecureSkipVerify: true}))
 	if err != nil {
-		log.Fatal(err)
+		// if LDAPS is failed try ldap
+		log.Printf("Failed to connect to LDAPS on %s, trying LDAP", host)
+
+		dialLDAP := fmt.Sprintf("ldap://%s:389", host.String())
+		l, err = ldap.DialURL(dialLDAP)
+		if err != nil {
+			return nil, err
+		}
 	}
 
+	// username in format user@example.com
 	err = l.Bind(username+"@"+domain, password)
 	if err != nil {
 		return nil, err
