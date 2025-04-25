@@ -42,5 +42,4 @@ func (r *Resolver) LookupHost(host string) (net.IP, error) {
 		return nil, err
 	}
 	return net.ParseIP(ip[0]), nil
-
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/go-ldap/ldap/v3"
 	"log"
+	"math"
 	"net"
 	"strings"
 )
@@ -45,16 +46,22 @@ func NewLDAPConnection(host net.IP, username, password, domain string) (*LDAPCon
 }
 
 func (conn *LDAPConnection) Close() {
-	conn.connection.Close()
+	_ = conn.connection.Close()
 }
 
 func (conn *LDAPConnection) SearchComputers(baseDN string) (*ldap.SearchResult, error) {
 	searchRequest := ldap.NewSearchRequest(
 		baseDN,
-		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
-		"(objectCategory=Computer)", []string{}, nil,
+		ldap.ScopeWholeSubtree,
+		ldap.NeverDerefAliases,
+		math.MaxInt32,
+		0,
+		false,
+		"(objectCategory=Computer)",
+		[]string{},
+		nil,
 	)
-	sr, err := conn.connection.Search(searchRequest)
+	sr, err := conn.connection.SearchWithPaging(searchRequest, math.MaxInt32)
 	if err != nil {
 		return nil, err
 	}
