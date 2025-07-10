@@ -101,7 +101,7 @@ func enumerateHost(host string, options *Options) (Host, error) {
 					lastWriteTime := time.UnixMicro(int64((file.LastWriteTime - 116444736000000000) / 10))
 
 					fileType := "dir"
-					singleFile := NewFile(fileType, file.Name, file.Size, lastWriteTime)
+					singleFile := NewFile(fileType, file.Name, file.FullPath, file.Size, lastWriteTime)
 					shareResult[i].Files = append(shareResult[i].Files, *singleFile)
 
 					if options.Recurse {
@@ -123,7 +123,7 @@ func enumerateHost(host string, options *Options) (Host, error) {
 					if file.IsJunction {
 						fileType = "link"
 					}
-					singleFile := NewFile(fileType, file.Name, file.Size, lastWriteTime)
+					singleFile := NewFile(fileType, file.Name, file.FullPath, file.Size, lastWriteTime)
 					shareResult[i].Files = append(shareResult[i].Files, *singleFile)
 				} else {
 					continue
@@ -161,7 +161,7 @@ func authThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
 			logger.Info(printResult)
 
 			if options.Output {
-				err := options.Writer.Write(printResult, options.File)
+				err := options.Writer.Write(printResult, options.FileTXT)
 				if err != nil {
 					log.Println(err)
 				}

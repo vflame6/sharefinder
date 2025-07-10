@@ -72,10 +72,11 @@ func ParseSharefinderRun(content []byte) (*SharefinderRun, error) {
 	return r, err
 }
 
-func NewFile(filetype, filename string, size uint64, lastModified time.Time) *File {
+func NewFile(filetype, filename, parent string, size uint64, lastModified time.Time) *File {
 	return &File{
 		Type:         filetype,
 		Name:         filename,
+		Parent:       parent,
 		Size:         size,
 		LastModified: lastModified,
 	}

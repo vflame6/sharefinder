@@ -170,7 +170,7 @@ func (conn *Connection) ListDirectoryRecursively(share string, dir smb.SharedFil
 			lastWriteTime := time.UnixMicro(int64((file.LastWriteTime - 116444736000000000) / 10))
 
 			fileType := "dir"
-			singleFile := NewFile(fileType, file.Name, file.Size, lastWriteTime)
+			singleFile := NewFile(fileType, file.Name, file.FullPath, file.Size, lastWriteTime)
 			currentDir.Files = append(currentDir.Files, *singleFile)
 		} else {
 			continue
@@ -184,7 +184,7 @@ func (conn *Connection) ListDirectoryRecursively(share string, dir smb.SharedFil
 			if file.IsJunction {
 				fileType = "link"
 			}
-			singleFile := NewFile(fileType, file.Name, file.Size, lastWriteTime)
+			singleFile := NewFile(fileType, file.Name, file.FullPath, file.Size, lastWriteTime)
 			currentDir.Files = append(currentDir.Files, *singleFile)
 		} else {
 			continue

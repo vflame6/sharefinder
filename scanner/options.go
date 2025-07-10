@@ -10,9 +10,9 @@ type Options struct {
 	SmbPort          int
 	Output           bool
 	OutputHTML       bool
-	OutputFile       string
+	OutputFileName   string
 	Writer           *OutputWriter
-	File             *os.File
+	FileTXT          *os.File
 	FileXML          *os.File
 	Timeout          time.Duration
 	Exclude          []string
@@ -24,6 +24,7 @@ type Options struct {
 	Recurse          bool
 	LocalAuth        bool
 	DomainController net.IP
+	CustomResolver   net.IP
 }
 
 func NewOptions(smbPort int, output, outputHTML bool, outputFile string, writer *OutputWriter, file, fileXML *os.File, timeout time.Duration, exclude []string, target chan string, username, password, domain string, localAuth, list, recurse bool, domainController net.IP) *Options {
@@ -31,9 +32,9 @@ func NewOptions(smbPort int, output, outputHTML bool, outputFile string, writer 
 		SmbPort:          smbPort,
 		Output:           output,
 		OutputHTML:       outputHTML,
-		OutputFile:       outputFile,
+		OutputFileName:   outputFile,
 		Writer:           writer,
-		File:             file,
+		FileTXT:          file,
 		FileXML:          fileXML,
 		Timeout:          timeout,
 		Exclude:          exclude,

@@ -15,7 +15,7 @@ var (
 	outputHTMLFlag = app.Flag("html", "output HTML (default false)").Default("false").Bool()
 	threadsFlag    = app.Flag("threads", "number of threads (default 1)").Default("1").Int()
 	timeoutFlag    = app.Flag("timeout", "seconds to wait for connection (default 5s)").Default("5s").Duration()
-	excludeFlag    = app.Flag("exclude", "share names to exclude (default IPC$,ADMIN$)").Short('e').Default("IPC$,ADMIN$").String()
+	excludeFlag    = app.Flag("exclude", "share names to exclude (default IPC$,ADMIN$,print$)").Short('e').Default("IPC$,ADMIN$,print$").String()
 	listFlag       = app.Flag("list", "list readable shares (default false)").Default("false").Bool()
 	recurseFlag    = app.Flag("recurse", "list readable shares recursively (default false)").Default("false").Bool()
 	// TODO: implement search for interesting files through shares
@@ -23,6 +23,7 @@ var (
 	//filterFlag  = app.Flag("filter", "pattern to filter through files while listing (default none)").Default("").String()
 	// TODO: implement proxy support (--proxy)
 	smbPortFlag = app.Flag("smb-port", "target port of SMB service (default 445)").Default("445").Int()
+	// TODO: add --victim flag to scan targets for SMB vulnerabilities
 
 	// find anonymous (guest) shares and permissions
 	anonCommand    = app.Command("anon", "anonymous module")
@@ -43,13 +44,14 @@ var (
 	huntUsernameFlag = huntCommand.Flag("username", "domain username in format DOMAIN\\username").Short('u').Required().String()
 	huntPasswordFlag = huntCommand.Flag("password", "domain user password").Short('p').Required().String()
 	huntDcFlag       = huntCommand.Arg("dc", "domain controller IP").Required().IP()
+	huntResolverFlag = huntCommand.Flag("resolver", "custom DNS resolver IP address (default DC IP)").Short('r').IP()
 	// TODO: add kerberos support (-k and --no-pass)
 	// TODO: add support for NTLM hash instead of password
 	// TODO: implement search forest option
 )
 
 func main() {
-	VERSION := "1.1.1"
+	VERSION := "1.1.4"
 
 	app.Version(VERSION)
 	app.Author("vflame6")
@@ -80,6 +82,6 @@ func main() {
 		cmd.ExecuteAuth(scanner, *authTargetFlag, *authUsernameFlag, *authPasswordFlag, *authLocalAuthFlag)
 	}
 	if command == huntCommand.FullCommand() {
-		cmd.ExecuteHunt(scanner, *huntUsernameFlag, *huntPasswordFlag, *huntDcFlag)
+		cmd.ExecuteHunt(scanner, *huntUsernameFlag, *huntPasswordFlag, *huntDcFlag, *huntResolverFlag)
 	}
 }

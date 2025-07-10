@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"time"
 )
@@ -17,9 +18,10 @@ func NewUDPResolver(resolver net.IP, timeout time.Duration) *Resolver {
 			d := net.Dialer{
 				Timeout: timeout,
 			}
-			return d.DialContext(ctx, "udp", resolver.String()+":53")
+			return d.DialContext(ctx, "udp", net.JoinHostPort(resolver.String(), "53"))
 		},
 	}
+	net.DefaultResolver = r
 	return &Resolver{resolver: r}
 }
 
@@ -30,16 +32,22 @@ func NewTCPResolver(resolver net.IP, timeout time.Duration) *Resolver {
 			d := net.Dialer{
 				Timeout: timeout,
 			}
-			return d.DialContext(ctx, "tcp", resolver.String()+":53")
+			return d.DialContext(ctx, "tcp", net.JoinHostPort(resolver.String(), "53"))
 		},
 	}
+	net.DefaultResolver = r
 	return &Resolver{resolver: r}
 }
 
 func (r *Resolver) LookupHost(host string) (net.IP, error) {
-	ip, err := r.resolver.LookupHost(context.Background(), host)
+	ips, err := r.resolver.LookupHost(context.Background(), host)
 	if err != nil {
 		return nil, err
 	}
-	return net.ParseIP(ip[0]), nil
+	for _, ipStr := range ips {
+		if ip := net.ParseIP(ipStr); ip != nil {
+			return ip, nil
+		}
+	}
+	return nil, fmt.Errorf("no valid IP found for host %s", host)
 }

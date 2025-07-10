@@ -13,20 +13,30 @@ import (
 	"time"
 )
 
-func CreateScanner(version string, commandLine []string, timeStart time.Time, output string, outputHTML bool, threads int, timeout time.Duration, exclude string, list, recurse bool, smbPort int) *scanner.Scanner {
+func CreateScanner(version string, commandLine []string, timeStart time.Time, outputFileName string, outputHTML bool, threads int, timeout time.Duration, exclude string, list, recurse bool, smbPort int) *scanner.Scanner {
 	outputOption := false
 	var outputWriter *scanner.OutputWriter
 	var file *os.File
 	var fileXML *os.File
 	var err error
-	if output != "" {
+	if outputFileName != "" {
+		if strings.HasSuffix(outputFileName, ".txt") {
+			outputFileName = strings.TrimSuffix(outputFileName, ".txt")
+		}
+		if strings.HasSuffix(outputFileName, ".xml") {
+			outputFileName = strings.TrimSuffix(outputFileName, ".xml")
+		}
+		if strings.HasSuffix(outputFileName, ".html") {
+			outputFileName = strings.TrimSuffix(outputFileName, ".html")
+		}
+
 		outputOption = true
 		outputWriter = scanner.NewOutputWriter()
-		file, err = outputWriter.CreateFile(output, false)
+		file, err = outputWriter.CreateFile(outputFileName+".txt", false)
 		if err != nil {
 			log.Fatal(err)
 		}
-		fileXML, err = outputWriter.CreateFile(output+".xml", false)
+		fileXML, err = outputWriter.CreateFile(outputFileName+".xml", false)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -35,8 +45,8 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 			log.Fatal(err)
 		}
 	}
-	if outputHTML && output == "" {
-		log.Fatal(errors.New("cannot use --html without --output"))
+	if outputHTML && outputFileName == "" {
+		log.Fatal(errors.New("cannot use --html without --outputFileName"))
 	}
 	if recurse && !list {
 		log.Fatal(errors.New("cannot use --recurse without --list"))
@@ -48,7 +58,7 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 		smbPort,
 		outputOption,
 		outputHTML,
-		output,
+		outputFileName,
 		outputWriter,
 		file,
 		fileXML,
@@ -126,7 +136,7 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password string, localAut
 	}
 }
 
-func ExecuteHunt(s *scanner.Scanner, username, password string, dc net.IP) {
+func ExecuteHunt(s *scanner.Scanner, username, password string, dc, resolver net.IP) {
 	logger.Info("Executing hunt module")
 	var targetDomain string
 	var targetUsername string
@@ -142,6 +152,7 @@ func ExecuteHunt(s *scanner.Scanner, username, password string, dc net.IP) {
 	s.Options.Domain = targetDomain
 	s.Options.LocalAuth = false
 	s.Options.DomainController = dc
+	s.Options.CustomResolver = resolver
 
 	var wg sync.WaitGroup
 

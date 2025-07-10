@@ -31,7 +31,7 @@ func NewScanner(options *Options, commandLine []string, timeStart time.Time, thr
 }
 
 func (s *Scanner) CloseOutputter() {
-	_ = s.Options.File.Close()
+	_ = s.Options.FileTXT.Close()
 
 	err := s.Options.Writer.WriteXMLFooter(s.TimeEnd, s.Options.FileXML)
 	if err != nil {
@@ -40,7 +40,7 @@ func (s *Scanner) CloseOutputter() {
 	_ = s.Options.FileXML.Close()
 
 	if s.Options.OutputHTML {
-		xmlFile, err := s.Options.Writer.ReadFile(s.Options.OutputFile + ".xml")
+		xmlFile, err := s.Options.Writer.ReadFile(s.Options.OutputFileName + ".xml")
 		if err != nil {
 			log.Println("Error reading output file:", err)
 		}
@@ -124,13 +124,20 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]net.IP, error) {
 		return nil, errors.New("no domain computers found")
 	}
 
+	var resolver net.IP
+	if s.Options.CustomResolver != nil {
+		resolver = s.Options.CustomResolver
+	} else {
+		resolver = s.Options.DomainController
+	}
+
 	// test if DNS works with UDP
 	testEntry := sr.Entries[0].GetAttributeValue("dNSHostName")
-	r := NewUDPResolver(s.Options.DomainController, s.Options.Timeout)
+	r := NewUDPResolver(resolver, s.Options.Timeout)
 	_, err = r.LookupHost(testEntry)
 	if err != nil {
 		// test if DNS works with TCP
-		r = NewTCPResolver(s.Options.DomainController, s.Options.Timeout)
+		r = NewTCPResolver(resolver, s.Options.Timeout)
 		_, err = r.LookupHost(testEntry)
 		if err != nil {
 			return nil, err
@@ -195,7 +202,7 @@ func (s *Scanner) OutputHTML(data []byte) error {
 		return err
 	}
 
-	fileXML, err := s.Options.Writer.CreateFile(s.Options.OutputFile+".html", false)
+	fileXML, err := s.Options.Writer.CreateFile(s.Options.OutputFileName+".html", false)
 	if err != nil {
 		return err
 	}
