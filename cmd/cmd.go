@@ -166,12 +166,12 @@ func ExecuteHunt(s *scanner.Scanner, username, password string, dc, resolver net
 	logger.Infof("Found %d possible targets", len(possibleTargets))
 
 	// scan every possible target for opened SMB port
-	targets := s.RunHuntDomainTargets(&wg, possibleTargets)
-	logger.Info(fmt.Sprintf("Found %d targets to enumerate", len(targets)))
+	//targets := s.RunHuntDomainTargets(&wg, possibleTargets)
+	//logger.Info(fmt.Sprintf("Found %d targets to enumerate", len(targets)))
 
 	// check for shares and permissions on identified targets
 	s.RunAuthEnumeration(&wg)
-	err = s.ParseTargetsInMemory(targets)
+	err = s.ParseTargetsInMemory(possibleTargets)
 	if err != nil {
 		log.Fatal(err)
 	}
