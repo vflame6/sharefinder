@@ -116,6 +116,7 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]net.IP, error) {
 	}
 	defer ldapConn.Close()
 
+	// get a list of domain computers names
 	sr, err := ldapConn.SearchComputers(GetBaseDN(s.Options.Domain))
 	if err != nil {
 		return nil, err
@@ -155,45 +156,6 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]net.IP, error) {
 	}
 
 	return results, nil
-}
-
-func (s *Scanner) RunHuntDomainTargets(wg *sync.WaitGroup, possibleTargets []net.IP) []net.IP {
-	var liveTargets []net.IP
-	targets := make(chan net.IP, 256)
-	results := make(chan net.IP)
-
-	// Separate WaitGroup for scanner threads
-	var scanWg sync.WaitGroup
-
-	// Start scan threads
-	for i := 0; i < s.Threads; i++ {
-		scanWg.Add(1)
-		go scanThread(s.Stop, &scanWg, targets, results, s.Options)
-	}
-
-	wg.Add(1)
-	// Collect results
-	go func() {
-		for result := range results {
-			liveTargets = append(liveTargets, result)
-		}
-		wg.Done()
-	}()
-
-	// Send targets
-	for _, target := range possibleTargets {
-		targets <- target
-	}
-	close(targets)
-
-	// Wait for scan threads to finish, then close results
-	scanWg.Wait()
-	close(results)
-
-	// Wait for results collector to finish
-	wg.Wait()
-
-	return liveTargets
 }
 
 func (s *Scanner) OutputHTML(data []byte) error {

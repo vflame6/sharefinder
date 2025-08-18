@@ -4,34 +4,10 @@ import (
 	"fmt"
 	"github.com/vflame6/sharefinder/logger"
 	"log"
-	"net"
 	"slices"
-	"strconv"
 	"sync"
 	"time"
 )
-
-func scanThread(s <-chan bool, wg *sync.WaitGroup, targets, results chan net.IP, options *Options) {
-	defer wg.Done()
-	for {
-		select {
-		case <-s:
-			return
-		default:
-			host, ok := <-targets
-			if !ok {
-				return
-			}
-			address := host.String() + ":" + strconv.Itoa(options.SmbPort)
-			conn, err := net.DialTimeout("tcp", address, options.Timeout)
-			if err != nil {
-				continue
-			}
-			_ = conn.Close()
-			results <- host
-		}
-	}
-}
 
 func enumerateHost(host string, options *Options) (Host, error) {
 	var hostResult Host
