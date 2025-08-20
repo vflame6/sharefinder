@@ -150,11 +150,12 @@
         <div class="panel panel-default border rounded pt-2 bg-light">
             <div onclick="toggleChevron(this)" class="panel-heading px-3" data-bs-toggle="collapse" data-bs-target="#{{ $host.IP }}" role="button">
                 <i class="bi bi-chevron-down"></i>
-                <h5 class="panel-title pt-0">{{ $host.IP }}</h5>
+                <h5 class="panel-title pt-0">{{ $host.Hostname }}.{{ $host.Domain }} ({{ $host.IP }})</h5>
             </div>
             <div class="panel-body collapse in show bg-white px-3 border-top border-bottom" id="{{ $host.IP }}" aria-expanded="true">
                 <h5>Host information</h5>
-                <p>{{ $host.Version }} (name:{{ $host.Hostname }}) (domain:{{ $host.Domain }}) (signing:{{ $host.Signing }})</p>
+                <p>Version: {{ $host.Version }}</p>
+                <p>Signing: {{ $host.Signing }}</p>
                 <h5>Shares</h5>
                 <table id="hostShares" class="table table-bordered">
                     <thead>

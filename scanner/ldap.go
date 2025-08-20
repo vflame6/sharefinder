@@ -4,10 +4,12 @@ import (
 	"crypto/tls"
 	"fmt"
 	"github.com/go-ldap/ldap/v3"
-	"log"
+	"github.com/vflame6/sharefinder/logger"
+	"golang.org/x/net/proxy"
 	"math"
 	"net"
 	"strings"
+	"time"
 )
 
 type LDAPConnection struct {
@@ -21,17 +23,65 @@ func GetBaseDN(domain string) string {
 	return result
 }
 
-func NewLDAPConnection(host net.IP, username, password, domain string) (*LDAPConnection, error) {
-	dialLDAPS := fmt.Sprintf("ldaps://%s:636", host.String())
-	l, err := ldap.DialURL(dialLDAPS, ldap.DialWithTLSConfig(&tls.Config{InsecureSkipVerify: true}))
-	if err != nil {
-		// if LDAPS is failed try ldap
-		log.Printf("Failed to connect to LDAPS on %s, trying LDAP", host)
+func NewLDAPConnection(host net.IP, username, password, domain string, timeout time.Duration, proxyOption bool, proxyDialer proxy.Dialer) (*LDAPConnection, error) {
+	var l *ldap.Conn
+	var err error
 
-		dialLDAP := fmt.Sprintf("ldap://%s:389", host.String())
-		l, err = ldap.DialURL(dialLDAP)
+	dialLDAPS := fmt.Sprintf("%s:636", host.String())
+	dialLDAP := fmt.Sprintf("%s:389", host.String())
+
+	var dialer proxy.Dialer
+	if proxyOption {
+		dialer = proxyDialer
+	} else {
+		dialer = &net.Dialer{Timeout: timeout}
+	}
+
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: true,
+	}
+
+	// try to connect over LDAPS
+	var isLDAPS bool
+	conn, err := dialer.Dial("tcp", dialLDAPS)
+	if err == nil {
+		// Wrap raw TCP connection in TLS with our config
+		tlsConn := tls.Client(conn, tlsConfig)
+
+		// Force handshake now so errors are caught early
+		if err = tlsConn.Handshake(); err != nil {
+			isLDAPS = false
+		} else {
+			// Hand the TLS connection to go-ldap
+			l = ldap.NewConn(tlsConn, true)
+			l.Start()
+			isLDAPS = true
+		}
+	} else {
+		isLDAPS = false
+	}
+
+	if !isLDAPS {
+		// try LDAP with STARTTLS if LDAPS is failed
+		logger.Warnf("Failed to connect to LDAPS on %s, trying LDAP with STARTTLS", dialLDAPS)
+
+		conn, err = dialer.Dial("tcp", dialLDAP)
 		if err != nil {
 			return nil, err
+		}
+		l = ldap.NewConn(conn, false)
+		l.Start()
+		err = l.StartTLS(tlsConfig)
+
+		// if all of that failed go plain LDAP
+		if err != nil {
+			logger.Warnf("Failed to set up STARTTLS on %s, trying plain LDAP", dialLDAP)
+			conn, err = dialer.Dial("tcp", dialLDAP)
+			if err != nil {
+				return nil, err
+			}
+			l = ldap.NewConn(conn, false)
+			l.Start()
 		}
 	}
 

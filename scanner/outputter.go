@@ -21,9 +21,8 @@ import (
 //go:embed template.html
 var HTMLTemplate string
 
-var mu sync.Mutex
-
 type OutputWriter struct {
+	mutex sync.Mutex
 }
 
 // NewOutputWriter creates a new OutputWriter
@@ -70,8 +69,8 @@ func (o *OutputWriter) ReadFile(filename string) ([]byte, error) {
 }
 
 func (o *OutputWriter) Write(content string, writer io.Writer) error {
-	mu.Lock()
-	defer mu.Unlock()
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
 
 	bufWriter := bufio.NewWriter(writer)
 
@@ -98,8 +97,8 @@ func (o *OutputWriter) WriteXMLHeader(version string, commandLine []string, star
 }
 
 func (o *OutputWriter) WriteXMLHost(host Host, writer io.Writer) error {
-	mu.Lock()
-	defer mu.Unlock()
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
 
 	content, err := xml.Marshal(host)
 	if err != nil {

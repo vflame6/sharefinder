@@ -3,7 +3,7 @@ package scanner
 import (
 	"bufio"
 	"errors"
-	"log"
+	"github.com/vflame6/sharefinder/logger"
 	"net"
 	"os"
 	"strings"
@@ -11,6 +11,7 @@ import (
 	"time"
 )
 
+// Scanner is a struct so store scanner's configuration and execute commands
 type Scanner struct {
 	Options     *Options
 	CommandLine []string
@@ -20,6 +21,7 @@ type Scanner struct {
 	Stop        chan bool
 }
 
+// NewScanner is a function to create new Scanner struct
 func NewScanner(options *Options, commandLine []string, timeStart time.Time, threads int) *Scanner {
 	return &Scanner{
 		Options:     options,
@@ -30,48 +32,61 @@ func NewScanner(options *Options, commandLine []string, timeStart time.Time, thr
 	}
 }
 
+// CloseOutputter is a function to close output files channels
 func (s *Scanner) CloseOutputter() {
-	_ = s.Options.FileTXT.Close()
+	if s.Options.Output {
+		_ = s.Options.FileTXT.Close()
 
-	err := s.Options.Writer.WriteXMLFooter(s.TimeEnd, s.Options.FileXML)
-	if err != nil {
-		log.Println("Error writing XML Footer:", err)
-	}
-	_ = s.Options.FileXML.Close()
-
-	if s.Options.OutputHTML {
-		xmlFile, err := s.Options.Writer.ReadFile(s.Options.OutputFileName + ".xml")
+		err := s.Options.Writer.WriteXMLFooter(s.TimeEnd, s.Options.FileXML)
 		if err != nil {
-			log.Println("Error reading output file:", err)
+			logger.Error(err)
 		}
+		_ = s.Options.FileXML.Close()
 
-		err = s.OutputHTML(xmlFile)
-		if err != nil {
-			log.Println(err)
+		if s.Options.OutputHTML {
+			xmlFile, err := s.Options.Writer.ReadFile(s.Options.OutputFileName + ".xml")
+			if err != nil {
+				logger.Error(err)
+			}
+
+			err = s.OutputHTML(xmlFile)
+			if err != nil {
+				logger.Error(err)
+			}
 		}
 	}
 }
 
+// ParseTargets function used to parse IP-address, IP-range or file and pass them in targets channel
 func (s *Scanner) ParseTargets(target string) error {
 	var targets []string
+
+	// check if the file with specified name is NOT available
 	if _, err := os.Stat(target); errors.Is(err, os.ErrNotExist) {
 		// target file does not exist
-		// try to parse as IP/CIDR
+		// try to parse specified string as IP/CIDR
 		targets, err = ParseIPOrCIDR(target)
 		if err != nil {
 			return err
 		}
+
+		// pass to targets channel
 		for _, t := range targets {
 			s.Options.Target <- t
 		}
+		// close the channel if targets are over
 		close(s.Options.Target)
 		return nil
 	}
+
+	// if the file is available, read it and then parse it
 	file, err := os.Open(target)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
+
+	// scan the file
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		// skip empty line
@@ -80,6 +95,7 @@ func (s *Scanner) ParseTargets(target string) error {
 			continue
 		}
 
+		// try to parse specified string as IP/CIDR
 		targets, err = ParseIPOrCIDR(line)
 		if err != nil {
 			return err
@@ -88,18 +104,20 @@ func (s *Scanner) ParseTargets(target string) error {
 			s.Options.Target <- t
 		}
 	}
+	// close the channel if targets are over
 	close(s.Options.Target)
 	return nil
 }
 
-func (s *Scanner) ParseTargetsInMemory(targets []net.IP) error {
+// ParseTargetsInMemory is used to parse a list of targets and pass them in targets list
+func (s *Scanner) ParseTargetsInMemory(targets []net.IP) {
 	for _, target := range targets {
 		s.Options.Target <- target.String()
 	}
 	close(s.Options.Target)
-	return nil
 }
 
+// RunAuthEnumeration is executed by auth command
 func (s *Scanner) RunAuthEnumeration(wg *sync.WaitGroup) {
 	for i := 0; i < s.Threads; i++ {
 		wg.Add(1)
@@ -107,10 +125,19 @@ func (s *Scanner) RunAuthEnumeration(wg *sync.WaitGroup) {
 	}
 }
 
+// RunEnumerateDomainComputers is executed by hunt command
 func (s *Scanner) RunEnumerateDomainComputers() ([]net.IP, error) {
 	var results []net.IP
 
-	ldapConn, err := NewLDAPConnection(s.Options.DomainController, s.Options.Username, s.Options.Password, s.Options.Domain)
+	ldapConn, err := NewLDAPConnection(
+		s.Options.DomainController,
+		s.Options.Username,
+		s.Options.Password,
+		strings.ToLower(s.Options.Domain),
+		s.Options.Timeout,
+		s.Options.Proxy,
+		s.Options.ProxyDialer,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -134,11 +161,11 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]net.IP, error) {
 
 	// test if DNS works with UDP
 	testEntry := sr.Entries[0].GetAttributeValue("dNSHostName")
-	r := NewUDPResolver(resolver, s.Options.Timeout)
+	r := NewUDPResolver(resolver, s.Options.Timeout, s.Options.ProxyDialer)
 	_, err = r.LookupHost(testEntry)
 	if err != nil {
 		// test if DNS works with TCP
-		r = NewTCPResolver(resolver, s.Options.Timeout)
+		r = NewTCPResolver(resolver, s.Options.Timeout, s.Options.ProxyDialer)
 		_, err = r.LookupHost(testEntry)
 		if err != nil {
 			return nil, err
@@ -147,9 +174,12 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]net.IP, error) {
 
 	for _, entry := range sr.Entries {
 		hostname := entry.GetAttributeValue("dNSHostName")
+
+		// TODO: the host might have several IP addresses, so we need to process this situation somehow
+		// get target's IP address from DNS (first one)
 		possibleTarget, err := r.LookupHost(hostname)
 		if err != nil {
-			log.Println(err)
+			logger.Error(err)
 			continue
 		}
 		results = append(results, possibleTarget)
@@ -158,17 +188,20 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]net.IP, error) {
 	return results, nil
 }
 
+// OutputHTML is used to generate HTML output from XML output
 func (s *Scanner) OutputHTML(data []byte) error {
+	// parse XML data
 	result, err := ParseSharefinderRun(data)
 	if err != nil {
 		return err
 	}
 
-	fileXML, err := s.Options.Writer.CreateFile(s.Options.OutputFileName+".html", false)
+	// create the HTML file and write to it
+	fileHTML, err := s.Options.Writer.CreateFile(s.Options.OutputFileName+".html", false)
 	if err != nil {
 		return err
 	}
-	err = s.Options.Writer.WriteHTML(*result, fileXML)
+	err = s.Options.Writer.WriteHTML(*result, fileHTML)
 	if err != nil {
 		return err
 	}
@@ -176,6 +209,7 @@ func (s *Scanner) OutputHTML(data []byte) error {
 	return nil
 }
 
+// Shutdown is a function to stop the scan by external caller
 func (s *Scanner) Shutdown() {
 	for i := 0; i < s.Threads; i++ {
 		s.Stop <- true

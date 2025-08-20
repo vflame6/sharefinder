@@ -64,8 +64,7 @@ func escapeXML(input string) string {
 	return buffer.String()
 }
 
-// ParseSharefinderRun takes a byte array of nmap xml data and unmarshals it into an
-// SharefinderRun struct.
+// ParseSharefinderRun takes a byte array of nmap xml data and unmarshalls it into SharefinderRun struct.
 func ParseSharefinderRun(content []byte) (*SharefinderRun, error) {
 	r := &SharefinderRun{}
 	err := xml.Unmarshal(content, r)

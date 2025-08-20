@@ -1,33 +1,38 @@
 package scanner
 
 import (
+	"golang.org/x/net/proxy"
 	"net"
 	"os"
 	"time"
 )
 
+// Options is a struct to store scanner's configuration
 type Options struct {
-	SmbPort          int
+	SmbPort          int // --smb-port
 	Output           bool
-	OutputHTML       bool
-	OutputFileName   string
+	OutputFileName   string // --output
+	OutputHTML       bool   // --html
 	Writer           *OutputWriter
 	FileTXT          *os.File
 	FileXML          *os.File
-	Timeout          time.Duration
-	Exclude          []string
+	Timeout          time.Duration // --timeout
+	Exclude          []string      // --exclude
 	Target           chan string
-	Username         string
-	Password         string
-	Domain           string
-	List             bool
-	Recurse          bool
-	LocalAuth        bool
+	Username         string // part of --username
+	Domain           string // part of --username
+	Password         string // --password
+	List             bool   // --list
+	Recurse          bool   // --recurse
+	LocalAuth        bool   // --local-auth
 	DomainController net.IP
-	CustomResolver   net.IP
+	CustomResolver   net.IP       // --resolver
+	Proxy            bool         // --proxy
+	ProxyDialer      proxy.Dialer // --proxy
 }
 
-func NewOptions(smbPort int, output, outputHTML bool, outputFile string, writer *OutputWriter, file, fileXML *os.File, timeout time.Duration, exclude []string, target chan string, username, password, domain string, localAuth, list, recurse bool, domainController net.IP) *Options {
+// NewOptions is a function to generate new Options object
+func NewOptions(smbPort int, output, outputHTML bool, outputFile string, writer *OutputWriter, file, fileXML *os.File, timeout time.Duration, exclude []string, target chan string, username, password, domain string, localAuth, list, recurse bool, domainController net.IP, proxyOption bool, proxyDialer proxy.Dialer) *Options {
 	return &Options{
 		SmbPort:          smbPort,
 		Output:           output,
@@ -46,5 +51,7 @@ func NewOptions(smbPort int, output, outputHTML bool, outputFile string, writer 
 		List:             list,
 		Recurse:          recurse,
 		DomainController: domainController,
+		Proxy:            proxyOption,
+		ProxyDialer:      proxyDialer,
 	}
 }

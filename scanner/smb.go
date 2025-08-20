@@ -1,37 +1,51 @@
 package scanner
 
 import (
+	"fmt"
 	"github.com/jfjallid/go-smb/smb"
 	"github.com/jfjallid/go-smb/smb/dcerpc"
 	"github.com/jfjallid/go-smb/spnego"
+	"github.com/vflame6/sharefinder/logger"
+	"golang.org/x/net/proxy"
 	"io"
-	"log"
 	"time"
 )
-
-// TODO: implement Windows versions check
-//const ()
-//
-//var (
-//	fileSizeThreshold = uint64(0)
-//)
 
 type Connection struct {
 	host    string
 	session *smb.Connection
 }
 
-func NewNTLMConnection(host, username, password, domain string, timeout time.Duration, smbPort int) (*Connection, error) {
-	options := smb.Options{
-		Host: host,
-		Port: smbPort,
-		Initiator: &spnego.NTLMInitiator{
-			User:     username,
-			Password: password,
-			Domain:   domain,
-		},
-		DialTimeout: timeout,
+func NewNTLMConnection(host, username, password, domain string, timeout time.Duration, smbPort int, proxyOption bool, proxyDialer proxy.Dialer) (*Connection, error) {
+	var options smb.Options
+
+	// set up a proxy if enabled
+	if proxyOption {
+		options = smb.Options{
+			Host: host,
+			Port: smbPort,
+			Initiator: &spnego.NTLMInitiator{
+				User:     username,
+				Password: password,
+				Domain:   domain,
+			},
+			DialTimeout: timeout,
+			ProxyDialer: proxyDialer,
+		}
+	} else {
+		options = smb.Options{
+			Host: host,
+			Port: smbPort,
+			Initiator: &spnego.NTLMInitiator{
+				User:     username,
+				Password: password,
+				Domain:   domain,
+			},
+			DialTimeout: timeout,
+		}
 	}
+
+	// establish the connection
 	session, err := smb.NewConnection(options)
 	if err != nil {
 		return nil, err
@@ -43,6 +57,7 @@ func NewNTLMConnection(host, username, password, domain string, timeout time.Dur
 	return conn, nil
 }
 
+// Close is a function to close the active connection
 func (conn *Connection) Close() {
 	conn.session.Close()
 }
@@ -51,15 +66,7 @@ func (conn *Connection) GetTargetInfo() *smb.TargetInfo {
 	return conn.session.GetTargetInfo()
 }
 
-// TODO: implement Guest check
-// func CheckGuest() bool {}
-
-// TODO: implement admin check - https://github.com/Pennyw0rth/NetExec/blob/91c339ea30bc87118fefa8236cb86a95c1717643/nxc/protocols/smb.py#L637
-//func CheckAdmin(session *smb.Connection) bool {
-//	return false
-//}
-
-func (conn *Connection) ListShares() ([]dcerpc.NetShare, error) {
+func (conn *Connection) GetSharesList() ([]dcerpc.NetShare, error) {
 	share := "IPC$"
 	err := conn.session.TreeConnect(share)
 	if err != nil {
@@ -83,10 +90,13 @@ func (conn *Connection) ListShares() ([]dcerpc.NetShare, error) {
 }
 
 func (conn *Connection) CheckReadAccess(share string) error {
-	conn.session.TreeConnect(share)
+	err := conn.session.TreeConnect(share)
+	if err != nil {
+		return err
+	}
 	defer conn.session.TreeDisconnect(share)
 
-	_, err := conn.session.ListShare(share, "", false)
+	_, err = conn.session.ListShare(share, "", false)
 	return err
 }
 
@@ -110,7 +120,7 @@ func (conn *Connection) CheckWriteAccess(share string) bool {
 	if err == nil {
 		err = conn.session.DeleteFile(share, tempFile)
 		if err != nil {
-			log.Printf("[!] Failed to delete created file %s on share %s\\%s", tempFile, conn.host, share)
+			logger.Error(fmt.Errorf("failed to delete created file %s on share %s\\%s", tempFile, conn.host, share))
 		}
 		return true
 	}
@@ -121,7 +131,7 @@ func (conn *Connection) CheckWriteAccess(share string) bool {
 	//if err == nil {
 	//	err = conn.session.DeleteDir(share, tempDir)
 	//	if err != nil {
-	//		log.Printf("[!] Failed to delete created directory %s on share %s\\%s", tempDir, conn.host, share)
+	//		logger.Error(fmt.Errorf("[!] Failed to delete created directory %s on share %s\\%s", tempDir, conn.host, share))
 	//	}
 	//	return true
 	//}
@@ -147,8 +157,8 @@ func (conn *Connection) ListShare(share string) ([]smb.SharedFile, error) {
 func (conn *Connection) ListDirectoryRecursively(share string, dir smb.SharedFile) ([]Directory, error) {
 	var result []Directory
 	var currentFiles []File
-	lastWriteTime := time.UnixMicro(int64((dir.LastWriteTime - 116444736000000000) / 10))
 
+	lastWriteTime := ConvertToUnixTimestamp(dir.LastWriteTime)
 	currentDir := NewDirectory(
 		dir.FullPath,
 		dir.Size,
@@ -156,18 +166,23 @@ func (conn *Connection) ListDirectoryRecursively(share string, dir smb.SharedFil
 		currentFiles,
 	)
 
-	conn.session.TreeConnect(share)
+	err := conn.session.TreeConnect(share)
+	if err != nil {
+		return nil, err
+	}
 	defer conn.session.TreeDisconnect(share)
 
+	// process current directory
 	files, err := conn.session.ListDirectory(share, dir.FullPath, "*")
 	if err != nil {
 		return nil, err
 	}
 
-	// process current directory
+	// loop over all files 2 times to process directories at first
+	// it is done like that to make directories in the top of the output
 	for _, file := range files {
 		if file.IsDir {
-			lastWriteTime := time.UnixMicro(int64((file.LastWriteTime - 116444736000000000) / 10))
+			lastWriteTime = ConvertToUnixTimestamp(file.LastWriteTime)
 
 			fileType := "dir"
 			singleFile := NewFile(fileType, file.Name, file.FullPath, file.Size, lastWriteTime)
@@ -176,10 +191,10 @@ func (conn *Connection) ListDirectoryRecursively(share string, dir smb.SharedFil
 			continue
 		}
 	}
-
+	// process files
 	for _, file := range files {
 		if !file.IsDir {
-			lastWriteTime := time.UnixMicro(int64((file.LastWriteTime - 116444736000000000) / 10))
+			lastWriteTime = ConvertToUnixTimestamp(file.LastWriteTime)
 			fileType := "file"
 			if file.IsJunction {
 				fileType = "link"
@@ -193,12 +208,12 @@ func (conn *Connection) ListDirectoryRecursively(share string, dir smb.SharedFil
 
 	result = append(result, *currentDir)
 
-	// recurse all directories
+	// loop over all files to list all nested directories recursively
 	for _, file := range files {
 		if file.IsDir {
 			recurseDirectory, err := conn.ListDirectoryRecursively(share, file)
 			if err != nil {
-				log.Printf("Failed to list directory %s\\%s\\%s: %s\n", conn.host, share, file.Name, err)
+				logger.Error(fmt.Errorf("Failed to list directory %s\\%s\\%s: %s\n", conn.host, share, file.Name, err))
 			}
 			result = append(result, recurseDirectory...)
 		} else {
