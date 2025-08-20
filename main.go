@@ -16,52 +16,52 @@ var (
 	// global flags
 
 	// output flags
-	debugFlag = app.Flag("debug", "enable debug mode, print debug messages (default false)").Bool()
-	quietFlag = app.Flag("quiet", "enable quiet mode, don't print any messages (default false)").Bool()
+	debugFlag = app.Flag("debug", "Enable debug mode, print debug messages").Bool()
+	quietFlag = app.Flag("quiet", "Enable quiet mode, don't print any messages").Bool()
 
 	// file output flags
-	outputFlag     = app.Flag("output", "file to write output to (raw and xml)").Short('o').Default("").String()
-	outputHTMLFlag = app.Flag("html", "output HTML (default false)").Default("false").Bool()
+	outputFlag     = app.Flag("output", "File to write output to (raw and xml)").Short('o').Default("").String()
+	outputHTMLFlag = app.Flag("html", "Output the results in HTML").Default("false").Bool()
 
 	// connection flags
-	threadsFlag = app.Flag("threads", "number of threads (default 1)").Default("1").Int()
-	timeoutFlag = app.Flag("timeout", "seconds to wait for connection (default 5s)").Default("5s").Duration()
-	smbPortFlag = app.Flag("smb-port", "target port of SMB service (default 445)").Default("445").Int()
-	proxyFlag   = app.Flag("proxy", "SOCKS-proxy address to use for connection in format IP:PORT").String()
+	threadsFlag = app.Flag("threads", "Number of threads").Default("1").Int()
+	timeoutFlag = app.Flag("timeout", "Seconds to wait for connection").Default("5s").Duration()
+	smbPortFlag = app.Flag("smb-port", "Target port of SMB service").Default("445").Int()
+	proxyFlag   = app.Flag("proxy", "SOCKS-proxy address to use for connection in format IP:PORT").Default("").String()
 
 	// SMB interaction flags
-	excludeFlag = app.Flag("exclude", "share names to exclude (default IPC$,NETLOGON,ADMIN$,print$,C$)").Short('e').Default("IPC$,NETLOGON,ADMIN$,print$,C$").String()
-	listFlag    = app.Flag("list", "list readable shares (default false)").Default("false").Bool()
-	recurseFlag = app.Flag("recurse", "list readable shares recursively (default false)").Default("false").Bool()
+	excludeFlag = app.Flag("exclude", "Exclude list").Short('e').Default("IPC$,NETLOGON,ADMIN$,print$,C$").String()
+	listFlag    = app.Flag("list", "List readable shares").Default("false").Bool()
+	recurseFlag = app.Flag("recurse", "List readable shares recursively").Default("false").Bool()
 
 	// anon command
 	// find anonymous (guest) shares and permissions
 	anonCommand    = app.Command("anon", "anonymous module")
-	anonTargetFlag = anonCommand.Arg("target", "target, IP range or filename").Required().String()
+	anonTargetFlag = anonCommand.Arg("target", "Target, IP range or filename").Required().String()
 
 	// TODO: implement null session check - https://sensepost.com/blog/2024/guest-vs-null-session-on-windows/
 
 	// auth command
 	// find authenticated shares and permissions
 	authCommand       = app.Command("auth", "authenticated module")
-	authTargetFlag    = authCommand.Arg("target", "target, IP range or filename").Required().String()
-	authUsernameFlag  = authCommand.Flag("username", "username in format DOMAIN\\username for domain auth, and just username for local auth").Short('u').Required().String()
-	authPasswordFlag  = authCommand.Flag("password", "user password").Short('p').Required().String()
-	authLocalAuthFlag = authCommand.Flag("local-auth", "enable local authentication, the username is passed without domain").Bool()
+	authTargetFlag    = authCommand.Arg("target", "Target, IP range or filename").Required().String()
+	authUsernameFlag  = authCommand.Flag("username", "Username in format DOMAIN\\username for domain auth, and just username for local auth").Short('u').Required().String()
+	authPasswordFlag  = authCommand.Flag("password", "User's password").Short('p').String()
+	authHashFlag      = authCommand.Flag("hashes", "NTLM hash of password to authenticate").Short('H').String()
+	authLocalAuthFlag = authCommand.Flag("local-auth", "Enable local authentication, the username is passed without domain").Bool()
 
-	// TODO: add support for NTLM hash instead of password
 	// TODO: add kerberos support (-k and --no-pass)
 
 	// hunt command
 	// hunt for targets from AD and find shares and permissions
 	huntCommand      = app.Command("hunt", "hunting module")
-	huntDcFlag       = huntCommand.Arg("dc", "domain controller IP").Required().IP()
-	huntUsernameFlag = huntCommand.Flag("username", "domain username in format DOMAIN\\username").Short('u').Required().String()
-	huntPasswordFlag = huntCommand.Flag("password", "domain user password").Short('p').Required().String()
-	huntResolverFlag = huntCommand.Flag("resolver", "custom DNS resolver IP address (default DC IP)").Short('r').IP()
+	huntDcFlag       = huntCommand.Arg("dc", "Domain Controller IP").Required().IP()
+	huntUsernameFlag = huntCommand.Flag("username", "Domain username in format DOMAIN\\username").Short('u').Required().String()
+	huntPasswordFlag = huntCommand.Flag("password", "Domain user's password").Short('p').Required().String()
+	huntHashFlag     = huntCommand.Flag("hashes", "NTLM hash of password to authenticate").Short('H').String()
+	huntResolverFlag = huntCommand.Flag("resolver", "Custom DNS resolver IP address").Short('r').IP()
 
 	// TODO: add kerberos support (-k and --no-pass)
-	// TODO: add support for NTLM hash instead of password
 	// TODO: implement search forest option
 )
 
@@ -111,10 +111,10 @@ func main() {
 		err = cmd.ExecuteAnon(scanner, *anonTargetFlag)
 	}
 	if command == authCommand.FullCommand() {
-		err = cmd.ExecuteAuth(scanner, *authTargetFlag, *authUsernameFlag, *authPasswordFlag, *authLocalAuthFlag)
+		err = cmd.ExecuteAuth(scanner, *authTargetFlag, *authUsernameFlag, *authPasswordFlag, *authHashFlag, *authLocalAuthFlag)
 	}
 	if command == huntCommand.FullCommand() {
-		err = cmd.ExecuteHunt(scanner, *huntUsernameFlag, *huntPasswordFlag, *huntDcFlag, *huntResolverFlag)
+		err = cmd.ExecuteHunt(scanner, *huntUsernameFlag, *huntPasswordFlag, *huntHashFlag, *huntDcFlag, *huntResolverFlag)
 	}
 	if err != nil {
 		logger.Fatal(err)

@@ -16,34 +16,8 @@ type Connection struct {
 	session *smb.Connection
 }
 
-func NewNTLMConnection(host, username, password, domain string, timeout time.Duration, smbPort int, proxyOption bool, proxyDialer proxy.Dialer) (*Connection, error) {
-	var options smb.Options
-
-	// set up a proxy if enabled
-	if proxyOption {
-		options = smb.Options{
-			Host: host,
-			Port: smbPort,
-			Initiator: &spnego.NTLMInitiator{
-				User:     username,
-				Password: password,
-				Domain:   domain,
-			},
-			DialTimeout: timeout,
-			ProxyDialer: proxyDialer,
-		}
-	} else {
-		options = smb.Options{
-			Host: host,
-			Port: smbPort,
-			Initiator: &spnego.NTLMInitiator{
-				User:     username,
-				Password: password,
-				Domain:   domain,
-			},
-			DialTimeout: timeout,
-		}
-	}
+func NewNTLMConnection(host, username, password, hash, domain string, timeout time.Duration, smbPort int, proxyOption bool, proxyDialer proxy.Dialer) (*Connection, error) {
+	options := GetSMBOptions(host, username, password, hash, domain, timeout, smbPort, proxyOption, proxyDialer)
 
 	// establish the connection
 	session, err := smb.NewConnection(options)
@@ -55,6 +29,47 @@ func NewNTLMConnection(host, username, password, domain string, timeout time.Dur
 		session: session,
 	}
 	return conn, nil
+}
+
+func GetSMBOptions(host, username, password, hash, domain string, timeout time.Duration, smbPort int, proxyOption bool, proxyDialer proxy.Dialer) smb.Options {
+	var options smb.Options
+	var initiator *spnego.NTLMInitiator
+
+	// check if password or hash is provided
+	// hash will be preferred if it is not empty
+	// if both are empty, then password is used
+	if hash != "" {
+		initiator = &spnego.NTLMInitiator{
+			User:   username,
+			Hash:   []byte(hash),
+			Domain: domain,
+		}
+	} else {
+		initiator = &spnego.NTLMInitiator{
+			User:     username,
+			Password: password,
+			Domain:   domain,
+		}
+	}
+
+	// set up a proxy if enabled
+	if proxyOption {
+		options = smb.Options{
+			Host:        host,
+			Port:        smbPort,
+			Initiator:   initiator,
+			DialTimeout: timeout,
+			ProxyDialer: proxyDialer,
+		}
+	} else {
+		options = smb.Options{
+			Host:        host,
+			Port:        smbPort,
+			Initiator:   initiator,
+			DialTimeout: timeout,
+		}
+	}
+	return options
 }
 
 // Close is a function to close the active connection

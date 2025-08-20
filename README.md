@@ -38,22 +38,26 @@ usage: sharefinder [<flags>] <command> [<args> ...]
   sharefinder is a network share discovery tool that enumerates shares, permissions and files in networks and domains.
 
 Flags:
-  -h, --[no-]help              Show context-sensitive help (also try --help-long and --help-man).
-  -o, --output=""              file to write output to (raw and xml)
-  --[no-]html              output HTML (default false)
-  --threads=1              number of threads (default 1)
-  --timeout=5s             seconds to wait for connection (default 5s)
-  -e, --exclude="IPC$,ADMIN$"  share names to exclude (default IPC$,ADMIN$)
-  --[no-]list              list readable shares (default false)
-  --[no-]recurse           list readable shares recursively (default false)
-  --smb-port=445           target port of SMB service (default 445)
-  --[no-]version           Show application version.
+  -h, --[no-]help     Show context-sensitive help (also try --help-long and --help-man).
+  --[no-]debug    Enable debug mode, print debug messages
+  --[no-]quiet    Enable quiet mode, don't print any messages
+  -o, --output=""     File to write output to (raw and xml)
+  --[no-]html     Output the results in HTML
+  --threads=1     Number of threads
+  --timeout=5s    Seconds to wait for connection
+  --smb-port=445  Target port of SMB service
+  --proxy=""   SOCKS-proxy address to use for connection in format IP:PORT
+  -e, --exclude="IPC$,NETLOGON,ADMIN$,print$,C$"
+  Exclude list
+  --[no-]list     List readable shares
+  --[no-]recurse  List readable shares recursively
+  --[no-]version  Show application version.
 
 Commands:
   help [<command>...]
   anon <target>
-  auth --username=USERNAME --password=PASSWORD [<flags>] <target>
-  hunt --username=USERNAME --password=PASSWORD <dc>
+  auth --username=USERNAME [<flags>] <target>
+  hunt --username=USERNAME --password=PASSWORD [<flags>] <dc>
 ```
 
 # Installation

@@ -133,6 +133,7 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]net.IP, error) {
 		s.Options.DomainController,
 		s.Options.Username,
 		s.Options.Password,
+		s.Options.Hash,
 		strings.ToLower(s.Options.Domain),
 		s.Options.Timeout,
 		s.Options.Proxy,

@@ -23,7 +23,7 @@ func GetBaseDN(domain string) string {
 	return result
 }
 
-func NewLDAPConnection(host net.IP, username, password, domain string, timeout time.Duration, proxyOption bool, proxyDialer proxy.Dialer) (*LDAPConnection, error) {
+func NewLDAPConnection(host net.IP, username, password, hash, domain string, timeout time.Duration, proxyOption bool, proxyDialer proxy.Dialer) (*LDAPConnection, error) {
 	var l *ldap.Conn
 	var err error
 
@@ -86,10 +86,23 @@ func NewLDAPConnection(host net.IP, username, password, domain string, timeout t
 	}
 
 	// username in format user@example.com
-	err = l.Bind(username+"@"+domain, password)
-	if err != nil {
-		return nil, err
+
+	// check if NTLM hash is provided to authenticate
+	// will use NTLM hash if both are provided
+	if hash != "" {
+		// bind with NTLM hash
+		err = l.NTLMBindWithHash(domain, username, hash)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// bind with password
+		err = l.Bind(username+"@"+domain, password)
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	return &LDAPConnection{
 		connection: l,
 	}, nil

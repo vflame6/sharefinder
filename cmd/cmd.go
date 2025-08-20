@@ -97,6 +97,7 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 		"",
 		"",
 		"",
+		"",
 		false,
 		list,
 		recurse,
@@ -132,10 +133,16 @@ func ExecuteAnon(s *scanner.Scanner, target string) error {
 	return nil
 }
 
-func ExecuteAuth(s *scanner.Scanner, target, username, password string, localAuth bool) error {
-	logger.Warn("Executing auth module")
+func ExecuteAuth(s *scanner.Scanner, target, username, password, hash string, localAuth bool) error {
 	var targetDomain string
 	var targetUsername string
+
+	logger.Warn("Executing auth module")
+
+	// check if both password and hash are provided
+	if password != "" && hash != "" {
+		return errors.New("--password can't be used with --hashes")
+	}
 
 	// check for local authentication option to parse username correctly
 	if localAuth {
@@ -152,6 +159,7 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password string, localAut
 
 	s.Options.Username = targetUsername
 	s.Options.Password = password
+	s.Options.Hash = hash
 	s.Options.Domain = targetDomain
 	s.Options.LocalAuth = localAuth
 
@@ -173,11 +181,16 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password string, localAut
 	return nil
 }
 
-func ExecuteHunt(s *scanner.Scanner, username, password string, dc, resolver net.IP) error {
+func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolver net.IP) error {
 	var targetDomain string
 	var targetUsername string
 
 	logger.Warn("Executing hunt module")
+
+	// check if both password and hash are provided
+	if password != "" && hash != "" {
+		return errors.New("--password can't be used with --hashes")
+	}
 
 	// try to parse username in format DOMAIN\username
 	trySplit := strings.Split(username, "\\")
@@ -189,6 +202,7 @@ func ExecuteHunt(s *scanner.Scanner, username, password string, dc, resolver net
 
 	s.Options.Username = targetUsername
 	s.Options.Password = password
+	s.Options.Hash = hash
 	s.Options.Domain = targetDomain
 	s.Options.LocalAuth = false
 	s.Options.DomainController = dc
