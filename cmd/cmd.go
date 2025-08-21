@@ -18,7 +18,6 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 	var file *os.File
 	var fileXML *os.File
 	var err error
-	var proxyOption bool
 	var proxyDialer proxy.Dialer
 
 	outputOption := false
@@ -67,7 +66,6 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 
 	// parse proxyStr string in a format IP:PORT
 	if proxyStr != "" {
-		proxyOption = true
 		proxyURL, err := url.Parse("socks5://" + proxyStr)
 		if err != nil {
 			return nil, errors.New("invalid proxy setting, try IP:PORT")
@@ -77,7 +75,6 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 			return nil, errors.New("invalid proxy setting, try IP:PORT")
 		}
 	} else {
-		proxyOption = false
 		proxyDialer = nil
 	}
 
@@ -96,13 +93,12 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 		make(chan string, 256),
 		"",
 		"",
-		"",
+		[]byte{},
 		"",
 		false,
 		list,
 		recurse,
 		net.IPv4zero,
-		proxyOption,
 		proxyDialer,
 	)
 
@@ -159,7 +155,7 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password, hash string, lo
 
 	s.Options.Username = targetUsername
 	s.Options.Password = password
-	s.Options.Hash = hash
+	s.Options.Hashes = []byte(hash)
 	s.Options.Domain = targetDomain
 	s.Options.LocalAuth = localAuth
 
@@ -202,7 +198,7 @@ func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolv
 
 	s.Options.Username = targetUsername
 	s.Options.Password = password
-	s.Options.Hash = hash
+	s.Options.Hashes = []byte(hash)
 	s.Options.Domain = targetDomain
 	s.Options.LocalAuth = false
 	s.Options.DomainController = dc

@@ -13,7 +13,7 @@ func enumerateHost(host string, options *Options) (Host, error) {
 	var shareResult []Share
 
 	// get an SMB connection with NTLM authentication method
-	conn, err := NewNTLMConnection(host, options.Username, options.Password, options.Hash, options.Domain, options.Timeout, options.SmbPort, options.Proxy, options.ProxyDialer)
+	conn, err := NewSMBConnection(host, options.Username, options.Password, options.Hashes, options.Domain, options.Timeout, options.SmbPort, options.ProxyDialer)
 	if err != nil {
 		return hostResult, err
 	}

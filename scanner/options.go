@@ -22,18 +22,17 @@ type Options struct {
 	Username         string // part of --username
 	Domain           string // part of --username
 	Password         string // --password
-	Hash             string // --hashes
+	Hashes           []byte // --hashes
 	List             bool   // --list
 	Recurse          bool   // --recurse
 	LocalAuth        bool   // --local-auth
 	DomainController net.IP
 	CustomResolver   net.IP       // --resolver
-	Proxy            bool         // --proxy
 	ProxyDialer      proxy.Dialer // --proxy
 }
 
 // NewOptions is a function to generate new Options object
-func NewOptions(smbPort int, output, outputHTML bool, outputFile string, writer *OutputWriter, file, fileXML *os.File, timeout time.Duration, exclude []string, target chan string, username, password, hash, domain string, localAuth, list, recurse bool, domainController net.IP, proxyOption bool, proxyDialer proxy.Dialer) *Options {
+func NewOptions(smbPort int, output, outputHTML bool, outputFile string, writer *OutputWriter, file, fileXML *os.File, timeout time.Duration, exclude []string, target chan string, username, password string, hashes []byte, domain string, localAuth, list, recurse bool, domainController net.IP, proxyDialer proxy.Dialer) *Options {
 	return &Options{
 		SmbPort:          smbPort,
 		Output:           output,
@@ -47,13 +46,12 @@ func NewOptions(smbPort int, output, outputHTML bool, outputFile string, writer 
 		Target:           target,
 		Username:         username,
 		Password:         password,
-		Hash:             hash,
+		Hashes:           hashes,
 		Domain:           domain,
 		LocalAuth:        localAuth,
 		List:             list,
 		Recurse:          recurse,
 		DomainController: domainController,
-		Proxy:            proxyOption,
 		ProxyDialer:      proxyDialer,
 	}
 }

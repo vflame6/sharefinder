@@ -16,8 +16,8 @@ type Connection struct {
 	session *smb.Connection
 }
 
-func NewNTLMConnection(host, username, password, hash, domain string, timeout time.Duration, smbPort int, proxyOption bool, proxyDialer proxy.Dialer) (*Connection, error) {
-	options := GetSMBOptions(host, username, password, hash, domain, timeout, smbPort, proxyOption, proxyDialer)
+func NewSMBConnection(host, username, password string, hashes []byte, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer) (*Connection, error) {
+	options := GetSMBOptions(host, username, password, hashes, domain, timeout, smbPort, proxyDialer)
 
 	// establish the connection
 	session, err := smb.NewConnection(options)
@@ -31,44 +31,25 @@ func NewNTLMConnection(host, username, password, hash, domain string, timeout ti
 	return conn, nil
 }
 
-func GetSMBOptions(host, username, password, hash, domain string, timeout time.Duration, smbPort int, proxyOption bool, proxyDialer proxy.Dialer) smb.Options {
+func GetSMBOptions(host, username, password string, hashes []byte, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer) smb.Options {
 	var options smb.Options
-	var initiator *spnego.NTLMInitiator
 
-	// check if password or hash is provided
-	// hash will be preferred if it is not empty
-	// if both are empty, then password is used
-	if hash != "" {
-		initiator = &spnego.NTLMInitiator{
-			User:   username,
-			Hash:   []byte(hash),
-			Domain: domain,
-		}
-	} else {
-		initiator = &spnego.NTLMInitiator{
-			User:     username,
-			Password: password,
-			Domain:   domain,
-		}
+	smbOptions := smb.Options{
+		Host:                  host,
+		Port:                  smbPort,
+		RequireMessageSigning: false,
+		//DisableSigning: true,
+		DialTimeout: timeout,
+		ProxyDialer: proxyDialer,
 	}
 
-	// set up a proxy if enabled
-	if proxyOption {
-		options = smb.Options{
-			Host:        host,
-			Port:        smbPort,
-			Initiator:   initiator,
-			DialTimeout: timeout,
-			ProxyDialer: proxyDialer,
-		}
-	} else {
-		options = smb.Options{
-			Host:        host,
-			Port:        smbPort,
-			Initiator:   initiator,
-			DialTimeout: timeout,
-		}
+	smbOptions.Initiator = &spnego.NTLMInitiator{
+		Domain:   domain,
+		User:     username,
+		Password: password,
+		Hash:     hashes,
 	}
+
 	return options
 }
 

@@ -40,6 +40,7 @@ var (
 	anonTargetFlag = anonCommand.Arg("target", "Target, IP range or filename").Required().String()
 
 	// TODO: implement null session check - https://sensepost.com/blog/2024/guest-vs-null-session-on-windows/
+	// https://github.com/jfjallid/go-shareenum/blob/main/main.go
 
 	// auth command
 	// find authenticated shares and permissions
@@ -49,8 +50,6 @@ var (
 	authPasswordFlag  = authCommand.Flag("password", "User's password").Short('p').String()
 	authHashFlag      = authCommand.Flag("hashes", "NTLM hash of password to authenticate").Short('H').String()
 	authLocalAuthFlag = authCommand.Flag("local-auth", "Enable local authentication, the username is passed without domain").Bool()
-
-	// TODO: add kerberos support (-k and --no-pass)
 
 	// hunt command
 	// hunt for targets from AD and find shares and permissions
