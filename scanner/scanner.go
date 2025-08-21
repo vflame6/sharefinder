@@ -34,9 +34,10 @@ func NewScanner(options *Options, commandLine []string, timeStart time.Time, thr
 
 // CloseOutputter is a function to close output files channels
 func (s *Scanner) CloseOutputter() {
-	if s.Options.Output {
+	if s.Options.FileTXT != nil {
 		_ = s.Options.FileTXT.Close()
-
+	}
+	if s.Options.FileXML != nil {
 		err := s.Options.Writer.WriteXMLFooter(s.TimeEnd, s.Options.FileXML)
 		if err != nil {
 			logger.Error(err)
@@ -44,7 +45,7 @@ func (s *Scanner) CloseOutputter() {
 		_ = s.Options.FileXML.Close()
 
 		if s.Options.OutputHTML {
-			xmlFile, err := s.Options.Writer.ReadFile(s.Options.OutputFileName + ".xml")
+			xmlFile, err := s.Options.Writer.ReadFile(s.Options.FileXML.Name())
 			if err != nil {
 				logger.Error(err)
 			}
@@ -54,6 +55,7 @@ func (s *Scanner) CloseOutputter() {
 				logger.Error(err)
 			}
 		}
+
 	}
 }
 
@@ -197,7 +199,8 @@ func (s *Scanner) OutputHTML(data []byte) error {
 	}
 
 	// create the HTML file and write to it
-	fileHTML, err := s.Options.Writer.CreateFile(s.Options.OutputFileName+".html", false)
+	filenameHTML := s.Options.OutputFileName + ".html"
+	fileHTML, err := s.Options.Writer.CreateFile(filenameHTML, false)
 	if err != nil {
 		return err
 	}

@@ -15,13 +15,15 @@ var (
 
 	// global flags
 
-	// output flags
+	// log output flags
 	debugFlag = app.Flag("debug", "Enable debug mode, print debug messages").Bool()
-	quietFlag = app.Flag("quiet", "Enable quiet mode, don't print any messages").Bool()
+	quietFlag = app.Flag("quiet", "Enable quiet mode, print only results").Bool()
 
 	// file output flags
-	outputFlag     = app.Flag("output", "File to write output to (raw and xml)").Short('o').Default("").String()
-	outputHTMLFlag = app.Flag("html", "Output the results in HTML").Default("false").Bool()
+	outputRawFlag  = app.Flag("output", "Filename to write output in raw format").Short('o').Default("").String()
+	outputXMLFlag  = app.Flag("output-xml", "Filename to write XML formatted output").Default("").String()
+	outputAllFlag  = app.Flag("output-all", "Filename to write output in all formats").Default("").String()
+	outputHTMLFlag = app.Flag("html", "Generate HTML report (requires XML output)").Default("false").Bool()
 
 	// connection flags
 	threadsFlag = app.Flag("threads", "Number of threads").Default("1").Int()
@@ -56,7 +58,7 @@ var (
 	huntCommand      = app.Command("hunt", "hunting module")
 	huntDcFlag       = huntCommand.Arg("dc", "Domain Controller IP").Required().IP()
 	huntUsernameFlag = huntCommand.Flag("username", "Domain username in format DOMAIN\\username").Short('u').Required().String()
-	huntPasswordFlag = huntCommand.Flag("password", "Domain user's password").Short('p').Required().String()
+	huntPasswordFlag = huntCommand.Flag("password", "Domain user's password").Short('p').String()
 	huntHashFlag     = huntCommand.Flag("hashes", "NTLM hash of password to authenticate").Short('H').String()
 	huntResolverFlag = huntCommand.Flag("resolver", "Custom DNS resolver IP address").Short('r').IP()
 
@@ -91,7 +93,9 @@ func main() {
 		VERSION,
 		os.Args[1:],
 		time.Now(),
-		*outputFlag,
+		*outputRawFlag,
+		*outputXMLFlag,
+		*outputAllFlag,
 		*outputHTMLFlag,
 		*threadsFlag,
 		*timeoutFlag,

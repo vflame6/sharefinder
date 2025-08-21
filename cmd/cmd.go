@@ -13,20 +13,22 @@ import (
 	"time"
 )
 
-func CreateScanner(version string, commandLine []string, timeStart time.Time, outputFileName string, outputHTML bool, threads int, timeout time.Duration, exclude string, list, recurse bool, smbPort int, proxyStr string) (*scanner.Scanner, error) {
+func CreateScanner(version string, commandLine []string, timeStart time.Time, outputRaw, outputXML, outputAll string, outputHTML bool, threads int, timeout time.Duration, exclude string, list, recurse bool, smbPort int, proxyStr string) (*scanner.Scanner, error) {
+	var outputFileName string
 	var outputWriter *scanner.OutputWriter
 	var file *os.File
 	var fileXML *os.File
 	var err error
 	var proxyDialer proxy.Dialer
 
-	outputOption := false
-
 	// HTML output is available only if basic output is specified
 	// it is done like that because HTML file is generated based on generated XML
-	// maybe I will rewrite that logic in the future, maybe
-	if outputHTML && outputFileName == "" {
-		return nil, errors.New("cannot use --html without --output")
+	if outputHTML && outputXML == "" {
+		return nil, errors.New("cannot use --html without --output-xml")
+	}
+
+	if (outputXML != "" || outputRaw != "" || outputHTML) && outputAll != "" {
+		return nil, errors.New("cannot use --output-all with --output-raw, --output-xml or --html")
 	}
 
 	// recursive output is available only if the list option is specified
@@ -35,13 +37,44 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 		return nil, errors.New("cannot use --recurse without --list")
 	}
 
-	// non-empty outputFileName means the output option is specified
-	if outputFileName != "" {
-		outputOption = true
+	if outputRaw != "" {
+		// trim suffix of output filename if it matches with txt/xml/html
+		outputFileName = scanner.TrimFilenameSuffix(outputRaw)
+		outputRaw = outputFileName + ".txt"
+		logger.Debugf("Output in Raw format option is specified. Output file name: %s", outputRaw)
+
+		// create raw text output file
+		outputWriter = scanner.NewOutputWriter()
+		file, err = outputWriter.CreateFile(outputRaw+".txt", false)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if outputXML != "" {
+		// trim suffix of output filename if it matches with txt/xml/html
+		outputFileName = scanner.TrimFilenameSuffix(outputRaw)
+		outputXML = outputFileName + ".xml"
+		logger.Debugf("Output in XML format option is specified. Output file name: %s", outputXML)
+
+		// create XML output file and write an XML header line to it
+		fileXML, err = outputWriter.CreateFile(outputRaw+".xml", false)
+		if err != nil {
+			return nil, err
+		}
+		err = outputWriter.WriteXMLHeader(version, commandLine, timeStart, fileXML)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if outputAll != "" {
+		// set HTML output variable to true in case of --output-all
+		outputHTML = true
 
 		// trim suffix of output filename if it matches with txt/xml/html
-		outputFileName = scanner.TrimFilenameSuffix(outputFileName)
-		logger.Debugf("Output option is specified. Output file name: %s", outputFileName)
+		outputFileName = scanner.TrimFilenameSuffix(outputAll)
+		logger.Debugf("Output all formats option is specified. Output file name: %s", outputAll)
 
 		// create raw text output file
 		outputWriter = scanner.NewOutputWriter()
@@ -82,7 +115,6 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 	// the credentials will be specified on execution of authenticated modules
 	options := scanner.NewOptions(
 		smbPort,
-		outputOption,
 		outputHTML,
 		outputFileName,
 		outputWriter,
@@ -135,6 +167,7 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password, hash string, lo
 
 	logger.Warn("Executing auth module")
 
+	// if both password and hashes are empty, will use blank password to authenticate
 	// check if both password and hash are provided
 	if password != "" && hash != "" {
 		return errors.New("--password can't be used with --hashes")
@@ -183,6 +216,7 @@ func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolv
 
 	logger.Warn("Executing hunt module")
 
+	// if both password and hashes are empty, will use blank password to authenticate
 	// check if both password and hash are provided
 	if password != "" && hash != "" {
 		return errors.New("--password can't be used with --hashes")

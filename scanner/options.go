@@ -9,9 +9,8 @@ import (
 
 // Options is a struct to store scanner's configuration
 type Options struct {
-	SmbPort          int // --smb-port
-	Output           bool
-	OutputFileName   string // --output
+	SmbPort          int    // --smb-port
+	OutputFileName   string // --output-*
 	OutputHTML       bool   // --html
 	Writer           *OutputWriter
 	FileTXT          *os.File
@@ -32,10 +31,9 @@ type Options struct {
 }
 
 // NewOptions is a function to generate new Options object
-func NewOptions(smbPort int, output, outputHTML bool, outputFile string, writer *OutputWriter, file, fileXML *os.File, timeout time.Duration, exclude []string, target chan string, username, password string, hashes []byte, domain string, localAuth, list, recurse bool, domainController net.IP, proxyDialer proxy.Dialer) *Options {
+func NewOptions(smbPort int, outputHTML bool, outputFile string, writer *OutputWriter, file, fileXML *os.File, timeout time.Duration, exclude []string, target chan string, username, password string, hashes []byte, domain string, localAuth, list, recurse bool, domainController net.IP, proxyDialer proxy.Dialer) *Options {
 	return &Options{
 		SmbPort:          smbPort,
-		Output:           output,
 		OutputHTML:       outputHTML,
 		OutputFileName:   outputFile,
 		Writer:           writer,

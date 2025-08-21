@@ -159,13 +159,14 @@ func authThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
 			logger.Info(printResult)
 
 			// write results to a file if such option is specified
-			if options.Output {
+			if options.FileTXT != nil {
 				// try to write raw version
 				err = options.Writer.Write(printResult, options.FileTXT)
 				if err != nil {
 					logger.Error(err)
 				}
-
+			}
+			if options.FileXML != nil {
 				// try to write XML version
 				err = options.Writer.WriteXMLHost(hostResult, options.FileXML)
 				if err != nil {
