@@ -17,8 +17,8 @@ type Connection struct {
 	session *smb.Connection
 }
 
-func NewSMBConnection(host DNHost, username, password string, hashes []byte, kerberos bool, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer, dcIP net.IP) (*Connection, error) {
-	options := GetSMBOptions(host, username, password, hashes, kerberos, domain, timeout, smbPort, proxyDialer, dcIP)
+func NewSMBConnection(host DNHost, username, password string, hashes []byte, kerberos, localAuth bool, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer, dcIP net.IP) (*Connection, error) {
+	options := GetSMBOptions(host, username, password, hashes, kerberos, localAuth, domain, timeout, smbPort, proxyDialer, dcIP)
 
 	// establish the connection
 	session, err := smb.NewConnection(options)
@@ -32,7 +32,7 @@ func NewSMBConnection(host DNHost, username, password string, hashes []byte, ker
 	return conn, nil
 }
 
-func GetSMBOptions(host DNHost, username, password string, hashes []byte, kerberos bool, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer, dcIP net.IP) smb.Options {
+func GetSMBOptions(host DNHost, username, password string, hashes []byte, kerberos, localAuth bool, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer, dcIP net.IP) smb.Options {
 	smbOptions := smb.Options{
 		Host:                  host.IP.String(),
 		Port:                  smbPort,
@@ -54,10 +54,11 @@ func GetSMBOptions(host DNHost, username, password string, hashes []byte, kerber
 		}
 	} else {
 		smbOptions.Initiator = &spnego.NTLMInitiator{
-			Domain:   domain,
-			User:     username,
-			Password: password,
-			Hash:     hashes,
+			Domain:    domain,
+			User:      username,
+			Password:  password,
+			Hash:      hashes,
+			LocalUser: localAuth,
 		}
 	}
 

@@ -20,6 +20,7 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 		options.Password,
 		options.Hashes,
 		options.Kerberos,
+		options.LocalAuth,
 		options.Domain,
 		options.Timeout,
 		options.SmbPort,
