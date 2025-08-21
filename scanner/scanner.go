@@ -136,7 +136,6 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]net.IP, error) {
 		s.Options.Hashes,
 		strings.ToLower(s.Options.Domain),
 		s.Options.Timeout,
-		s.Options.Proxy,
 		s.Options.ProxyDialer,
 	)
 	if err != nil {
