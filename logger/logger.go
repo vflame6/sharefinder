@@ -43,30 +43,35 @@ func SetLoggerOptions(debug, quiet bool) error {
 func LogString(s string) {
 	if Log.Debug {
 		// split lines to determine if several lines are needed
-		lines := strings.Split(s, "\n")
+		lines := strings.Split(strings.TrimSpace(s), "\n")
 		if len(lines) > 1 {
 			// print the first one with timestamp and the others with padding
 			firstLine := lines[0]
 			Log.logger.Println(firstLine)
 			for _, line := range lines[1:] {
-				fmt.Println(Log.Padding + line)
+				fmt.Print(Log.Padding + line + "\n")
 			}
+			fmt.Println()
 		} else {
 			Log.logger.Println(s)
 		}
 	} else {
-		fmt.Println(s)
+		if s[len(s)-2:] == "\n\n" {
+			fmt.Print(s)
+		} else {
+			fmt.Println(s)
+		}
 	}
 }
 
 // LogDebugString is a function to make debug logs
 func LogDebugString(s string) {
-	Log.logger.Println("[DEBUG] " + s)
+	Log.logger.Println("[DEBUG] " + strings.TrimSpace(s))
 }
 
 // LogErrorString is a function to make debug logs
 func LogErrorString(s string) {
-	errorString := "[ERROR] " + s
+	errorString := "[ERROR] " + strings.TrimSpace(s)
 	if Log.Debug {
 		Log.logger.Println(errorString)
 	} else {

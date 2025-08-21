@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/hex"
 	"errors"
 	"github.com/vflame6/sharefinder/logger"
 	"github.com/vflame6/sharefinder/scanner"
@@ -165,6 +166,7 @@ func ExecuteAnon(s *scanner.Scanner, target string) error {
 func ExecuteAuth(s *scanner.Scanner, target, username, password, hash string, localAuth bool) error {
 	var targetDomain string
 	var targetUsername string
+	var err error
 
 	logger.Warn("Executing auth module")
 
@@ -187,9 +189,18 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password, hash string, lo
 		targetUsername = trySplit[1]
 	}
 
+	// try to decode hash
+	var hashBytes []byte
+	if hash != "" {
+		hashBytes, err = hex.DecodeString(hash)
+		if err != nil {
+			return err
+		}
+	}
+
 	s.Options.Username = targetUsername
 	s.Options.Password = password
-	s.Options.Hashes = []byte(hash)
+	s.Options.Hashes = hashBytes
 	s.Options.Domain = targetDomain
 	s.Options.LocalAuth = localAuth
 
@@ -198,7 +209,7 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password, hash string, lo
 	// run the enumeration threads
 	s.RunAuthEnumeration(&wg)
 	// parse targets and send them to targets channel
-	err := s.ParseTargets(target)
+	err = s.ParseTargets(target)
 	if err != nil {
 		return err
 	}
@@ -214,6 +225,7 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password, hash string, lo
 func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolver net.IP, kerberos bool, dcHostname string) error {
 	var targetDomain string
 	var targetUsername string
+	var err error
 
 	logger.Warn("Executing hunt module")
 
@@ -236,9 +248,18 @@ func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolv
 	targetDomain = strings.ToLower(trySplit[0])
 	targetUsername = strings.ToLower(trySplit[1])
 
+	// try to decode hash
+	var hashBytes []byte
+	if hash != "" {
+		hashBytes, err = hex.DecodeString(hash)
+		if err != nil {
+			return err
+		}
+	}
+
 	s.Options.Username = targetUsername
 	s.Options.Password = password
-	s.Options.Hashes = []byte(hash)
+	s.Options.Hashes = hashBytes
 	s.Options.Kerberos = kerberos
 	s.Options.Domain = targetDomain
 	s.Options.LocalAuth = false
@@ -256,8 +277,7 @@ func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolv
 		return err
 	}
 
-	logger.Warnf("Found %d domain computers", len(possibleTargets))
-	logger.Warn("Starting SMB shares enumeration")
+	logger.Warnf("Found %d domain computers. Starting SMB shares enumeration...", len(possibleTargets))
 
 	// check for shares and permissions on identified targets
 	s.RunAuthEnumeration(&wg)

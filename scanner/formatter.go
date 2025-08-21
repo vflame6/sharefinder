@@ -59,7 +59,7 @@ func SprintFiles(files []File) string {
 			// Microsoft handles time as number of 100-nanosecond intervals since January 1, 1601 UTC
 			// So to get a timestamp with unix time, subtract difference in 100-nanosecond intervals
 			// and divide by 10 to convert to microseconds
-			lastWrite := time.Time.Format(time.Time(file.LastModified), dateTimeFormat)
+			lastWrite := time.Time.Format(file.LastModified, dateTimeFormat)
 			fileSize := BytesToHumanReadableSize(file.Size)
 			shareListResult += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", file.Type, fileSize, lastWrite, file.Name)
 		}
@@ -73,6 +73,8 @@ func SprintDirectories(ip, share string, dirs []Directory) string {
 	if len(dirs) > 0 {
 		for _, dir := range dirs {
 			shareListResult += fmt.Sprintf("Listing directory %s\\%s\\%s\n", ip, share, dir.Name)
+			shareListResult += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "Type", "Size", "LastWriteTime", "ShareName")
+			shareListResult += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "----", "----", "-------------", "----")
 			for _, file := range dir.Files {
 				lastWrite := time.Time.Format(file.LastModified, dateTimeFormat)
 				fileSize := BytesToHumanReadableSize(file.Size)

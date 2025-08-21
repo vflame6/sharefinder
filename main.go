@@ -61,7 +61,7 @@ var (
 	huntPasswordFlag   = huntCommand.Flag("password", "Domain user's password").Short('p').String()
 	huntHashFlag       = huntCommand.Flag("hashes", "NTLM hash of password to authenticate").Short('H').String()
 	huntResolverFlag   = huntCommand.Flag("resolver", "Custom DNS resolver IP address").Short('r').IP()
-	huntKerberosFlag   = huntCommand.Flag("kerberos", "Use Kerberos authentication").Bool()
+	huntKerberosFlag   = huntCommand.Flag("kerberos", "Use Kerberos authentication").Short('k').Bool()
 	huntDcHostnameFlag = huntCommand.Flag("dc-hostname", "Hostname of domain controller for Kerberos authentication").String()
 )
 
@@ -79,7 +79,9 @@ func main() {
 	command := kingpin.MustParse(app.Parse(os.Args[1:]))
 
 	// print program banner
-	cmd.PrintBanner()
+	if !*quietFlag {
+		cmd.PrintBanner()
+	}
 
 	// set up a logger
 	err := logger.SetLoggerOptions(*debugFlag, *quietFlag)

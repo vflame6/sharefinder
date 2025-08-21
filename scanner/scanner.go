@@ -219,6 +219,7 @@ func (s *Scanner) OutputHTML(data []byte) error {
 
 	// create the HTML file and write to it
 	filenameHTML := s.Options.OutputFileName + ".html"
+	logger.Debugf("Generating HTML report. Output file: %s", filenameHTML)
 	fileHTML, err := s.Options.Writer.CreateFile(filenameHTML, false)
 	if err != nil {
 		return err

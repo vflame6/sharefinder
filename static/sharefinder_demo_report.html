@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://cdn.datatables.net/v/bs5/jq-3.7.0/dt-2.2.2/datatables.min.css" rel="stylesheet" integrity="sha384-WMi+Ec+QE8hxW/3qKvuefShIddYjwMalSgy0MR4FZnl285C4HGYfISceaagw0Am3" crossorigin="anonymous">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.bundle.min.js" integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz" crossorigin="anonymous"></script>
+    <script src="https://cdn.datatables.net/v/bs5/jq-3.7.0/dt-2.2.2/datatables.min.js" integrity="sha384-WcZXtPeSp12Ybwm08R/IL8F3bMhrj0WW6jKsqKXTqJSwCSkISe4unYVY8Vzc1RZc" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            padding-top: 56px;  
+        }
+        .footer {
+            margin-top:56px;
+            padding-top:56px;
+            width: 100%;
+            height: 160px;
+            background-color: #f5f5f5;
+        }
+        .panel-heading {
+            display: flex;
+        }
+        .bi-chevron-down {
+            font-size: 1rem;
+            margin-right: 3px;
+        }
+        .bi-chevron-right {
+            font-size: 1rem;
+            margin-right: 3px;
+        }
+        h2 {
+            padding-top: 24px;
+        }
+        h5 {
+            padding-top: 12px;
+        }
+        h6 {
+            padding-top: 4px;
+        }
+    </style>
+
+    <title>sharefinder report</title>
+</head>
+
+<body>
+
+<script>
+    function toggleChevron(element) {
+        let chevron = element.getElementsByTagName("i")[0]
+        chevron.classList.toggle("bi-chevron-right")
+        chevron.classList.toggle("bi-chevron-down")
+    }
+
+    function logn(n, b) {
+        return Math.log(n) / Math.log(b);
+    }
+
+    function bytesToHumanReadableSize(s) {
+        const base = 1000;
+        const sizes = ["B", "kB", "MB", "GB", "TB", "PB", "EB"];
+
+        if (s < 10) {
+            return `${s} B`;
+        }
+
+        let e = Math.floor(logn(s, base));
+        let suffix = sizes[e];
+        let val = Math.floor((s / Math.pow(base, e)) * 10 + 0.5) / 10;
+
+        return val < 10 ? `${val.toFixed(1)} ${suffix}` : `${val.toFixed(0)} ${suffix}`;
+    }
+</script>
+
+<nav class="navbar navbar-expand-lg bg-secondary fixed-top">
+    <div class="container">
+        <a class="navbar-brand text-white" href="#">sharefinder</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav gap-2">
+                <li class="nav-item">
+                    <a class="nav-link text-white" href="#hosts">Hosts</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link text-white" href="#shares">Shares</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link text-white" href="#files">Files</a>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<div id="content" class="container">
+    <div id="summary" class="mt-4 p-5 bg-light rounded">
+        <h1>Sharefinder Scan Report</h1>
+        <h2 class="text-muted pt-0">sharefinder 1.2.0</h2>
+        <p id="summary-time" class="lead">21/08/2025 21:39:42 - 21/08/2025 21:39:42</p>
+    </div>
+
+    
+    <h2>Identified Hosts</h2>
+    <div id="hosts">
+        <table id="table-hosts" class="table table-hover table-sm">
+            <thead>
+            <tr>
+                <th>IP</th>
+                <th>Version</th>
+                <th>Hostname</th>
+                <th>Domain</th>
+                <th>Signing</th>
+                <th>Shares</th>
+            </tr>
+            </thead>
+            <tbody>
+                
+                <tr>
+                    <td><a href="#192.168.56.11">192.168.56.11</a></td>
+                    <td>Windows NT 10.0 Build 17763</td>
+                    <td>WINTERFELL</td>
+                    <td>north.sevenkingdoms.local</td>
+                    <td>true</td>
+                    <td>1</td>
+                </tr>
+                
+                <tr>
+                    <td><a href="#192.168.56.22">192.168.56.22</a></td>
+                    <td>Windows NT 10.0 Build 17763</td>
+                    <td>CASTELBLACK</td>
+                    <td>north.sevenkingdoms.local</td>
+                    <td>false</td>
+                    <td>2</td>
+                </tr>
+                
+            </tbody>
+        </table>
+    </div>
+    <script>
+        $(document).ready(function() {
+            $('#table-hosts').DataTable({
+                "lengthMenu": [ [20, 100, -1], [20, 100, "All"] ],
+            });
+        });
+    </script>
+
+    
+    <h2>Shares</h2>
+    <div id="shares">
+        
+        <div class="panel panel-default border rounded pt-2 bg-light">
+            <div onclick="toggleChevron(this)" class="panel-heading px-3" data-bs-toggle="collapse" data-bs-target="#192.168.56.11" role="button">
+                <i class="bi bi-chevron-down"></i>
+                <h5 class="panel-title pt-0">WINTERFELL.north.sevenkingdoms.local (192.168.56.11)</h5>
+            </div>
+            <div class="panel-body collapse in show bg-white px-3 border-top border-bottom" id="192.168.56.11" aria-expanded="true">
+                <h5>Host information</h5>
+                <p>Version: Windows NT 10.0 Build 17763</p>
+                <p>Signing: true</p>
+                <h5>Shares</h5>
+                <table id="hostShares" class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Description</th>
+                            <th>Readable</th>
+                            <th>Writable</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        
+                        <tr  class="table-warning">
+                            <td>SYSVOL</td>
+                            <td>Logon server share </td>
+                            <td>true</td>
+                            <td>false</td>
+                        </tr>
+
+                        
+                        <tr>
+                            <td colspan="4">
+                                <h6>Share: SYSVOL</h6>
+                                <div>
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+                                        
+                                        
+                                        <tr>
+                                            <td>dir</td>
+                                            <td>north.sevenkingdoms.local</td>
+                                            <td>0</td>
+                                            <td>2025-03-02 18:14:48.51 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        
+
+                                        
+                                        
+                                        
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                
+                                <h6>Directory: SYSVOL\north.sevenkingdoms.local</h6>
+                                <div>
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+
+                                        
+                                        <tr>
+                                            <td>dir</td>
+                                            <td>DfsrPrivate</td>
+                                            <td>0</td>
+                                            <td>2025-03-02 18:25:43.731717 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        <tr>
+                                            <td>dir</td>
+                                            <td>Policies</td>
+                                            <td>0</td>
+                                            <td>2025-03-02 19:49:24.056213 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        <tr>
+                                            <td>dir</td>
+                                            <td>scripts</td>
+                                            <td>0</td>
+                                            <td>2025-03-02 19:48:56.462258 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <h6>Directory: SYSVOL\north.sevenkingdoms.local\Policies</h6>
+                                <div>
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+
+                                        
+                                        <tr>
+                                            <td>dir</td>
+                                            <td>{31B2F340-016D-11D2-945F-00C04FB984F9}</td>
+                                            <td>0</td>
+                                            <td>2025-03-02 18:14:59.599071 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        <tr>
+                                            <td>dir</td>
+                                            <td>{6AC1786C-016F-11D2-945F-00C04fB984F9}</td>
+                                            <td>0</td>
+                                            <td>2025-03-02 18:14:59.599071 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        <tr>
+                                            <td>dir</td>
+                                            <td>{6CB8F7E3-2EAE-4C0B-ADBB-68A2057429C5}</td>
+                                            <td>0</td>
+                                            <td>2025-03-02 19:49:24.087843 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <h6>Directory: SYSVOL\north.sevenkingdoms.local\Policies\{31B2F340-016D-11D2-945F-00C04FB984F9}</h6>
+                                <div>
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+
+                                        
+                                        <tr>
+                                            <td>dir</td>
+                                            <td>MACHINE</td>
+                                            <td>0</td>
+                                            <td>2025-03-02 18:14:59.599071 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        <tr>
+                                            <td>dir</td>
+                                            <td>USER</td>
+                                            <td>0</td>
+                                            <td>2025-03-02 18:14:59.599071 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        <tr>
+                                            <td>file</td>
+                                            <td>GPT.INI</td>
+                                            <td>22</td>
+                                            <td>2025-03-02 18:38:38.888108 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <h6>Directory: SYSVOL\north.sevenkingdoms.local\Policies\{31B2F340-016D-11D2-945F-00C04FB984F9}\MACHINE</h6>
+                                <div>
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+
+                                        
+                                        <tr>
+                                            <td>dir</td>
+                                            <td>Microsoft</td>
+                                            <td>0</td>
+                                            <td>2025-03-02 18:14:59.599071 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <h6>Directory: SYSVOL\north.sevenkingdoms.local\Policies\{31B2F340-016D-11D2-945F-00C04FB984F9}\MACHINE\Microsoft</h6>
+                                <div>
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+
+                                        
+                                        <tr>
+                                            <td>dir</td>
+                                            <td>Windows NT</td>
+                                            <td>0</td>
+                                            <td>2025-03-02 18:14:59.599071 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <h6>Directory: SYSVOL\north.sevenkingdoms.local\Policies\{31B2F340-016D-11D2-945F-00C04FB984F9}\MACHINE\Microsoft\Windows NT</h6>
+                                <div>
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+
+                                        
+                                        <tr>
+                                            <td>dir</td>
+                                            <td>SecEdit</td>
+                                            <td>0</td>
+                                            <td>2025-03-02 18:38:38.872451 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <h6>Directory: SYSVOL\north.sevenkingdoms.local\Policies\{31B2F340-016D-11D2-945F-00C04FB984F9}\MACHINE\Microsoft\Windows NT\SecEdit</h6>
+                                <div>
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+
+                                        
+                                        <tr>
+                                            <td>file</td>
+                                            <td>GptTmpl.inf</td>
+                                            <td>1192</td>
+                                            <td>2025-03-02 18:38:38.84119 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <h6>Directory: SYSVOL\north.sevenkingdoms.local\Policies\{31B2F340-016D-11D2-945F-00C04FB984F9}\USER</h6>
+                                <div>
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+
+                                        
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <h6>Directory: SYSVOL\north.sevenkingdoms.local\Policies\{6AC1786C-016F-11D2-945F-00C04fB984F9}</h6>
+                                <div>
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+
+                                        
+                                        <tr>
+                                            <td>dir</td>
+                                            <td>MACHINE</td>
+                                            <td>0</td>
+                                            <td>2025-03-02 18:14:59.599071 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        <tr>
+                                            <td>dir</td>
+                                            <td>USER</td>
+                                            <td>0</td>
+                                            <td>2025-03-02 18:14:59.599071 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        <tr>
+                                            <td>file</td>
+                                            <td>GPT.INI</td>
+                                            <td>22</td>
+                                            <td>2025-03-02 18:14:59.599071 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <h6>Directory: SYSVOL\north.sevenkingdoms.local\Policies\{6AC1786C-016F-11D2-945F-00C04fB984F9}\MACHINE</h6>
+                                <div>
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+
+                                        
+                                        <tr>
+                                            <td>dir</td>
+                                            <td>Microsoft</td>
+                                            <td>0</td>
+                                            <td>2025-03-02 18:14:59.599071 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <h6>Directory: SYSVOL\north.sevenkingdoms.local\Policies\{6AC1786C-016F-11D2-945F-00C04fB984F9}\MACHINE\Microsoft</h6>
+                                <div>
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+
+                                        
+                                        <tr>
+                                            <td>dir</td>
+                                            <td>Windows NT</td>
+                                            <td>0</td>
+                                            <td>2025-03-02 18:14:59.599071 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <h6>Directory: SYSVOL\north.sevenkingdoms.local\Policies\{6AC1786C-016F-11D2-945F-00C04fB984F9}\MACHINE\Microsoft\Windows NT</h6>
+                                <div>
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+
+                                        
+                                        <tr>
+                                            <td>dir</td>
+                                            <td>SecEdit</td>
+                                            <td>0</td>
+                                            <td>2025-03-02 18:14:59.599071 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <h6>Directory: SYSVOL\north.sevenkingdoms.local\Policies\{6AC1786C-016F-11D2-945F-00C04fB984F9}\MACHINE\Microsoft\Windows NT\SecEdit</h6>
+                                <div>
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+
+                                        
+                                        <tr>
+                                            <td>file</td>
+                                            <td>GptTmpl.inf</td>
+                                            <td>3764</td>
+                                            <td>2025-03-02 18:14:59.599071 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <h6>Directory: SYSVOL\north.sevenkingdoms.local\Policies\{6AC1786C-016F-11D2-945F-00C04fB984F9}\USER</h6>
+                                <div>
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+
+                                        
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <h6>Directory: SYSVOL\north.sevenkingdoms.local\Policies\{6CB8F7E3-2EAE-4C0B-ADBB-68A2057429C5}</h6>
+                                <div>
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+
+                                        
+                                        <tr>
+                                            <td>dir</td>
+                                            <td>Machine</td>
+                                            <td>0</td>
+                                            <td>2025-03-02 19:49:24.494003 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        <tr>
+                                            <td>dir</td>
+                                            <td>User</td>
+                                            <td>0</td>
+                                            <td>2025-03-02 19:49:24.447666 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        <tr>
+                                            <td>file</td>
+                                            <td>GPO.cmt</td>
+                                            <td>32</td>
+                                            <td>2025-03-02 19:49:24.103269 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        <tr>
+                                            <td>file</td>
+                                            <td>GPT.INI</td>
+                                            <td>64</td>
+                                            <td>2025-03-02 19:49:24.494003 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <h6>Directory: SYSVOL\north.sevenkingdoms.local\Policies\{6CB8F7E3-2EAE-4C0B-ADBB-68A2057429C5}\Machine</h6>
+                                <div>
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+
+                                        
+                                        <tr>
+                                            <td>file</td>
+                                            <td>Registry.pol</td>
+                                            <td>200</td>
+                                            <td>2025-03-02 19:49:24.47898 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <h6>Directory: SYSVOL\north.sevenkingdoms.local\Policies\{6CB8F7E3-2EAE-4C0B-ADBB-68A2057429C5}\User</h6>
+                                <div>
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+
+                                        
+                                        <tr>
+                                            <td>file</td>
+                                            <td>Registry.pol</td>
+                                            <td>202</td>
+                                            <td>2025-03-02 19:49:24.447666 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <h6>Directory: SYSVOL\north.sevenkingdoms.local\scripts</h6>
+                                <div>
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+
+                                        
+                                        <tr>
+                                            <td>file</td>
+                                            <td>script.ps1</td>
+                                            <td>165</td>
+                                            <td>2025-03-02 19:48:53.25907 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        <tr>
+                                            <td>file</td>
+                                            <td>secret.ps1</td>
+                                            <td>869</td>
+                                            <td>2025-03-02 19:48:55.728352 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                            </td>
+                        </tr>
+                        
+                        
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="panel panel-default border rounded pt-2 bg-light">
+            <div onclick="toggleChevron(this)" class="panel-heading px-3" data-bs-toggle="collapse" data-bs-target="#192.168.56.22" role="button">
+                <i class="bi bi-chevron-down"></i>
+                <h5 class="panel-title pt-0">CASTELBLACK.north.sevenkingdoms.local (192.168.56.22)</h5>
+            </div>
+            <div class="panel-body collapse in show bg-white px-3 border-top border-bottom" id="192.168.56.22" aria-expanded="true">
+                <h5>Host information</h5>
+                <p>Version: Windows NT 10.0 Build 17763</p>
+                <p>Signing: false</p>
+                <h5>Shares</h5>
+                <table id="hostShares" class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Description</th>
+                            <th>Readable</th>
+                            <th>Writable</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        
+                        <tr class="table-danger">
+                            <td>all</td>
+                            <td>Basic RW share for all</td>
+                            <td>true</td>
+                            <td>true</td>
+                        </tr>
+
+                        
+                        <tr>
+                            <td colspan="4">
+                                <h6>Share: all</h6>
+                                <div>
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+                                        
+                                        
+                                        
+
+                                        
+                                        
+                                        <tr>
+                                            <td>file</td>
+                                            <td>arya.txt</td>
+                                            <td>413</td>
+                                            <td>2025-03-02 19:48:54.324746 &#43;0500 &#43;05</td>
+                                        </tr>
+                                        
+                                        
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                
+                            </td>
+                        </tr>
+                        
+                        
+                        <tr class="table-danger">
+                            <td>public</td>
+                            <td>Basic Read share for all domain users</td>
+                            <td>true</td>
+                            <td>true</td>
+                        </tr>
+
+                        
+                        
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+    </div>
+
+    
+    <h2>Identified Files</h2>
+    <div id="files">
+        <table id="tableFiles" class="table table-hover table-sm">
+            <thead>
+                <tr>
+                    <th>Host</th>
+                    <th>Share</th>
+                    <th>Path</th>
+                    <th>Size</th>
+                    <th>Last Modified</th>
+                    <th>Filename</th>
+                </tr>
+            </thead>
+            <tbody>
+            
+            
+
+            
+            
+            
+
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            <tr>
+                <td>192.168.56.11</td>
+                <td>SYSVOL</td>
+                <td>north.sevenkingdoms.local\Policies\{31B2F340-016D-11D2-945F-00C04FB984F9}\GPT.INI</td>
+                <td>22</td>
+                <td>2025-03-02 18:38:38.888108 &#43;0500 &#43;05</td>
+                <td style="white-space:pre-wrap; word-wrap:break-word;">GPT.INI</td>
+            </tr>
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            <tr>
+                <td>192.168.56.11</td>
+                <td>SYSVOL</td>
+                <td>north.sevenkingdoms.local\Policies\{31B2F340-016D-11D2-945F-00C04FB984F9}\MACHINE\Microsoft\Windows NT\SecEdit\GptTmpl.inf</td>
+                <td>1192</td>
+                <td>2025-03-02 18:38:38.84119 &#43;0500 &#43;05</td>
+                <td style="white-space:pre-wrap; word-wrap:break-word;">GptTmpl.inf</td>
+            </tr>
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            <tr>
+                <td>192.168.56.11</td>
+                <td>SYSVOL</td>
+                <td>north.sevenkingdoms.local\Policies\{6AC1786C-016F-11D2-945F-00C04fB984F9}\GPT.INI</td>
+                <td>22</td>
+                <td>2025-03-02 18:14:59.599071 &#43;0500 &#43;05</td>
+                <td style="white-space:pre-wrap; word-wrap:break-word;">GPT.INI</td>
+            </tr>
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            <tr>
+                <td>192.168.56.11</td>
+                <td>SYSVOL</td>
+                <td>north.sevenkingdoms.local\Policies\{6AC1786C-016F-11D2-945F-00C04fB984F9}\MACHINE\Microsoft\Windows NT\SecEdit\GptTmpl.inf</td>
+                <td>3764</td>
+                <td>2025-03-02 18:14:59.599071 &#43;0500 &#43;05</td>
+                <td style="white-space:pre-wrap; word-wrap:break-word;">GptTmpl.inf</td>
+            </tr>
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            <tr>
+                <td>192.168.56.11</td>
+                <td>SYSVOL</td>
+                <td>north.sevenkingdoms.local\Policies\{6CB8F7E3-2EAE-4C0B-ADBB-68A2057429C5}\GPO.cmt</td>
+                <td>32</td>
+                <td>2025-03-02 19:49:24.103269 &#43;0500 &#43;05</td>
+                <td style="white-space:pre-wrap; word-wrap:break-word;">GPO.cmt</td>
+            </tr>
+            
+            
+            
+            <tr>
+                <td>192.168.56.11</td>
+                <td>SYSVOL</td>
+                <td>north.sevenkingdoms.local\Policies\{6CB8F7E3-2EAE-4C0B-ADBB-68A2057429C5}\GPT.INI</td>
+                <td>64</td>
+                <td>2025-03-02 19:49:24.494003 &#43;0500 &#43;05</td>
+                <td style="white-space:pre-wrap; word-wrap:break-word;">GPT.INI</td>
+            </tr>
+            
+            
+            
+            
+            
+            <tr>
+                <td>192.168.56.11</td>
+                <td>SYSVOL</td>
+                <td>north.sevenkingdoms.local\Policies\{6CB8F7E3-2EAE-4C0B-ADBB-68A2057429C5}\Machine\Registry.pol</td>
+                <td>200</td>
+                <td>2025-03-02 19:49:24.47898 &#43;0500 &#43;05</td>
+                <td style="white-space:pre-wrap; word-wrap:break-word;">Registry.pol</td>
+            </tr>
+            
+            
+            
+            
+            
+            <tr>
+                <td>192.168.56.11</td>
+                <td>SYSVOL</td>
+                <td>north.sevenkingdoms.local\Policies\{6CB8F7E3-2EAE-4C0B-ADBB-68A2057429C5}\User\Registry.pol</td>
+                <td>202</td>
+                <td>2025-03-02 19:49:24.447666 &#43;0500 &#43;05</td>
+                <td style="white-space:pre-wrap; word-wrap:break-word;">Registry.pol</td>
+            </tr>
+            
+            
+            
+            
+            
+            <tr>
+                <td>192.168.56.11</td>
+                <td>SYSVOL</td>
+                <td>north.sevenkingdoms.local\scripts\script.ps1</td>
+                <td>165</td>
+                <td>2025-03-02 19:48:53.25907 &#43;0500 &#43;05</td>
+                <td style="white-space:pre-wrap; word-wrap:break-word;">script.ps1</td>
+            </tr>
+            
+            
+            
+            <tr>
+                <td>192.168.56.11</td>
+                <td>SYSVOL</td>
+                <td>north.sevenkingdoms.local\scripts\secret.ps1</td>
+                <td>869</td>
+                <td>2025-03-02 19:48:55.728352 &#43;0500 &#43;05</td>
+                <td style="white-space:pre-wrap; word-wrap:break-word;">secret.ps1</td>
+            </tr>
+            
+            
+            
+
+            
+            
+            
+
+            
+            
+            <tr>
+                <td>192.168.56.22</td>
+                <td>all</td>
+                <td>arya.txt</td>
+                <td>413</td>
+                <td>2025-03-02 19:48:54.324746 &#43;0500 &#43;05</td>
+                <td>arya.txt</td>
+            </tr>
+            
+            
+
+            
+
+            
+
+            
+
+            
+
+            
+            
+            </tbody>
+        </table>
+    </div>
+    <script>
+        $(document).ready(function() {
+            $('#tableFiles').DataTable({
+                "lengthMenu": [ [20, 100, -1], [20, 100, "All"] ],
+                "columnDefs": [
+                    {
+                        targets: 3,
+                        render: function (data, type, row, meta) {
+                            return bytesToHumanReadableSize(data)
+                        }
+                    },
+                    {
+                        targets: 4,
+                        render: function(data, type, row, meta) {
+                            
+                            let cleanedInput = data.replace(/\.\d+\s\+\d{4}\s\+\d{2}$/, '');
+
+                            
+                            let date = new Date(cleanedInput);
+
+                            
+                            let formattedDate = date.toLocaleString("en-GB", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                hour12: false
+                            });
+
+                            return formattedDate.replace(',', '');
+                        }
+                    }
+                ]
+            });
+        });
+    </script>
+</div>
+
+<footer class="footer">
+    <div class="container">
+        <p class="text-muted">
+            This report was generated by <a href="https://github.com/vflame6/sharefinder">sharefinder</a>.
+            <br>
+            Designed and built by Maksim Radaev (<a href="https://vflame6.github.io/about-me/">@vflame6</a>).
+            <br>
+        </p>
+    </div>
+</footer>
+
+</body>
+
+</html>

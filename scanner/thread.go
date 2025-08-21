@@ -13,6 +13,7 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 	var shareResult []Share
 
 	// get an SMB connection with NTLM authentication method
+	logger.Debugf("Trying to establish SMB connection to %s (%s)", host.Hostname, host.IP.String())
 	conn, err := NewSMBConnection(
 		host,
 		options.Username,
@@ -35,6 +36,7 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 	if !conn.session.IsAuthenticated() {
 		return hostResult, fmt.Errorf("not authenticated status on host %s after successful connection", host)
 	}
+	logger.Debugf("Successfully established SMB connection to %s (%s)", host.Hostname, host.IP.String())
 
 	// TODO implement SMBv1 check
 	// TODO: implement Windows versions check
@@ -172,6 +174,7 @@ func authThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
 			// write results to a file if such option is specified
 			if options.FileTXT != nil {
 				// try to write raw version
+				logger.Debugf("Writing the results in raw format to %s", options.FileTXT.Name())
 				err = options.Writer.Write(printResult, options.FileTXT)
 				if err != nil {
 					logger.Error(err)
@@ -179,6 +182,7 @@ func authThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
 			}
 			if options.FileXML != nil {
 				// try to write XML version
+				logger.Debugf("Writing the results in XML format to %s", options.FileXML.Name())
 				err = options.Writer.WriteXMLHost(hostResult, options.FileXML)
 				if err != nil {
 					logger.Error(err)

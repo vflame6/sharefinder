@@ -33,8 +33,6 @@ func NewSMBConnection(host DNHost, username, password string, hashes []byte, ker
 }
 
 func GetSMBOptions(host DNHost, username, password string, hashes []byte, kerberos bool, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer, dcIP net.IP) smb.Options {
-	var options smb.Options
-
 	smbOptions := smb.Options{
 		Host:                  host.IP.String(),
 		Port:                  smbPort,
@@ -63,7 +61,7 @@ func GetSMBOptions(host DNHost, username, password string, hashes []byte, kerber
 		}
 	}
 
-	return options
+	return smbOptions
 }
 
 // Close is a function to close the active connection
