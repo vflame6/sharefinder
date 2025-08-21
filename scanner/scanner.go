@@ -148,7 +148,7 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 		s.Options.DomainController,
 		s.Options.Username,
 		s.Options.Password,
-		s.Options.Hashes,
+		s.Options.Hash,
 		strings.ToLower(s.Options.Domain),
 		s.Options.Timeout,
 		s.Options.ProxyDialer,

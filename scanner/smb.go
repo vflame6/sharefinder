@@ -37,6 +37,7 @@ func GetSMBOptions(host DNHost, username, password string, hashes []byte, kerber
 		Host:                  host.IP.String(),
 		Port:                  smbPort,
 		RequireMessageSigning: false,
+		ForceSMB2:             false,
 		//DisableSigning: true,
 		DialTimeout: timeout,
 		ProxyDialer: proxyDialer,

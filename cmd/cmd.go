@@ -125,6 +125,7 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 		excludeList,
 		"",
 		"",
+		"",
 		[]byte{},
 		false,
 		"",
@@ -200,7 +201,8 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password, hash string, lo
 
 	s.Options.Username = targetUsername
 	s.Options.Password = password
-	s.Options.Hashes = hashBytes
+	s.Options.Hash = hash
+	s.Options.HashBytes = hashBytes
 	s.Options.Domain = targetDomain
 	s.Options.LocalAuth = localAuth
 
@@ -259,7 +261,8 @@ func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolv
 
 	s.Options.Username = targetUsername
 	s.Options.Password = password
-	s.Options.Hashes = hashBytes
+	s.Options.Hash = hash
+	s.Options.HashBytes = hashBytes
 	s.Options.Kerberos = kerberos
 	s.Options.Domain = targetDomain
 	s.Options.LocalAuth = false

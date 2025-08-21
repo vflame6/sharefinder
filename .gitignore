@@ -31,3 +31,4 @@ main.out
 /result*
 .air.toml
 tmp
+*.ccache

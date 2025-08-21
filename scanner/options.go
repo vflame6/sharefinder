@@ -21,7 +21,8 @@ type Options struct {
 	Username         string // part of --username
 	Domain           string // part of --username
 	Password         string // --password
-	Hashes           []byte // --hashes
+	Hash             string // --hashes
+	HashBytes        []byte // --hashes
 	Kerberos         bool
 	List             bool // --list
 	Recurse          bool // --recurse
@@ -33,7 +34,7 @@ type Options struct {
 }
 
 // NewOptions is a function to generate new Options object
-func NewOptions(smbPort int, outputHTML bool, outputFile string, writer *OutputWriter, file, fileXML *os.File, timeout time.Duration, exclude []string, username, password string, hashes []byte, kerberos bool, domain string, localAuth, list, recurse bool, domainController net.IP, dcHostname string, proxyDialer proxy.Dialer) *Options {
+func NewOptions(smbPort int, outputHTML bool, outputFile string, writer *OutputWriter, file, fileXML *os.File, timeout time.Duration, exclude []string, username, password, hash string, hashes []byte, kerberos bool, domain string, localAuth, list, recurse bool, domainController net.IP, dcHostname string, proxyDialer proxy.Dialer) *Options {
 	return &Options{
 		SmbPort:          smbPort,
 		OutputHTML:       outputHTML,
@@ -46,7 +47,8 @@ func NewOptions(smbPort int, outputHTML bool, outputFile string, writer *OutputW
 		Target:           make(chan DNHost, 256),
 		Username:         username,
 		Password:         password,
-		Hashes:           hashes,
+		Hash:             hash,
+		HashBytes:        hashes,
 		Kerberos:         kerberos,
 		Domain:           domain,
 		LocalAuth:        localAuth,
