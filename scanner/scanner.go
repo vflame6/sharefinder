@@ -163,11 +163,11 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]net.IP, error) {
 
 	// test if DNS works with UDP
 	testEntry := sr.Entries[0].GetAttributeValue("dNSHostName")
-	r := NewUDPResolver(resolver, s.Options.Timeout, s.Options.ProxyDialer)
+	r := NewResolver("udp", resolver, s.Options.Timeout, s.Options.ProxyDialer)
 	_, err = r.LookupHost(testEntry)
 	if err != nil {
 		// test if DNS works with TCP
-		r = NewTCPResolver(resolver, s.Options.Timeout, s.Options.ProxyDialer)
+		r = NewResolver("tcp", resolver, s.Options.Timeout, s.Options.ProxyDialer)
 		_, err = r.LookupHost(testEntry)
 		if err != nil {
 			return nil, err

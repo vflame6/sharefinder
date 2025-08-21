@@ -62,7 +62,7 @@ var (
 	huntHashFlag     = huntCommand.Flag("hashes", "NTLM hash of password to authenticate").Short('H').String()
 	huntResolverFlag = huntCommand.Flag("resolver", "Custom DNS resolver IP address").Short('r').IP()
 
-	// TODO: add kerberos support (-k and --no-pass)
+	// TODO: add kerberos support (-k)
 	// TODO: implement search forest option
 )
 
