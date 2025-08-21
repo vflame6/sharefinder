@@ -8,6 +8,7 @@ import (
 	"github.com/vflame6/sharefinder/logger"
 	"golang.org/x/net/proxy"
 	"io"
+	"net"
 	"time"
 )
 
@@ -16,8 +17,8 @@ type Connection struct {
 	session *smb.Connection
 }
 
-func NewSMBConnection(host, username, password string, hashes []byte, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer) (*Connection, error) {
-	options := GetSMBOptions(host, username, password, hashes, domain, timeout, smbPort, proxyDialer)
+func NewSMBConnection(host DNHost, username, password string, hashes []byte, kerberos bool, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer, dcIP net.IP) (*Connection, error) {
+	options := GetSMBOptions(host, username, password, hashes, kerberos, domain, timeout, smbPort, proxyDialer, dcIP)
 
 	// establish the connection
 	session, err := smb.NewConnection(options)
@@ -25,17 +26,17 @@ func NewSMBConnection(host, username, password string, hashes []byte, domain str
 		return nil, err
 	}
 	conn := &Connection{
-		host:    host,
+		host:    host.IP.String(),
 		session: session,
 	}
 	return conn, nil
 }
 
-func GetSMBOptions(host, username, password string, hashes []byte, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer) smb.Options {
+func GetSMBOptions(host DNHost, username, password string, hashes []byte, kerberos bool, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer, dcIP net.IP) smb.Options {
 	var options smb.Options
 
 	smbOptions := smb.Options{
-		Host:                  host,
+		Host:                  host.IP.String(),
 		Port:                  smbPort,
 		RequireMessageSigning: false,
 		//DisableSigning: true,
@@ -43,11 +44,23 @@ func GetSMBOptions(host, username, password string, hashes []byte, domain string
 		ProxyDialer: proxyDialer,
 	}
 
-	smbOptions.Initiator = &spnego.NTLMInitiator{
-		Domain:   domain,
-		User:     username,
-		Password: password,
-		Hash:     hashes,
+	if kerberos {
+		smbOptions.Initiator = &spnego.KRB5Initiator{
+			Domain:   domain,
+			User:     username,
+			Password: password,
+			Hash:     hashes,
+			AESKey:   []byte{},
+			SPN:      "cifs/" + host.Hostname,
+			DCIP:     dcIP.String(),
+		}
+	} else {
+		smbOptions.Initiator = &spnego.NTLMInitiator{
+			Domain:   domain,
+			User:     username,
+			Password: password,
+			Hash:     hashes,
+		}
 	}
 
 	return options

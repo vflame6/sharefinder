@@ -21,6 +21,11 @@ type Scanner struct {
 	Stop        chan bool
 }
 
+type DNHost struct {
+	Hostname string
+	IP       net.IP
+}
+
 // NewScanner is a function to create new Scanner struct
 func NewScanner(options *Options, commandLine []string, timeStart time.Time, threads int) *Scanner {
 	return &Scanner{
@@ -74,7 +79,11 @@ func (s *Scanner) ParseTargets(target string) error {
 
 		// pass to targets channel
 		for _, t := range targets {
-			s.Options.Target <- t
+			dnHost := &DNHost{
+				Hostname: "",
+				IP:       net.ParseIP(t),
+			}
+			s.Options.Target <- *dnHost
 		}
 		// close the channel if targets are over
 		close(s.Options.Target)
@@ -103,7 +112,11 @@ func (s *Scanner) ParseTargets(target string) error {
 			return err
 		}
 		for _, t := range targets {
-			s.Options.Target <- t
+			dnHost := &DNHost{
+				Hostname: "",
+				IP:       net.ParseIP(t),
+			}
+			s.Options.Target <- *dnHost
 		}
 	}
 	// close the channel if targets are over
@@ -112,9 +125,9 @@ func (s *Scanner) ParseTargets(target string) error {
 }
 
 // ParseTargetsInMemory is used to parse a list of targets and pass them in targets list
-func (s *Scanner) ParseTargetsInMemory(targets []net.IP) {
+func (s *Scanner) ParseTargetsInMemory(targets []DNHost) {
 	for _, target := range targets {
-		s.Options.Target <- target.String()
+		s.Options.Target <- target
 	}
 	close(s.Options.Target)
 }
@@ -127,9 +140,9 @@ func (s *Scanner) RunAuthEnumeration(wg *sync.WaitGroup) {
 	}
 }
 
-// RunEnumerateDomainComputers is executed by hunt command
-func (s *Scanner) RunEnumerateDomainComputers() ([]net.IP, error) {
-	var results []net.IP
+// RunEnumerateDomainComputers is executed by hunt command to get a list of hosts
+func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
+	var results []DNHost
 
 	ldapConn, err := NewLDAPConnection(
 		s.Options.DomainController,
@@ -139,6 +152,8 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]net.IP, error) {
 		strings.ToLower(s.Options.Domain),
 		s.Options.Timeout,
 		s.Options.ProxyDialer,
+		s.Options.Kerberos,
+		s.Options.DCHostname,
 	)
 	if err != nil {
 		return nil, err
@@ -184,7 +199,11 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]net.IP, error) {
 			logger.Error(err)
 			continue
 		}
-		results = append(results, possibleTarget)
+		dnHost := &DNHost{
+			Hostname: hostname,
+			IP:       possibleTarget,
+		}
+		results = append(results, *dnHost)
 	}
 
 	return results, nil

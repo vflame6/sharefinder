@@ -8,12 +8,23 @@ import (
 	"time"
 )
 
-func enumerateHost(host string, options *Options) (Host, error) {
+func enumerateHost(host DNHost, options *Options) (Host, error) {
 	var hostResult Host
 	var shareResult []Share
 
 	// get an SMB connection with NTLM authentication method
-	conn, err := NewSMBConnection(host, options.Username, options.Password, options.Hashes, options.Domain, options.Timeout, options.SmbPort, options.ProxyDialer)
+	conn, err := NewSMBConnection(
+		host,
+		options.Username,
+		options.Password,
+		options.Hashes,
+		options.Kerberos,
+		options.Domain,
+		options.Timeout,
+		options.SmbPort,
+		options.ProxyDialer,
+		options.DomainController,
+	)
 	if err != nil {
 		return hostResult, err
 	}
@@ -32,7 +43,7 @@ func enumerateHost(host string, options *Options) (Host, error) {
 
 	// get base info about connected target
 	targetInfo := conn.GetTargetInfo()
-	hostResult.IP = host
+	hostResult.IP = host.IP.String()
 	hostResult.Time = time.Now()
 	hostResult.Version = targetInfo.GuessedOSVersion
 	hostResult.Hostname = targetInfo.NBComputerName

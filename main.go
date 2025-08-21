@@ -55,15 +55,14 @@ var (
 
 	// hunt command
 	// hunt for targets from AD and find shares and permissions
-	huntCommand      = app.Command("hunt", "hunting module")
-	huntDcFlag       = huntCommand.Arg("dc", "Domain Controller IP").Required().IP()
-	huntUsernameFlag = huntCommand.Flag("username", "Domain username in format DOMAIN\\username").Short('u').Required().String()
-	huntPasswordFlag = huntCommand.Flag("password", "Domain user's password").Short('p').String()
-	huntHashFlag     = huntCommand.Flag("hashes", "NTLM hash of password to authenticate").Short('H').String()
-	huntResolverFlag = huntCommand.Flag("resolver", "Custom DNS resolver IP address").Short('r').IP()
-
-	// TODO: add kerberos support (-k)
-	// TODO: implement search forest option
+	huntCommand        = app.Command("hunt", "hunting module")
+	huntDcFlag         = huntCommand.Arg("dc", "Domain Controller IP").Required().IP()
+	huntUsernameFlag   = huntCommand.Flag("username", "Domain username in format DOMAIN\\username").Short('u').Required().String()
+	huntPasswordFlag   = huntCommand.Flag("password", "Domain user's password").Short('p').String()
+	huntHashFlag       = huntCommand.Flag("hashes", "NTLM hash of password to authenticate").Short('H').String()
+	huntResolverFlag   = huntCommand.Flag("resolver", "Custom DNS resolver IP address").Short('r').IP()
+	huntKerberosFlag   = huntCommand.Flag("kerberos", "Use Kerberos authentication").Bool()
+	huntDcHostnameFlag = huntCommand.Flag("dc-hostname", "Hostname of domain controller for Kerberos authentication").String()
 )
 
 func main() {
@@ -117,7 +116,7 @@ func main() {
 		err = cmd.ExecuteAuth(scanner, *authTargetFlag, *authUsernameFlag, *authPasswordFlag, *authHashFlag, *authLocalAuthFlag)
 	}
 	if command == huntCommand.FullCommand() {
-		err = cmd.ExecuteHunt(scanner, *huntUsernameFlag, *huntPasswordFlag, *huntHashFlag, *huntDcFlag, *huntResolverFlag)
+		err = cmd.ExecuteHunt(scanner, *huntUsernameFlag, *huntPasswordFlag, *huntHashFlag, *huntDcFlag, *huntResolverFlag, *huntKerberosFlag, *huntDcHostnameFlag)
 	}
 	if err != nil {
 		logger.Fatal(err)

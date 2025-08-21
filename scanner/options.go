@@ -17,21 +17,23 @@ type Options struct {
 	FileXML          *os.File
 	Timeout          time.Duration // --timeout
 	Exclude          []string      // --exclude
-	Target           chan string
+	Target           chan DNHost
 	Username         string // part of --username
 	Domain           string // part of --username
 	Password         string // --password
 	Hashes           []byte // --hashes
-	List             bool   // --list
-	Recurse          bool   // --recurse
-	LocalAuth        bool   // --local-auth
+	Kerberos         bool
+	List             bool // --list
+	Recurse          bool // --recurse
+	LocalAuth        bool // --local-auth
 	DomainController net.IP
+	DCHostname       string
 	CustomResolver   net.IP       // --resolver
 	ProxyDialer      proxy.Dialer // --proxy
 }
 
 // NewOptions is a function to generate new Options object
-func NewOptions(smbPort int, outputHTML bool, outputFile string, writer *OutputWriter, file, fileXML *os.File, timeout time.Duration, exclude []string, target chan string, username, password string, hashes []byte, domain string, localAuth, list, recurse bool, domainController net.IP, proxyDialer proxy.Dialer) *Options {
+func NewOptions(smbPort int, outputHTML bool, outputFile string, writer *OutputWriter, file, fileXML *os.File, timeout time.Duration, exclude []string, username, password string, hashes []byte, kerberos bool, domain string, localAuth, list, recurse bool, domainController net.IP, dcHostname string, proxyDialer proxy.Dialer) *Options {
 	return &Options{
 		SmbPort:          smbPort,
 		OutputHTML:       outputHTML,
@@ -41,15 +43,17 @@ func NewOptions(smbPort int, outputHTML bool, outputFile string, writer *OutputW
 		FileXML:          fileXML,
 		Timeout:          timeout,
 		Exclude:          exclude,
-		Target:           target,
+		Target:           make(chan DNHost, 256),
 		Username:         username,
 		Password:         password,
 		Hashes:           hashes,
+		Kerberos:         kerberos,
 		Domain:           domain,
 		LocalAuth:        localAuth,
 		List:             list,
 		Recurse:          recurse,
 		DomainController: domainController,
+		DCHostname:       dcHostname,
 		ProxyDialer:      proxyDialer,
 	}
 }

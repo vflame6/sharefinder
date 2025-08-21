@@ -122,15 +122,16 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 		fileXML,
 		timeout,
 		excludeList,
-		make(chan string, 256),
 		"",
 		"",
 		[]byte{},
+		false,
 		"",
 		false,
 		list,
 		recurse,
 		net.IPv4zero,
+		"",
 		proxyDialer,
 	)
 
@@ -210,7 +211,7 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password, hash string, lo
 	return nil
 }
 
-func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolver net.IP) error {
+func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolver net.IP, kerberos bool, dcHostname string) error {
 	var targetDomain string
 	var targetUsername string
 
@@ -220,6 +221,11 @@ func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolv
 	// check if both password and hash are provided
 	if password != "" && hash != "" {
 		return errors.New("--password can't be used with --hashes")
+	}
+
+	// check if dcHostname is provided with kerberos authentication
+	if kerberos && dcHostname == "" {
+		return errors.New("--kerberos can't be used without --dc-hostname")
 	}
 
 	// try to parse username in format DOMAIN\username
@@ -233,9 +239,11 @@ func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolv
 	s.Options.Username = targetUsername
 	s.Options.Password = password
 	s.Options.Hashes = []byte(hash)
+	s.Options.Kerberos = kerberos
 	s.Options.Domain = targetDomain
 	s.Options.LocalAuth = false
 	s.Options.DomainController = dc
+	s.Options.DCHostname = dcHostname
 	s.Options.CustomResolver = resolver
 
 	var wg sync.WaitGroup
