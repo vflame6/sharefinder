@@ -3,6 +3,7 @@ package logger
 import (
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"sync"
 )
@@ -40,17 +41,21 @@ func SetLoggerOptions(debug, quiet bool) error {
 
 // LogString is a function to make basic logs
 func LogString(s string) {
-	// split lines to determine if several lines are needed
-	lines := strings.Split(s, "\n")
-	if len(lines) > 1 {
-		// print the first one with timestamp and the others with padding
-		firstLine := lines[0]
-		Log.logger.Println(firstLine)
-		for _, line := range lines[1:] {
-			fmt.Println(Log.Padding + line)
+	if Log.Debug {
+		// split lines to determine if several lines are needed
+		lines := strings.Split(s, "\n")
+		if len(lines) > 1 {
+			// print the first one with timestamp and the others with padding
+			firstLine := lines[0]
+			Log.logger.Println(firstLine)
+			for _, line := range lines[1:] {
+				fmt.Println(Log.Padding + line)
+			}
+		} else {
+			Log.logger.Println(s)
 		}
 	} else {
-		Log.logger.Println(s)
+		fmt.Println(s)
 	}
 }
 
@@ -61,7 +66,12 @@ func LogDebugString(s string) {
 
 // LogErrorString is a function to make debug logs
 func LogErrorString(s string) {
-	Log.logger.Println("[ERROR] " + s)
+	errorString := "[ERROR] " + s
+	if Log.Debug {
+		Log.logger.Println(errorString)
+	} else {
+		fmt.Println(errorString)
+	}
 }
 
 // Info logs a formatted multi-line message
@@ -141,5 +151,10 @@ func Error(err error) {
 // Fatal logs a formatted fatal errors and shuts the program down
 // Fatal logs are critical and could not be suppressed
 func Fatal(err error) {
-	Log.logger.Fatal(err)
+	if Log.Debug {
+		Log.logger.Fatal(err)
+	} else {
+		fmt.Println("[FATAL] " + err.Error())
+		os.Exit(1)
+	}
 }
