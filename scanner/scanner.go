@@ -196,7 +196,7 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 		// get target's IP address from DNS (first one)
 		possibleTarget, err := r.LookupHost(hostname)
 		if err != nil {
-			logger.Error(err)
+			logger.Debug(err.Error())
 			continue
 		}
 		dnHost := &DNHost{

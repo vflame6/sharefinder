@@ -43,6 +43,7 @@ var (
 
 	// TODO: implement null session check - https://sensepost.com/blog/2024/guest-vs-null-session-on-windows/
 	// https://github.com/jfjallid/go-shareenum/blob/main/main.go
+	// https://sud0ru.ghost.io/what-makes-anonymous-pipes/
 
 	// auth command
 	// find authenticated shares and permissions
