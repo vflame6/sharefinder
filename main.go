@@ -26,7 +26,7 @@ var (
 	outputHTMLFlag = app.Flag("html", "Generate HTML report (requires XML output)").Default("false").Bool()
 
 	// connection flags
-	threadsFlag = app.Flag("threads", "Number of threads").Default("1").Int()
+	threadsFlag = app.Flag("threads", "Number of threads").Default("10").Int()
 	timeoutFlag = app.Flag("timeout", "Seconds to wait for connection").Default("5s").Duration()
 	smbPortFlag = app.Flag("smb-port", "Target port of SMB service").Default("445").Int()
 	proxyFlag   = app.Flag("proxy", "SOCKS-proxy address to use for connection in format IP:PORT").Default("").String()
