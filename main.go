@@ -68,7 +68,7 @@ var (
 
 func main() {
 	// version is linked to actual tag
-	VERSION := "1.2.0"
+	VERSION := "1.2.1"
 
 	// kingpin settings
 	app.Version(VERSION)
