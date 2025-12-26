@@ -6,7 +6,7 @@ require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/go-ldap/ldap/v3 v3.4.10
 	github.com/jfjallid/go-smb v0.5.9
-	golang.org/x/net v0.43.0
+	golang.org/x/net v0.48.0
 )
 
 require (
@@ -26,5 +26,5 @@ require (
 	github.com/jfjallid/gokrb5/v8 v8.4.4 // indirect
 	github.com/jfjallid/golog v0.3.3 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
-	golang.org/x/crypto v0.41.0 // indirect
+	golang.org/x/crypto v0.46.0 // indirect
 )
