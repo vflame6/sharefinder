@@ -104,7 +104,7 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 
 					fileType := "dir"
 
-					singleFile := NewFile(fileType, file.Name, file.FullPath, file.Size, lastWriteTime)
+					singleFile := NewFile(fileType, file.Name, GetFilePath(file.FullPath), file.Size, lastWriteTime)
 					shareResult[i].Files = append(shareResult[i].Files, *singleFile)
 
 					// list all directories recursively if such option is specified
@@ -129,7 +129,7 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 						fileType = "link"
 					}
 
-					singleFile := NewFile(fileType, file.Name, file.FullPath, file.Size, lastWriteTime)
+					singleFile := NewFile(fileType, file.Name, GetFilePath(file.FullPath), file.Size, lastWriteTime)
 					shareResult[i].Files = append(shareResult[i].Files, *singleFile)
 				} else {
 					continue

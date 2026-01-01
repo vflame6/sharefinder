@@ -159,7 +159,7 @@ func ExecuteAnon(s *scanner.Scanner, target string) error {
 
 	// finish the execution
 	s.TimeEnd = time.Now()
-	logger.Warnf("Finished executing anon module at %s", s.TimeEnd)
+	logger.Warnf("Finished executing anon module at %s", s.TimeEnd.Format("02/01/2006 15:04:05"))
 	s.CloseOutputter()
 	return nil
 }
@@ -219,7 +219,7 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password, hash string, lo
 
 	// finish the execution
 	s.TimeEnd = time.Now()
-	logger.Warnf("Finished executing auth module at %s", s.TimeEnd)
+	logger.Warnf("Finished executing auth module at %s", s.TimeEnd.Format("02/01/2006 15:04:05"))
 	s.CloseOutputter()
 	return nil
 }
@@ -290,7 +290,7 @@ func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolv
 
 	// finish the execution
 	s.TimeEnd = time.Now()
-	logger.Warnf("Finished executing hunt module at %s", s.TimeEnd)
+	logger.Warnf("Finished executing hunt module at %s", s.TimeEnd.Format("02/01/2006 15:04:05"))
 	s.CloseOutputter()
 	return nil
 }

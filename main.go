@@ -41,10 +41,6 @@ var (
 	anonCommand    = app.Command("anon", "anonymous module")
 	anonTargetFlag = anonCommand.Arg("target", "Target, IP range or filename").Required().String()
 
-	// TODO: implement null session check - https://sensepost.com/blog/2024/guest-vs-null-session-on-windows/
-	// https://github.com/jfjallid/go-shareenum/blob/main/main.go
-	// https://sud0ru.ghost.io/what-makes-anonymous-pipes/
-
 	// auth command
 	// find authenticated shares and permissions
 	authCommand       = app.Command("auth", "authenticated module")
@@ -67,12 +63,9 @@ var (
 )
 
 func main() {
-	// version is linked to actual tag
-	VERSION := "1.2.1"
-
 	// kingpin settings
-	app.Version(VERSION)
-	app.Author("vflame6")
+	app.Version(cmd.VERSION)
+	app.Author(cmd.AUTHOR)
 	app.HelpFlag.Short('h')
 	app.UsageTemplate(kingpin.CompactUsageTemplate)
 
@@ -92,7 +85,7 @@ func main() {
 
 	// set up a scanner
 	scanner, err := cmd.CreateScanner(
-		VERSION,
+		cmd.VERSION,
 		os.Args[1:],
 		time.Now(),
 		*outputRawFlag,

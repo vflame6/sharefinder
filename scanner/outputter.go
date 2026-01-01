@@ -64,8 +64,7 @@ func (o *OutputWriter) ReadFile(filename string) ([]byte, error) {
 	if filename == "" {
 		return nil, errors.New("empty filename")
 	}
-	file := filepath.Join(filepath.Dir(filename), filename)
-	return ioutil.ReadFile(file)
+	return ioutil.ReadFile(filename)
 }
 
 func (o *OutputWriter) Write(content string, writer io.Writer) error {
