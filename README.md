@@ -18,7 +18,7 @@ Created by Maksim Radaev/[@vflame6](https://github.com/vflame6)
 
 ## Features
 
-![sharefinder](static/sharefinder_demo.jpg)
+![sharefinder](static/sharefinder_demo.png)
 
 Main commands:
 
