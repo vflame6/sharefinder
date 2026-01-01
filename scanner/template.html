@@ -88,6 +88,106 @@
         !function(n){var o,r;"function"==typeof define&&define.amd?define(["jquery","datatables.net"],function(t){return n(t,window,document)}):"object"==typeof exports?(o=require("jquery"),r=function(t,e){e.fn.dataTable||require("datatables.net")(t,e)},"undefined"==typeof window?module.exports=function(t,e){return t=t||window,e=e||o(t),r(t,e),n(e,0,t.document)}:(r(window,o),module.exports=n(o,window,window.document))):n(jQuery,window,document)}(function(d,t,e){"use strict";var n=d.fn.dataTable;return d.extend(!0,n.defaults,{renderer:"bootstrap"}),d.extend(!0,n.ext.classes,{container:"dt-container dt-bootstrap5",search:{input:"form-control form-control-sm"},length:{select:"form-select form-select-sm"},processing:{container:"dt-processing card"},layout:{row:"row mt-2 justify-content-between",cell:"d-md-flex justify-content-between align-items-center",tableCell:"col-12",start:"dt-layout-start col-md-auto me-auto",end:"dt-layout-end col-md-auto ms-auto",full:"dt-layout-full col-md"}}),n.ext.renderer.pagingButton.bootstrap=function(t,e,n,o,r){var a=["dt-paging-button","page-item"],o=(o&&a.push("active"),r&&a.push("disabled"),d("<li>").addClass(a.join(" ")));return{display:o,clicker:d("<button>",{class:"page-link",role:"link",type:"button"}).html(n).appendTo(o)}},n.ext.renderer.pagingContainer.bootstrap=function(t,e){return d("<ul/>").addClass("pagination").append(e)},n});
     </script>
 
+    <!--    datatables file-size plugin -->
+    <script>
+        /*! © SpryMedia Ltd - datatables.net/license */
+
+        (function( factory ){
+            if ( typeof define === 'function' && define.amd ) {
+                // AMD
+                define( ['jquery', 'datatables.net'], function ( $ ) {
+                    return factory( $, window, document );
+                } );
+            }
+            else if ( typeof exports === 'object' ) {
+                // CommonJS
+                var jq = require('jquery');
+                var cjsRequires = function (root, $) {
+                    if ( ! $.fn.dataTable ) {
+                        require('datatables.net')(root, $);
+                    }
+                };
+
+                if (typeof window === 'undefined') {
+                    module.exports = function (root, $) {
+                        if ( ! root ) {
+                            // CommonJS environments without a window global must pass a
+                            // root. This will give an error otherwise
+                            root = window;
+                        }
+
+                        if ( ! $ ) {
+                            $ = jq( root );
+                        }
+
+                        cjsRequires( root, $ );
+                        return factory( $, root, root.document );
+                    };
+                }
+                else {
+                    cjsRequires( window, jq );
+                    module.exports = factory( jq, window, window.document );
+                }
+            }
+            else {
+                // Browser
+                factory( jQuery, window, document );
+            }
+        }(function( $, window, document ) {
+            'use strict';
+            var DataTable = $.fn.dataTable;
+
+
+            /**
+             * When dealing with computer file sizes, it is common to append a post fix
+             * such as B, KB, MB or GB to a string in order to easily denote the order of
+             * magnitude of the file size. This plug-in allows sorting to take these
+             * indicates of size into account.
+             *
+             * A counterpart type detection plug-in is also available.
+             *
+             *  @name File size
+             *  @summary Sort abbreviated file sizes correctly (8MB, 4KB, etc)
+             *  @author Allan Jardine - datatables.net
+             *
+             *  @example
+             *    $('#example').DataTable( {
+             *       columnDefs: [
+             *         { type: 'file-size', targets: 0 }
+             *       ]
+             *    } );
+             */
+            DataTable.ext.type.order['file-size-pre'] = function (data) {
+                if (data === null || data === '') {
+                    return 0;
+                }
+                var matches = data.match(/^(\d+(?:\.\d+)?)\s*([a-z]+)/i);
+                var multipliers = {
+                    b: 1,
+                    bytes: 1,
+                    kb: 1000,
+                    kib: 1024,
+                    mb: 1000000,
+                    mib: 1048576,
+                    gb: 1000000000,
+                    gib: 1073741824,
+                    tb: 1000000000000,
+                    tib: 1099511627776,
+                    pb: 1000000000000000,
+                    pib: 1125899906842624,
+                };
+                if (matches) {
+                    var multiplier = multipliers[matches[2].toLowerCase()];
+                    return parseFloat(matches[1]) * multiplier;
+                }
+                return -1;
+            };
+
+
+            return DataTable;
+        }));
+    </script>
+
     <style>
         body {
             padding-top: 56px; /* Adjusts for the fixed navbar height */
@@ -153,8 +253,8 @@
     }
 </script>
 
-<nav class="navbar navbar-expand-lg bg-secondary fixed-top">
-    <div class="container">
+<nav class="navbar navbar-expand-md bg-secondary fixed-top">
+    <div class="container-md">
         <a class="navbar-brand text-white" href="#">sharefinder</a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
                 aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
@@ -176,7 +276,7 @@
     </div>
 </nav>
 
-<div id="content" class="container">
+<div id="content" class="container-md">
     <div id="summary" class="mt-4 p-5 bg-light rounded">
         <h1>Sharefinder Scan Report</h1>
         <h2 class="text-muted pt-0">sharefinder {{ .Version }}</h2>
@@ -202,7 +302,7 @@
                 <tr>
                     <td><a href="#{{ $host.IP }}">{{ $host.IP }}</a></td>
                     <td>{{ $host.Hostname }}</td>
-                    <td>{{ $host.Domain }}</td>
+                    <td class="text-break">{{ $host.Domain }}</td>
                     <td>{{ $host.Version }}</td>
                     <td>{{ $host.Signing }}</td>
                     <td>{{ len $host.Shares }}</td>
@@ -229,10 +329,10 @@
                 <h5 class="panel-title pt-0">{{ $host.IP }} ({{ $host.Hostname }})</h5>
             </div>
             <div class="panel-body collapse in show bg-white px-3 border-top border-bottom" id="{{ $host.IP }}" aria-expanded="true">
-                <h5>Host information</h5>
+                <h5 class="pt-2">Host details</h5>
                 <table class="table table-bordered">
                     <thead>
-                    <tr>
+                    <tr class="table-light">
                         <th>IP</th>
                         <th>Hostname</th>
                         <th>Domain</th>
@@ -245,7 +345,7 @@
                     <tr>
                         <td>{{ $host.IP }}</td>
                         <td>{{ $host.Hostname }}</td>
-                        <td>{{ $host.Domain }}</td>
+                        <td class="text-break">{{ $host.Domain }}</td>
                         <td>{{ $host.Version }}</td>
                         <td>{{ $host.Signing }}</td>
                         <td>{{ len $host.Shares }}</td>
@@ -253,9 +353,10 @@
                     </tbody>
                 </table>
                 <h5>Shares</h5>
+                {{ range $share := $host.Shares }}
                 <table id="hostShares" class="table table-bordered">
                     <thead>
-                        <tr>
+                        <tr class="table-light">
                             <th>Name</th>
                             <th>Description</th>
                             <th>Readable</th>
@@ -263,8 +364,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {{ range $share := $host.Shares }}
-                        <tr {{ if $share.WritePermission }}class="table-danger"{{ else }} {{ if $share.ReadPermission }}class="table-warning"{{ end }}{{ end }}>
+                        <tr class="{{ if $share.WritePermission }}table-danger{{ else }}{{ if $share.ReadPermission }}table-warning{{ end }}{{ end }}" >
                             <td>{{ $share.ShareName }}</td>
                             <td>{{ $share.Description }}</td>
                             <td>{{ $share.ReadPermission }}</td>
@@ -272,11 +372,11 @@
                         </tr>
 
                         {{ if $share.Files }}
-                        <tr>
+                        <tr class="">
                             <td colspan="4">
-                                <h6>Share: {{ $share.ShareName }}</h6>
+                                <h5 class="text-break">Listing share: {{ $share.ShareName }}</h5>
                                 <div>
-                                    <table class="table table-hover table-sm">
+                                    <table class="hostFiles table table-hover table-sm">
                                         <thead>
                                         <tr>
                                             <th>Type</th>
@@ -312,9 +412,11 @@
                                 </div>
 
                                 {{ range $directory := $share.Directories }}
-                                <h6>Directory: {{ $share.ShareName }}\{{ $directory.Name }}</h6>
+                                <h5 class="text-break">{{ $directory.Name }}</h5>
+
+                                {{ if len $directory.Files }}
                                 <div>
-                                    <table class="table table-hover table-sm">
+                                    <table class="hostFiles table table-hover table-sm">
                                         <thead>
                                         <tr>
                                             <th>Type</th>
@@ -336,6 +438,8 @@
                                         </tbody>
                                     </table>
                                 </div>
+                                {{ end }}
+
                                 {{ end }}
                             </td>
                         </tr>
@@ -372,7 +476,7 @@
                 <td>{{ $host.IP }}</td>
                 <td>{{ $share.ShareName }}</td>
                 <td>{{ $file.Name }}</td>
-                <td>{{ $file.Parent }}</td>
+                <td class="text-break">{{ $file.Parent }}</td>
                 <td>{{ $file.Size }}</td>
                 <td>{{ $file.LastModified }}</td>
             </tr>
@@ -386,7 +490,7 @@
                 <td>{{ $host.IP }}</td>
                 <td>{{ $share.ShareName }}</td>
                 <td style="white-space:pre-wrap; word-wrap:break-word;">{{ $file.Name }}</td>
-                <td>{{ $file.Parent }}</td>
+                <td class="text-break">{{ $file.Parent }}</td>
                 <td>{{ $file.Size }}</td>
                 <td>{{ $file.LastModified }}</td>
             </tr>
@@ -401,14 +505,54 @@
     </div>
     <script>
         $(document).ready(function() {
+            $('table.hostFiles').DataTable({
+                searching: false,
+                ordering: false,
+                paging: false,
+                info: false,
+                columnDefs: [
+                    {
+                        targets: 2,
+                        render: function (data, type, row, meta) {
+                            return bytesToHumanReadableSize(data)
+                        }
+                    },
+                    {
+                        targets: 3,
+                        render: function(data, type, row, meta) {
+                            // Remove microseconds and extra timezone information
+                            let cleanedInput = data.replace(/\.\d+\s\+\d{4}\s\+\d{2}$/, '');
+
+                            // Convert to Date object
+                            let date = new Date(cleanedInput);
+
+                            // Format the date
+                            let formattedDate = date.toLocaleString("en-GB", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                second: "2-digit",
+                                hour12: false
+                            });
+
+                            return formattedDate.replace(',', '');
+                        }
+                    }
+                ]
+            })
+
             $('#tableFiles').DataTable({
+                order: [[0, "asc"]],
                 "lengthMenu": [ [20, 100, -1], [20, 100, "All"] ],
                 "columnDefs": [
                     {
                         targets: 4,
                         render: function (data, type, row, meta) {
                             return bytesToHumanReadableSize(data)
-                        }
+                        },
+                        type: "file-size"
                     },
                     {
                         targets: 5,
