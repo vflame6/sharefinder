@@ -175,7 +175,7 @@ func authThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
 			// write results to a file if such option is specified
 			if options.FileTXT != nil {
 				// try to write raw version
-				logger.Debugf("Writing the results in raw format to %s", options.FileTXT.Name())
+				logger.Debugf("Writing the results in raw format to %s", options.OutputRawFileName)
 				err = options.Writer.Write(printResult, options.FileTXT)
 				if err != nil {
 					logger.Error(err)
@@ -183,7 +183,7 @@ func authThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
 			}
 			if options.FileXML != nil {
 				// try to write XML version
-				logger.Debugf("Writing the results in XML format to %s", options.FileXML.Name())
+				logger.Debugf("Writing the results in XML format to %s", options.OutputXMLFileName)
 				err = options.Writer.WriteXMLHost(hostResult, options.FileXML)
 				if err != nil {
 					logger.Error(err)

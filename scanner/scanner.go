@@ -50,7 +50,7 @@ func (s *Scanner) CloseOutputter() {
 		_ = s.Options.FileXML.Close()
 
 		if s.Options.OutputHTML {
-			xmlFile, err := s.Options.Writer.ReadFile(s.Options.FileXML.Name())
+			xmlFile, err := s.Options.Writer.ReadFile(s.Options.OutputXMLFileName)
 			if err != nil {
 				logger.Error(err)
 			}
@@ -60,7 +60,6 @@ func (s *Scanner) CloseOutputter() {
 				logger.Error(err)
 			}
 		}
-
 	}
 }
 
@@ -218,13 +217,12 @@ func (s *Scanner) OutputHTML(data []byte) error {
 	}
 
 	// create the HTML file and write to it
-	filenameHTML := s.Options.OutputFileName + ".html"
-	logger.Debugf("Generating HTML report. Output file: %s", filenameHTML)
-	fileHTML, err := s.Options.Writer.CreateFile(filenameHTML, false)
+	logger.Debugf("Generating HTML report. Output file: %s", s.Options.OutputHTMLFileName)
+	fileHTML, err := s.Options.Writer.CreateFile(s.Options.OutputHTMLFileName, false)
 	if err != nil {
 		return err
 	}
-	err = s.Options.Writer.WriteHTML(*result, fileHTML)
+	err = s.Options.Writer.WriteHTML(result, fileHTML)
 	if err != nil {
 		return err
 	}

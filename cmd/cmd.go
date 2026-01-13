@@ -15,7 +15,9 @@ import (
 )
 
 func CreateScanner(version string, commandLine []string, timeStart time.Time, outputRaw, outputXML, outputAll string, outputHTML bool, threads int, timeout time.Duration, exclude string, list, recurse bool, smbPort int, proxyStr string) (*scanner.Scanner, error) {
-	var outputFileName string
+	var outputRawFileName string
+	var outputXMLFileName string
+	var outputHTMLFileName string
 	var outputWriter *scanner.OutputWriter
 	var file *os.File
 	var fileXML *os.File
@@ -38,15 +40,14 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 		return nil, errors.New("cannot use --recurse without --list")
 	}
 
+	outputWriter = scanner.NewOutputWriter()
 	if outputRaw != "" {
 		// trim suffix of output filename if it matches with txt/xml/html
-		outputFileName = scanner.TrimFilenameSuffix(outputRaw)
-		outputRaw = outputFileName + ".txt"
-		logger.Debugf("Output in Raw format option is specified. Output file name: %s", outputRaw)
+		outputRawFileName = outputRaw + ".txt"
+		logger.Debugf("Output in Raw format option is specified. Output file name: %s", outputRawFileName)
 
 		// create raw text output file
-		outputWriter = scanner.NewOutputWriter()
-		file, err = outputWriter.CreateFile(outputRaw+".txt", false)
+		file, err = outputWriter.CreateFile(outputRawFileName, false)
 		if err != nil {
 			return nil, err
 		}
@@ -54,12 +55,11 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 
 	if outputXML != "" {
 		// trim suffix of output filename if it matches with txt/xml/html
-		outputFileName = scanner.TrimFilenameSuffix(outputRaw)
-		outputXML = outputFileName + ".xml"
-		logger.Debugf("Output in XML format option is specified. Output file name: %s", outputXML)
+		outputXMLFileName = outputXML + ".xml"
+		logger.Debugf("Output in XML format option is specified. Output file name: %s", outputXMLFileName)
 
 		// create XML output file and write an XML header line to it
-		fileXML, err = outputWriter.CreateFile(outputRaw+".xml", false)
+		fileXML, err = outputWriter.CreateFile(outputXMLFileName, false)
 		if err != nil {
 			return nil, err
 		}
@@ -69,23 +69,29 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 		}
 	}
 
-	if outputAll != "" {
-		// set HTML output variable to true in case of --output-all
-		outputHTML = true
+	if outputHTML {
+		outputHTMLFileName = outputXML + ".html"
+	}
 
-		// trim suffix of output filename if it matches with txt/xml/html
-		outputFileName = scanner.TrimFilenameSuffix(outputAll)
+	if outputAll != "" {
 		logger.Debugf("Output all formats option is specified. Output file name: %s", outputAll)
 
+		// set HTML output variable to true in case of --output-all
+		outputHTML = true
+		outputHTMLFileName = outputAll + ".html"
+
+		// trim suffix of output filename if it matches with txt/xml/html
+		outputRawFileName = outputAll + ".txt"
+
 		// create raw text output file
-		outputWriter = scanner.NewOutputWriter()
-		file, err = outputWriter.CreateFile(outputFileName+".txt", false)
+		file, err = outputWriter.CreateFile(outputRawFileName, false)
 		if err != nil {
 			return nil, err
 		}
 
+		outputXMLFileName = outputAll + ".xml"
 		// create XML output file and write an XML header line to it
-		fileXML, err = outputWriter.CreateFile(outputFileName+".xml", false)
+		fileXML, err = outputWriter.CreateFile(outputXMLFileName, false)
 		if err != nil {
 			return nil, err
 		}
@@ -114,28 +120,33 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 
 	// scanner options are created without credentials just to specify global flags
 	// the credentials will be specified on execution of authenticated modules
-	options := scanner.NewOptions(
-		smbPort,
-		outputHTML,
-		outputFileName,
-		outputWriter,
-		file,
-		fileXML,
-		timeout,
-		excludeList,
-		"",
-		"",
-		"",
-		[]byte{},
-		false,
-		"",
-		false,
-		list,
-		recurse,
-		net.IPv4zero,
-		"",
-		proxyDialer,
-	)
+	options := &scanner.Options{
+		DCHostname:       "",
+		Domain:           "",
+		DomainController: net.IPv4zero,
+		Exclude:          excludeList,
+		FileTXT:          file,
+		FileXML:          fileXML,
+		Hash:             "",
+		HashBytes:        []byte{},
+		Kerberos:         false,
+		List:             list,
+		LocalAuth:        false,
+
+		OutputHTML:         outputHTML,
+		OutputHTMLFileName: outputHTMLFileName,
+		OutputRawFileName:  outputRawFileName,
+		OutputXMLFileName:  outputXMLFileName,
+
+		Password:    "",
+		ProxyDialer: proxyDialer,
+		Recurse:     recurse,
+		SmbPort:     smbPort,
+		Target:      make(chan scanner.DNHost, 256),
+		Timeout:     timeout,
+		Username:    "",
+		Writer:      outputWriter,
+	}
 
 	// create and return a scanner object
 	s := scanner.NewScanner(options, commandLine, timeStart, threads)

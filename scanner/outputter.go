@@ -21,6 +21,13 @@ import (
 //go:embed template.html
 var HTMLTemplate string
 
+// HTMLHeader is just a string copy of vendor.html with the same logic as HTMLTemplate
+//
+//go:embed vendor.html
+var HTMLHeader string
+
+var TEMPLATE = HTMLHeader + HTMLTemplate
+
 type OutputWriter struct {
 	mutex sync.Mutex
 }
@@ -82,9 +89,10 @@ func (o *OutputWriter) Write(content string, writer io.Writer) error {
 
 func (o *OutputWriter) WriteXMLHeader(version string, commandLine []string, startTime time.Time, writer io.Writer) error {
 	cmd := escapeXML(strings.Join(commandLine, " "))
+	header := fmt.Sprintf("<SharefinderRun version=\"%s\" command=\"%s\" time_start=\"%s\" formatted_time_start=\"%s\">\n", version, cmd, startTime.Format("2006-01-02T15:04:05Z07:00"), startTime.Format(dateTimeSecondsFormat))
 
 	content := xml.Header
-	content += fmt.Sprintf("<SharefinderRun version=\"%s\" command=\"%s\" time_start=\"%s\" formatted_time_start=\"%s\">\n", version, cmd, startTime.Format("2006-01-02T15:04:05Z07:00"), startTime.Format(dateTimeSecondsFormat))
+	content += header
 	content += "<hosts>\n"
 
 	bufWriter := bufio.NewWriter(writer)
@@ -115,7 +123,10 @@ func (o *OutputWriter) WriteXMLHost(host Host, writer io.Writer) error {
 
 func (o *OutputWriter) WriteXMLFooter(timeEnd time.Time, writer io.Writer) error {
 	content := "</hosts>\n"
-	content += fmt.Sprintf("<time_end time=\"%s\" formatted_time=\"%s\"></time_end>", timeEnd.Format("2006-01-02T15:04:05Z07:00"), timeEnd.Format(dateTimeSecondsFormat)) + "\n"
+	content += fmt.Sprintf(
+		"<time_end time=\"%s\" formatted_time=\"%s\"></time_end>",
+		timeEnd.Format("2006-01-02T15:04:05Z07:00"),
+		timeEnd.Format(dateTimeSecondsFormat)) + "\n"
 	content += "</SharefinderRun>"
 
 	bufWriter := bufio.NewWriter(writer)
@@ -126,9 +137,9 @@ func (o *OutputWriter) WriteXMLFooter(timeEnd time.Time, writer io.Writer) error
 	return bufWriter.Flush()
 }
 
-func (o *OutputWriter) WriteHTML(result SharefinderRun, writer io.Writer) error {
+func (o *OutputWriter) WriteHTML(result *SharefinderRun, writer io.Writer) error {
 	t := template.New("HTML")
-	tmpl, err := t.Parse(HTMLTemplate)
+	tmpl, err := t.Parse(TEMPLATE)
 	if err != nil {
 		return err
 	}
