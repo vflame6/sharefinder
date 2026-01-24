@@ -26,6 +26,7 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 		options.SmbPort,
 		options.ProxyDialer,
 		options.DomainController,
+		options.NullSession,
 	)
 	if err != nil {
 		return hostResult, err
@@ -141,7 +142,7 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 	return hostResult, nil
 }
 
-func authThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
+func smbThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
 	// reduce the number of WaitGroup after returning from function
 	defer wg.Done()
 

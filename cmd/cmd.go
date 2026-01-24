@@ -121,36 +121,56 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 	// scanner options are created without credentials just to specify global flags
 	// the credentials will be specified on execution of authenticated modules
 	options := &scanner.Options{
-		DCHostname:       "",
-		Domain:           "",
-		DomainController: net.IPv4zero,
-		Exclude:          excludeList,
-		FileTXT:          file,
-		FileXML:          fileXML,
-		Hash:             "",
-		HashBytes:        []byte{},
-		Kerberos:         false,
-		List:             list,
-		LocalAuth:        false,
-
+		DCHostname:         "",
+		Domain:             "",
+		DomainController:   net.IPv4zero,
+		Exclude:            excludeList,
+		FileTXT:            file,
+		FileXML:            fileXML,
+		Hash:               "",
+		HashBytes:          []byte{},
+		Kerberos:           false,
+		List:               list,
+		LocalAuth:          false,
+		NullSession:        false,
 		OutputHTML:         outputHTML,
 		OutputHTMLFileName: outputHTMLFileName,
 		OutputRawFileName:  outputRawFileName,
 		OutputXMLFileName:  outputXMLFileName,
-
-		Password:    "",
-		ProxyDialer: proxyDialer,
-		Recurse:     recurse,
-		SmbPort:     smbPort,
-		Target:      make(chan scanner.DNHost, 256),
-		Timeout:     timeout,
-		Username:    "",
-		Writer:      outputWriter,
+		Password:           "",
+		ProxyDialer:        proxyDialer,
+		Recurse:            recurse,
+		SmbPort:            smbPort,
+		Target:             make(chan scanner.DNHost, 256),
+		Timeout:            timeout,
+		Username:           "",
+		Writer:             outputWriter,
 	}
 
 	// create and return a scanner object
 	s := scanner.NewScanner(options, commandLine, timeStart, threads)
 	return s, nil
+}
+
+func ExecuteNull(s *scanner.Scanner, target string) error {
+	logger.Warn("Executing null module")
+
+	// configure options to use null session
+	s.Options.NullSession = true
+
+	var wg sync.WaitGroup
+	s.RunSMBEnumeration(&wg)
+	err := s.ParseTargets(target)
+	if err != nil {
+		return err
+	}
+	wg.Wait()
+
+	// finish the execution
+	s.TimeEnd = time.Now()
+	logger.Warnf("Finished executing null module at %s", s.TimeEnd.Format("02/01/2006 15:04:05"))
+	s.CloseOutputter()
+	return nil
 }
 
 func ExecuteAnon(s *scanner.Scanner, target string) error {
@@ -161,7 +181,7 @@ func ExecuteAnon(s *scanner.Scanner, target string) error {
 	logger.Warnf("Using username for anonymous access: %s", s.Options.Username)
 
 	var wg sync.WaitGroup
-	s.RunAuthEnumeration(&wg)
+	s.RunSMBEnumeration(&wg)
 	err := s.ParseTargets(target)
 	if err != nil {
 		return err
@@ -220,7 +240,7 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password, hash string, lo
 	var wg sync.WaitGroup
 
 	// run the enumeration threads
-	s.RunAuthEnumeration(&wg)
+	s.RunSMBEnumeration(&wg)
 	// parse targets and send them to targets channel
 	err = s.ParseTargets(target)
 	if err != nil {
@@ -294,7 +314,7 @@ func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolv
 	logger.Warnf("Found %d domain computers. Starting SMB shares enumeration...", len(possibleTargets))
 
 	// check for shares and permissions on identified targets
-	s.RunAuthEnumeration(&wg)
+	s.RunSMBEnumeration(&wg)
 	// send identified targets for processing channel
 	s.ParseTargetsInMemory(possibleTargets)
 	wg.Wait()

@@ -21,6 +21,7 @@ type Options struct {
 	Kerberos           bool
 	List               bool // --list
 	LocalAuth          bool // --local-auth
+	NullSession        bool
 	OutputRawFileName  string
 	OutputXMLFileName  string
 	OutputHTML         bool // --html

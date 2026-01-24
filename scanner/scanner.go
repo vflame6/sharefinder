@@ -131,11 +131,11 @@ func (s *Scanner) ParseTargetsInMemory(targets []DNHost) {
 	close(s.Options.Target)
 }
 
-// RunAuthEnumeration is executed by auth command
-func (s *Scanner) RunAuthEnumeration(wg *sync.WaitGroup) {
+// RunSMBEnumeration is executed by auth command
+func (s *Scanner) RunSMBEnumeration(wg *sync.WaitGroup) {
 	for i := 0; i < s.Threads; i++ {
 		wg.Add(1)
-		go authThread(s.Stop, s.Options, wg)
+		go smbThread(s.Stop, s.Options, wg)
 	}
 }
 

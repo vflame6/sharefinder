@@ -36,15 +36,20 @@ var (
 	listFlag    = app.Flag("list", "List readable shares").Default("false").Bool()
 	recurseFlag = app.Flag("recurse", "List readable shares recursively").Default("false").Bool()
 
+	// null command
+	// find null sessions shares and permissions
+	nullCommand   = app.Command("null", "null session module")
+	nullTargetArg = nullCommand.Arg("target", "Target, IP range of filename").Required().String()
+
 	// anon command
 	// find anonymous (guest) shares and permissions
-	anonCommand    = app.Command("anon", "anonymous module")
-	anonTargetFlag = anonCommand.Arg("target", "Target, IP range or filename").Required().String()
+	anonCommand   = app.Command("anon", "anonymous module")
+	anonTargetArg = anonCommand.Arg("target", "Target, IP range or filename").Required().String()
 
 	// auth command
 	// find authenticated shares and permissions
 	authCommand       = app.Command("auth", "authenticated module")
-	authTargetFlag    = authCommand.Arg("target", "Target, IP range or filename").Required().String()
+	authTargetArg     = authCommand.Arg("target", "Target, IP range or filename").Required().String()
 	authUsernameFlag  = authCommand.Flag("username", "Username in format DOMAIN\\username for domain auth, and just username for local auth").Short('u').Required().String()
 	authPasswordFlag  = authCommand.Flag("password", "User's password").Short('p').String()
 	authHashFlag      = authCommand.Flag("hashes", "NTLM hash of password to authenticate").Short('H').String()
@@ -53,7 +58,7 @@ var (
 	// hunt command
 	// hunt for targets from AD and find shares and permissions
 	huntCommand        = app.Command("hunt", "hunting module")
-	huntDcFlag         = huntCommand.Arg("dc", "Domain Controller IP").Required().IP()
+	huntDcArg          = huntCommand.Arg("dc", "Domain Controller IP").Required().IP()
 	huntUsernameFlag   = huntCommand.Flag("username", "Domain username in format DOMAIN\\username").Short('u').Required().String()
 	huntPasswordFlag   = huntCommand.Flag("password", "Domain user's password").Short('p').String()
 	huntHashFlag       = huntCommand.Flag("hashes", "NTLM hash of password to authenticate").Short('H').String()
@@ -105,14 +110,17 @@ func main() {
 	}
 
 	// execute specified command
+	if command == nullCommand.FullCommand() {
+		err = cmd.ExecuteNull(scanner, *nullTargetArg)
+	}
 	if command == anonCommand.FullCommand() {
-		err = cmd.ExecuteAnon(scanner, *anonTargetFlag)
+		err = cmd.ExecuteAnon(scanner, *anonTargetArg)
 	}
 	if command == authCommand.FullCommand() {
-		err = cmd.ExecuteAuth(scanner, *authTargetFlag, *authUsernameFlag, *authPasswordFlag, *authHashFlag, *authLocalAuthFlag)
+		err = cmd.ExecuteAuth(scanner, *authTargetArg, *authUsernameFlag, *authPasswordFlag, *authHashFlag, *authLocalAuthFlag)
 	}
 	if command == huntCommand.FullCommand() {
-		err = cmd.ExecuteHunt(scanner, *huntUsernameFlag, *huntPasswordFlag, *huntHashFlag, *huntDcFlag, *huntResolverFlag, *huntKerberosFlag, *huntDcHostnameFlag)
+		err = cmd.ExecuteHunt(scanner, *huntUsernameFlag, *huntPasswordFlag, *huntHashFlag, *huntDcArg, *huntResolverFlag, *huntKerberosFlag, *huntDcHostnameFlag)
 	}
 	if err != nil {
 		logger.Fatal(err)
