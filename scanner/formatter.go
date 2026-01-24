@@ -2,8 +2,7 @@ package scanner
 
 import (
 	"fmt"
-	"math"
-	"math/rand"
+	"github.com/vflame6/sharefinder/utils"
 	"net"
 	"slices"
 	"strconv"
@@ -12,43 +11,12 @@ import (
 )
 
 var (
-	letters               = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	dateTimeFormat        = "02/01/2006 15:04"
 	dateTimeSecondsFormat = "02/01/2006 15:04:05"
 )
 
-func logn(n, b float64) float64 {
-	return math.Log(n) / math.Log(b)
-}
-
-func BytesToHumanReadableSize(s uint64) string {
-	base := float64(1000)
-	sizes := []string{"B", "kB", "MB", "GB", "TB", "PB", "EB"}
-
-	if s < 10 {
-		return fmt.Sprintf("%d B", s)
-	}
-	e := math.Floor(logn(float64(s), base))
-	suffix := sizes[int(e)]
-	val := math.Floor(float64(s)/math.Pow(base, e)*10+0.5) / 10
-	f := "%.0f %s"
-	if val < 10 {
-		f = "%.1f %s"
-	}
-
-	return fmt.Sprintf(f, val, suffix)
-}
-
 func SPrintHostInfo(host, version, hostname, domain string, signing bool) string {
 	return fmt.Sprintf("[+] %s: %s (name:%s) (domain:%s) (signing:%v)", host, version, hostname, domain, signing)
-}
-
-func RandSeq(n int) string {
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
-	}
-	return string(b)
 }
 
 func SprintFiles(files []File) string {
@@ -60,7 +28,7 @@ func SprintFiles(files []File) string {
 			// So to get a timestamp with unix time, subtract difference in 100-nanosecond intervals
 			// and divide by 10 to convert to microseconds
 			lastWrite := time.Time.Format(file.LastModified, dateTimeFormat)
-			fileSize := BytesToHumanReadableSize(file.Size)
+			fileSize := utils.BytesToHumanReadableSize(file.Size)
 			shareListResult += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", file.Type, fileSize, lastWrite, file.Name)
 		}
 	}
@@ -77,7 +45,7 @@ func SprintDirectories(ip, share string, dirs []Directory) string {
 			shareListResult += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "----", "----", "-------------", "----")
 			for _, file := range dir.Files {
 				lastWrite := time.Time.Format(file.LastModified, dateTimeFormat)
-				fileSize := BytesToHumanReadableSize(file.Size)
+				fileSize := utils.BytesToHumanReadableSize(file.Size)
 				shareListResult += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", file.Type, fileSize, lastWrite, file.Name)
 			}
 			shareListResult += "\n"
@@ -228,31 +196,4 @@ func isNetworkOrBroadcast(ip net.IP, ipNet *net.IPNet) bool {
 	}
 
 	return false
-}
-
-// ConvertToUnixTimestamp is a function to convert Microsoft's timestamp value to Unix one
-func ConvertToUnixTimestamp(timestamp uint64) time.Time {
-	// Microsoft handles time as number of 100-nanosecond intervals since January 1, 1601 UTC
-	// So to get a timestamp with unix time, subtract difference in 100-nanosecond intervals
-	// and divide by 10 to convert to microseconds
-	return time.UnixMicro(int64((timestamp - 116444736000000000) / 10))
-}
-
-func GetFilePath(fullpath string) string {
-	separator := "\\"
-
-	// 1. Split the string by the separator
-	parts := strings.Split(fullpath, separator)
-
-	if len(parts) > 1 {
-		// 2. Slice the array to exclude the last element
-		// The slicing operation `[:len(parts)-1]` creates a new slice
-		// from the start (index 0) up to, but not including, the last element.
-		partsWithoutLast := parts[:len(parts)-1]
-
-		// 3. Join the remaining parts back into a single string using the same separator
-		return strings.Join(partsWithoutLast, separator)
-	} else {
-		return ""
-	}
 }

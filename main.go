@@ -45,7 +45,7 @@ var (
 	// find anonymous (guest) shares and permissions
 	anonCommand      = app.Command("anon", "anonymous module")
 	anonTargetArg    = anonCommand.Arg("target", "Target, IP range or filename").Required().String()
-	anonUsernameFlag = anonCommand.Flag("username", "Username to authenticate").String()
+	anonUsernameFlag = anonCommand.Flag("username", "Username to authenticate as Guest").String()
 
 	// auth command
 	// find authenticated shares and permissions

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/vflame6/sharefinder/logger"
+	"github.com/vflame6/sharefinder/utils"
 	"slices"
 	"sync"
 	"time"
@@ -99,11 +100,11 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 			// it is done like that to make directories in the top of the output
 			for _, file := range files {
 				if file.IsDir {
-					lastWriteTime := ConvertToUnixTimestamp(file.LastWriteTime)
+					lastWriteTime := utils.ConvertToUnixTimestamp(file.LastWriteTime)
 
 					fileType := "dir"
 
-					singleFile := NewFile(fileType, file.Name, GetFilePath(file.FullPath), file.Size, lastWriteTime)
+					singleFile := NewFile(fileType, file.Name, utils.GetFilePath(file.FullPath), file.Size, lastWriteTime)
 					shareResult[i].Files = append(shareResult[i].Files, *singleFile)
 
 					// list all directories recursively if such option is specified
@@ -121,14 +122,14 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 			// process files
 			for _, file := range files {
 				if !file.IsDir {
-					lastWriteTime := ConvertToUnixTimestamp(file.LastWriteTime)
+					lastWriteTime := utils.ConvertToUnixTimestamp(file.LastWriteTime)
 
 					fileType := "file"
 					if file.IsJunction {
 						fileType = "link"
 					}
 
-					singleFile := NewFile(fileType, file.Name, GetFilePath(file.FullPath), file.Size, lastWriteTime)
+					singleFile := NewFile(fileType, file.Name, utils.GetFilePath(file.FullPath), file.Size, lastWriteTime)
 					shareResult[i].Files = append(shareResult[i].Files, *singleFile)
 				} else {
 					continue

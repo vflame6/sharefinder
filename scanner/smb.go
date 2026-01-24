@@ -6,6 +6,7 @@ import (
 	"github.com/jfjallid/go-smb/smb/dcerpc"
 	"github.com/jfjallid/go-smb/spnego"
 	"github.com/vflame6/sharefinder/logger"
+	"github.com/vflame6/sharefinder/utils"
 	"golang.org/x/net/proxy"
 	"io"
 	"net"
@@ -110,8 +111,8 @@ func (conn *Connection) CheckReadAccess(share string) error {
 }
 
 func (conn *Connection) CheckWriteAccess(share string) bool {
-	tempFile := RandSeq(16) + ".txt"
-	tempData := RandSeq(32)
+	tempFile := utils.RandSeq(16) + ".txt"
+	tempData := utils.RandSeq(32)
 	//tempDir := RandSeq(16)
 	conn.session.TreeConnect(share)
 	defer conn.session.TreeDisconnect(share)
@@ -167,7 +168,7 @@ func (conn *Connection) ListDirectoryRecursively(share string, dir smb.SharedFil
 	var result []Directory
 	var currentFiles []File
 
-	lastWriteTime := ConvertToUnixTimestamp(dir.LastWriteTime)
+	lastWriteTime := utils.ConvertToUnixTimestamp(dir.LastWriteTime)
 	currentDir := NewDirectory(
 		dir.FullPath,
 		dir.Size,
@@ -191,10 +192,10 @@ func (conn *Connection) ListDirectoryRecursively(share string, dir smb.SharedFil
 	// it is done like that to make directories in the top of the output
 	for _, file := range files {
 		if file.IsDir {
-			lastWriteTime = ConvertToUnixTimestamp(file.LastWriteTime)
+			lastWriteTime = utils.ConvertToUnixTimestamp(file.LastWriteTime)
 
 			fileType := "dir"
-			singleFile := NewFile(fileType, file.Name, GetFilePath(file.FullPath), file.Size, lastWriteTime)
+			singleFile := NewFile(fileType, file.Name, utils.GetFilePath(file.FullPath), file.Size, lastWriteTime)
 			currentDir.Files = append(currentDir.Files, *singleFile)
 		} else {
 			continue
@@ -203,12 +204,12 @@ func (conn *Connection) ListDirectoryRecursively(share string, dir smb.SharedFil
 	// process files
 	for _, file := range files {
 		if !file.IsDir {
-			lastWriteTime = ConvertToUnixTimestamp(file.LastWriteTime)
+			lastWriteTime = utils.ConvertToUnixTimestamp(file.LastWriteTime)
 			fileType := "file"
 			if file.IsJunction {
 				fileType = "link"
 			}
-			singleFile := NewFile(fileType, file.Name, GetFilePath(file.FullPath), file.Size, lastWriteTime)
+			singleFile := NewFile(fileType, file.Name, utils.GetFilePath(file.FullPath), file.Size, lastWriteTime)
 			currentDir.Files = append(currentDir.Files, *singleFile)
 		} else {
 			continue

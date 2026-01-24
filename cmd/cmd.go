@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/vflame6/sharefinder/logger"
 	"github.com/vflame6/sharefinder/scanner"
+	"github.com/vflame6/sharefinder/utils"
 	"golang.org/x/net/proxy"
 	"net"
 	"net/url"
@@ -181,7 +182,7 @@ func ExecuteAnon(s *scanner.Scanner, target, username string) error {
 		s.Options.Username = username
 	} else {
 		// generate a random username for anonymous access check
-		s.Options.Username = "anonymous_" + scanner.RandSeq(8)
+		s.Options.Username = "anonymous_" + utils.RandSeq(8)
 	}
 	logger.Warnf("Using username for anonymous access: %s", s.Options.Username)
 
