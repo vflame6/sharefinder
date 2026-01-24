@@ -85,6 +85,12 @@ To Build:
 go build -o sharefinder main.go
 ```
 
+Build with Docker:
+
+```shell
+docker build -t sharefinder . 
+```
+
 ## Contributing
 
 Feel free to open an issue if something does not work, or if you have any issues. New ideas to improve the tool are much appreciated.
