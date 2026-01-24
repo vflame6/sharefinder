@@ -173,11 +173,16 @@ func ExecuteNull(s *scanner.Scanner, target string) error {
 	return nil
 }
 
-func ExecuteAnon(s *scanner.Scanner, target string) error {
+func ExecuteAnon(s *scanner.Scanner, target, username string) error {
 	logger.Warn("Executing anon module")
 
-	// generate a random username for anonymous access check
-	s.Options.Username = "anonymous_" + scanner.RandSeq(8)
+	if username != "" {
+		// use the username specified by the user
+		s.Options.Username = username
+	} else {
+		// generate a random username for anonymous access check
+		s.Options.Username = "anonymous_" + scanner.RandSeq(8)
+	}
 	logger.Warnf("Using username for anonymous access: %s", s.Options.Username)
 
 	var wg sync.WaitGroup

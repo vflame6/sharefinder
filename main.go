@@ -43,8 +43,9 @@ var (
 
 	// anon command
 	// find anonymous (guest) shares and permissions
-	anonCommand   = app.Command("anon", "anonymous module")
-	anonTargetArg = anonCommand.Arg("target", "Target, IP range or filename").Required().String()
+	anonCommand      = app.Command("anon", "anonymous module")
+	anonTargetArg    = anonCommand.Arg("target", "Target, IP range or filename").Required().String()
+	anonUsernameFlag = anonCommand.Flag("username", "Username to authenticate").String()
 
 	// auth command
 	// find authenticated shares and permissions
@@ -114,7 +115,7 @@ func main() {
 		err = cmd.ExecuteNull(scanner, *nullTargetArg)
 	}
 	if command == anonCommand.FullCommand() {
-		err = cmd.ExecuteAnon(scanner, *anonTargetArg)
+		err = cmd.ExecuteAnon(scanner, *anonTargetArg, *anonUsernameFlag)
 	}
 	if command == authCommand.FullCommand() {
 		err = cmd.ExecuteAuth(scanner, *authTargetArg, *authUsernameFlag, *authPasswordFlag, *authHashFlag, *authLocalAuthFlag)
