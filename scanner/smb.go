@@ -1,7 +1,6 @@
 package scanner
 
 import (
-	"errors"
 	"fmt"
 	"github.com/jfjallid/go-smb/smb"
 	"github.com/jfjallid/go-smb/smb/dcerpc"
@@ -24,8 +23,7 @@ func NewSMBConnection(host DNHost, username, password string, hashes []byte, ker
 	// establish the connection
 	session, err := smb.NewConnection(options)
 	if err != nil {
-		errMsg := fmt.Sprintf("failed to establish SMB connection on %s: ", host.IP)
-		return nil, errors.New(errMsg + err.Error())
+		return nil, err
 	}
 	conn := &Connection{
 		host:    host.IP.String(),

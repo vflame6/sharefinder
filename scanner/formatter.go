@@ -40,7 +40,7 @@ func BytesToHumanReadableSize(s uint64) string {
 }
 
 func SPrintHostInfo(host, version, hostname, domain string, signing bool) string {
-	return fmt.Sprintf("[+] %s: %s (name:%s) (domain:%s) (signing:%v)\n", host, version, hostname, domain, signing)
+	return fmt.Sprintf("[+] %s: %s (name:%s) (domain:%s) (signing:%v)", host, version, hostname, domain, signing)
 }
 
 func RandSeq(n int) string {
@@ -89,8 +89,7 @@ func SprintDirectories(ip, share string, dirs []Directory) string {
 func SprintHost(h Host, exclude []string) string {
 	var result string
 
-	result += SPrintHostInfo(h.IP, h.Version, h.Hostname, h.Domain, h.Signing)
-	result += fmt.Sprintf("%-16s %-16s %-16s\n", "Share", "Permissions", "Decription")
+	result += fmt.Sprintf("\n%-16s %-16s %-16s\n", "Share", "Permissions", "Decription")
 	result += fmt.Sprintf("%-16s %-16s %-16s\n", strings.Repeat("-", 5), strings.Repeat("-", 11), strings.Repeat("-", 10))
 
 	for _, share := range h.Shares {

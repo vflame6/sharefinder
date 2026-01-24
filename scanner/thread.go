@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"errors"
 	"fmt"
 	"github.com/vflame6/sharefinder/logger"
 	"slices"
@@ -13,7 +14,7 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 	var shareResult []Share
 
 	// get an SMB connection with NTLM authentication method
-	logger.Debugf("Trying to establish SMB connection to %s (%s)", host.Hostname, host.IP.String())
+	logger.Debugf("Trying to establish SMB connection to %s (%s)", host.IP.String(), host.Hostname)
 	conn, err := NewSMBConnection(
 		host,
 		options.Username,
@@ -38,12 +39,7 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 	if !conn.session.IsAuthenticated() {
 		return hostResult, fmt.Errorf("not authenticated status on host %s after successful connection", host)
 	}
-	logger.Debugf("Successfully established SMB connection to %s (%s)", host.Hostname, host.IP.String())
-
-	// TODO implement SMBv1 check
-	// TODO: implement Windows versions check
-	// TODO: implement Guest check
-	// TODO: implement admin check - https://github.com/Pennyw0rth/NetExec/blob/91c339ea30bc87118fefa8236cb86a95c1717643/nxc/protocols/smb.py#L637
+	logger.Debugf("Successfully established SMB connection to %s (%s)", host.IP.String(), host.Hostname)
 
 	// get base info about connected target
 	targetInfo := conn.GetTargetInfo()
@@ -55,10 +51,12 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 	hostResult.Signing = isSigningRequired
 
 	// get a list of shares
+	logger.Debugf("Trying to list shares on %s (%s)", host.IP.String(), host.Hostname)
 	shares, err := conn.GetSharesList()
 	if err != nil {
 		return hostResult, err
 	}
+	logger.Debugf("Successfully listed shares on %s (%s)", host.IP.String(), host.Hostname)
 
 	// get permissions on shares
 	for _, share := range shares {
@@ -161,15 +159,21 @@ func smbThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
 
 			// enumerate the host. Will receive the Host struct or an error
 			hostResult, err := enumerateHost(host, options)
-			if err != nil {
-				logger.Error(err)
+
+			// failed on authentication
+			if hostResult.IP == "" {
+				logger.Error(errors.New(fmt.Sprintf("Error during authentication on %s: %v", host.IP, err)))
 				continue
 			}
 
 			// format and print results on enumerated host
-			printResult := SprintHost(hostResult, options.Exclude)
-			if options.List {
-				printResult += SprintShares(hostResult, options.Exclude)
+			printResult := SPrintHostInfo(hostResult.IP, hostResult.Version, hostResult.Hostname, hostResult.Domain, hostResult.Signing)
+			if len(hostResult.Shares) > 0 {
+				printResult += SprintHost(hostResult, options.Exclude)
+
+				if options.List {
+					printResult += SprintShares(hostResult, options.Exclude)
+				}
 			}
 			logger.Info(printResult)
 
@@ -189,6 +193,12 @@ func smbThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
 				if err != nil {
 					logger.Error(err)
 				}
+			}
+
+			// got an error during shares enumeration
+			if err != nil {
+				logger.Error(errors.New(fmt.Sprintf("Error during shares enumeration on %s: %v", host.IP, err)))
+				continue
 			}
 		}
 	}
