@@ -174,17 +174,17 @@ func ExecuteNull(s *scanner.Scanner, target string) error {
 	return nil
 }
 
-func ExecuteAnon(s *scanner.Scanner, target, username string) error {
-	logger.Warn("Executing anon module")
+func ExecuteGuest(s *scanner.Scanner, target, username string) error {
+	logger.Warn("Executing guest module")
 
 	if username != "" {
 		// use the username specified by the user
 		s.Options.Username = username
 	} else {
-		// generate a random username for anonymous access check
+		// generate a random username for Guest access check
 		s.Options.Username = "anonymous_" + utils.RandSeq(8)
 	}
-	logger.Warnf("Using username for anonymous access: %s", s.Options.Username)
+	logger.Warnf("Using username for Guest access: %s", s.Options.Username)
 
 	var wg sync.WaitGroup
 	s.RunSMBEnumeration(&wg)

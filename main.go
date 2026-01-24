@@ -41,11 +41,11 @@ var (
 	nullCommand   = app.Command("null", "null session module")
 	nullTargetArg = nullCommand.Arg("target", "Target, IP range of filename").Required().String()
 
-	// anon command
-	// find anonymous (guest) shares and permissions
-	anonCommand      = app.Command("anon", "anonymous module")
-	anonTargetArg    = anonCommand.Arg("target", "Target, IP range or filename").Required().String()
-	anonUsernameFlag = anonCommand.Flag("username", "Username to authenticate as Guest").String()
+	// guest command
+	// find guest authentication shares and permissions
+	guestCommand      = app.Command("guest", "guest module")
+	guestTargetArg    = guestCommand.Arg("target", "Target, IP range or filename").Required().String()
+	guestUsernameFlag = guestCommand.Flag("username", "Username to authenticate as Guest").String()
 
 	// auth command
 	// find authenticated shares and permissions
@@ -114,8 +114,8 @@ func main() {
 	if command == nullCommand.FullCommand() {
 		err = cmd.ExecuteNull(scanner, *nullTargetArg)
 	}
-	if command == anonCommand.FullCommand() {
-		err = cmd.ExecuteAnon(scanner, *anonTargetArg, *anonUsernameFlag)
+	if command == guestCommand.FullCommand() {
+		err = cmd.ExecuteGuest(scanner, *guestTargetArg, *guestUsernameFlag)
 	}
 	if command == authCommand.FullCommand() {
 		err = cmd.ExecuteAuth(scanner, *authTargetArg, *authUsernameFlag, *authPasswordFlag, *authHashFlag, *authLocalAuthFlag)
