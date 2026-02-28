@@ -12,6 +12,7 @@ import (
 	"golang.org/x/net/proxy"
 	"io"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -46,14 +47,28 @@ func GetSMBOptions(host DNHost, username, password string, hashes []byte, kerber
 	}
 
 	if kerberos {
+		hostname := host.Hostname
+		if hostname == "" {
+			// Kerberos requires a hostname for SPN — attempt reverse DNS lookup
+			names, err := net.LookupAddr(host.IP.String())
+			if err == nil && len(names) > 0 {
+				hostname = strings.TrimSuffix(names[0], ".")
+				logger.Debugf("Resolved %s to %s for Kerberos SPN", host.IP.String(), hostname)
+			} else {
+				logger.Warnf("Kerberos requires a hostname for SPN but target %s has no hostname — authentication may fail", host.IP.String())
+			}
+		}
 		smbOptions.Initiator = &spnego.KRB5Initiator{
-			Domain:   domain,
-			User:     username,
-			Password: password,
-			Hash:     hashes,
-			AESKey:   []byte{},
-			SPN:      "cifs/" + host.Hostname,
-			DCIP:     dcIP.String(),
+			Domain:      domain,
+			User:        username,
+			Password:    password,
+			Hash:        hashes,
+			AESKey:      []byte{},
+			SPN:         "cifs/" + hostname,
+			DCIP:        dcIP.String(),
+			DialTimeout: timeout,
+			ProxyDialer: proxyDialer,
+			Host:        hostname,
 		}
 	} else {
 		smbOptions.Initiator = &spnego.NTLMInitiator{
