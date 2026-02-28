@@ -28,8 +28,6 @@ func NewResolver(protocol string, resolverIP net.IP, timeout time.Duration, prox
 		},
 	}
 
-	// Override default resolver so Go runtime also uses this
-	net.DefaultResolver = r
 	return &Resolver{resolver: r}
 }
 

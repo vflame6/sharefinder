@@ -58,14 +58,18 @@ func GetSMBOptions(host DNHost, username, password string, hashes []byte, kerber
 				logger.Warnf("Kerberos requires a hostname for SPN but target %s has no hostname — authentication may fail", host.IP.String())
 			}
 		}
+		var dcIPStr string
+		if dcIP != nil && !dcIP.Equal(net.IPv4zero) {
+			dcIPStr = dcIP.String()
+		}
 		smbOptions.Initiator = &spnego.KRB5Initiator{
 			Domain:      domain,
 			User:        username,
 			Password:    password,
 			Hash:        hashes,
-			AESKey:      []byte{},
+			AESKey:      nil,
 			SPN:         "cifs/" + hostname,
-			DCIP:        dcIP.String(),
+			DCIP:        dcIPStr,
 			DialTimeout: timeout,
 			ProxyDialer: proxyDialer,
 			Host:        hostname,

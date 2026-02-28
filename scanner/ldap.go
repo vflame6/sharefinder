@@ -96,52 +96,52 @@ func NewLDAPConnection(host net.IP, username, password string, hash string, doma
 
 	// --- Bind: Kerberos -> NTLM hash -> simple ---
 	if kerberos {
-		// 1) read ccache path from env (no system krb5.conf dependency)
-		ccachePath, err := ccachePathFromEnv()
-		if err != nil {
-			_ = l.Close()
-			return nil, err
-		}
-
-		// 2) generate a minimal krb5.conf in a temp file (no global files needed)
-		realm := strings.ToUpper(domain) // AD realm = uppercased DNS domain
 		if dcHostname == "" {
 			_ = l.Close()
 			return nil, fmt.Errorf("dcHostname is required for Kerberos (used as KDC and SPN host)")
 		}
+
+		// generate a minimal krb5.conf in a temp file
+		realm := strings.ToUpper(domain) // AD realm = uppercased DNS domain
 		krbConfPath, cleanup, err := writeMinimalKrb5Conf(realm, dcHostname+"."+domain)
 		if err != nil {
 			_ = l.Close()
 			return nil, fmt.Errorf("create krb5.conf: %w", err)
 		}
-		// ensure cleanup later if we fail after this
-		defer func() {
-			if conn.gssClient == nil { // didn’t succeed binding
-				_ = os.Remove(krbConfPath)
+		defer cleanup()
+
+		var gc *gssapi.Client
+
+		// try ccache first (KRB5CCNAME), fall back to password-based TGT
+		ccachePath, ccErr := ccachePathFromEnv()
+		if ccErr == nil {
+			gc, err = gssapi.NewClientFromCCache(ccachePath, krbConfPath)
+			if err != nil {
+				_ = l.Close()
+				return nil, fmt.Errorf("gssapi: load ccache: %w", err)
 			}
-		}()
-
-		// 3) build GSSAPI client from ccache + our generated krb5.conf
-		gc, err := gssapi.NewClientFromCCache(ccachePath, krbConfPath)
-		if err != nil {
+		} else if password != "" {
+			// get TGT using password directly
+			gc, err = gssapi.NewClientWithPassword(username, realm, password, krbConfPath)
+			if err != nil {
+				_ = l.Close()
+				return nil, fmt.Errorf("gssapi: password auth: %w", err)
+			}
+		} else {
 			_ = l.Close()
-			cleanup()
-			return nil, fmt.Errorf("gssapi: load ccache: %w", err)
+			return nil, fmt.Errorf("kerberos requires either KRB5CCNAME ccache or -p password")
 		}
-		conn.gssClient = gc // keep alive for SASL sign/seal
+		conn.gssClient = gc
 
-		// 4) SPN must be host-based ldap/<fqdn>
+		// SPN must be host-based ldap/<fqdn>
 		servicePrincipal := fmt.Sprintf("ldap/%s", strings.ToLower(dcHostname))
 
-		// 5) SASL GSSAPI bind (authzid usually empty)
+		// SASL GSSAPI bind
 		if err := l.GSSAPIBind(gc, servicePrincipal, ""); err != nil {
 			_ = l.Close()
 			_ = gc.Close()
-			cleanup()
 			return nil, fmt.Errorf("kerberos GSSAPI bind failed: %w", err)
 		}
-
-		cleanup()
 
 		return conn, nil
 	}
