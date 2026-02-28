@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"io/ioutil"
+	
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,7 +71,7 @@ func (o *OutputWriter) ReadFile(filename string) ([]byte, error) {
 	if filename == "" {
 		return nil, errors.New("empty filename")
 	}
-	return ioutil.ReadFile(filename)
+	return os.ReadFile(filename)
 }
 
 func (o *OutputWriter) Write(content string, writer io.Writer) error {

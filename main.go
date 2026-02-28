@@ -5,6 +5,8 @@ import (
 	"github.com/vflame6/sharefinder/cmd"
 	"github.com/vflame6/sharefinder/logger"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -109,6 +111,17 @@ func main() {
 	if err != nil {
 		logger.Fatal(err)
 	}
+
+	// set up graceful shutdown on Ctrl+C
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		logger.Warn("Interrupt received, shutting down...")
+		scanner.Shutdown()
+		scanner.CloseOutputter()
+		os.Exit(1)
+	}()
 
 	// execute specified command
 	if command == nullCommand.FullCommand() {

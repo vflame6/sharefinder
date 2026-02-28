@@ -3,7 +3,9 @@ package scanner
 import (
 	"fmt"
 	"github.com/jfjallid/go-smb/smb"
-	"github.com/jfjallid/go-smb/smb/dcerpc"
+	"github.com/jfjallid/go-smb/dcerpc"
+	"github.com/jfjallid/go-smb/dcerpc/mssrvs"
+	"github.com/jfjallid/go-smb/dcerpc/smbtransport"
 	"github.com/jfjallid/go-smb/spnego"
 	"github.com/vflame6/sharefinder/logger"
 	"github.com/vflame6/sharefinder/utils"
@@ -76,7 +78,7 @@ func (conn *Connection) GetTargetInfo() *smb.TargetInfo {
 	return conn.session.GetTargetInfo()
 }
 
-func (conn *Connection) GetSharesList() ([]dcerpc.NetShare, error) {
+func (conn *Connection) GetSharesList() ([]mssrvs.NetShare, error) {
 	share := "IPC$"
 	err := conn.session.TreeConnect(share)
 	if err != nil {
@@ -88,11 +90,16 @@ func (conn *Connection) GetSharesList() ([]dcerpc.NetShare, error) {
 		return nil, err
 	}
 	defer f.CloseFile()
-	bind, err := dcerpc.Bind(f, dcerpc.MSRPCUuidSrvSvc, 3, 0, dcerpc.MSRPCUuidNdr)
+	transport, err := smbtransport.NewSMBTransport(f)
 	if err != nil {
 		return nil, err
 	}
-	shares, err := bind.NetShareEnumAll(conn.host)
+	bind, err := dcerpc.Bind(transport, mssrvs.MSRPCUuidSrvSvc, 3, 0, dcerpc.MSRPCUuidNdr)
+	if err != nil {
+		return nil, err
+	}
+	rpccon := mssrvs.NewRPCCon(bind)
+	shares, err := rpccon.NetShareEnumAll(conn.host)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +121,9 @@ func (conn *Connection) CheckWriteAccess(share string) bool {
 	tempFile := utils.RandSeq(16) + ".txt"
 	tempData := utils.RandSeq(32)
 	//tempDir := RandSeq(16)
-	conn.session.TreeConnect(share)
+	if err := conn.session.TreeConnect(share); err != nil {
+		return false
+	}
 	defer conn.session.TreeDisconnect(share)
 
 	// try to write a file
@@ -165,6 +174,16 @@ func (conn *Connection) ListShare(share string) ([]smb.SharedFile, error) {
 }
 
 func (conn *Connection) ListDirectoryRecursively(share string, dir smb.SharedFile) ([]Directory, error) {
+	err := conn.session.TreeConnect(share)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.session.TreeDisconnect(share)
+
+	return conn.listDirectoryRecursivelyInternal(share, dir)
+}
+
+func (conn *Connection) listDirectoryRecursivelyInternal(share string, dir smb.SharedFile) ([]Directory, error) {
 	var result []Directory
 	var currentFiles []File
 
@@ -175,12 +194,6 @@ func (conn *Connection) ListDirectoryRecursively(share string, dir smb.SharedFil
 		lastWriteTime,
 		currentFiles,
 	)
-
-	err := conn.session.TreeConnect(share)
-	if err != nil {
-		return nil, err
-	}
-	defer conn.session.TreeDisconnect(share)
 
 	// process current directory
 	files, err := conn.session.ListDirectory(share, dir.FullPath, "*")
@@ -221,7 +234,7 @@ func (conn *Connection) ListDirectoryRecursively(share string, dir smb.SharedFil
 	// loop over all files to list all nested directories recursively
 	for _, file := range files {
 		if file.IsDir {
-			recurseDirectory, err := conn.ListDirectoryRecursively(share, file)
+			recurseDirectory, err := conn.listDirectoryRecursivelyInternal(share, file)
 			if err != nil {
 				logger.Error(fmt.Errorf("Failed to list directory %s\\%s\\%s: %s\n", conn.host, share, file.Name, err))
 			}

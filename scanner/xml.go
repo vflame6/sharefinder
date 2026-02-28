@@ -3,6 +3,7 @@ package scanner
 import (
 	"bytes"
 	"encoding/xml"
+	"path/filepath"
 	"time"
 )
 
@@ -82,7 +83,12 @@ func NewFile(filetype, filename, parent string, size uint64, lastModified time.T
 }
 
 func NewDirectory(filename string, size uint64, lastModified time.Time, files []File) *Directory {
+	parent := filepath.Dir(filename)
+	if parent == "." {
+		parent = ""
+	}
 	return &Directory{
+		Parent:       parent,
 		Name:         filename,
 		Size:         size,
 		LastModified: lastModified,

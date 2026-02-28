@@ -228,7 +228,7 @@ func (conn *LDAPConnection) SearchComputers(baseDN string) (*ldap.SearchResult, 
 		0,
 		false,
 		"(objectCategory=Computer)",
-		[]string{},
+		[]string{"dNSHostName"},
 		nil,
 	)
 	sr, err := conn.connection.SearchWithPaging(searchRequest, math.MaxInt32)
