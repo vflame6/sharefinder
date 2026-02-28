@@ -21,8 +21,8 @@ type Connection struct {
 	session *smb.Connection
 }
 
-func NewSMBConnection(host DNHost, username, password string, hashes []byte, kerberos, localAuth bool, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer, dcIP net.IP, nullSession bool) (*Connection, error) {
-	options := GetSMBOptions(host, username, password, hashes, kerberos, localAuth, domain, timeout, smbPort, proxyDialer, dcIP, nullSession)
+func NewSMBConnection(host DNHost, username, password string, hashes []byte, kerberos, localAuth bool, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer, dcIP net.IP, nullSession bool, dcHostname string) (*Connection, error) {
+	options := GetSMBOptions(host, username, password, hashes, kerberos, localAuth, domain, timeout, smbPort, proxyDialer, dcIP, nullSession, dcHostname)
 
 	// establish the connection
 	session, err := smb.NewConnection(options)
@@ -36,7 +36,7 @@ func NewSMBConnection(host DNHost, username, password string, hashes []byte, ker
 	return conn, nil
 }
 
-func GetSMBOptions(host DNHost, username, password string, hashes []byte, kerberos, localAuth bool, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer, dcIP net.IP, nullSession bool) smb.Options {
+func GetSMBOptions(host DNHost, username, password string, hashes []byte, kerberos, localAuth bool, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer, dcIP net.IP, nullSession bool, dcHostname string) smb.Options {
 	smbOptions := smb.Options{
 		Host:                  host.IP.String(),
 		Port:                  smbPort,
@@ -54,8 +54,12 @@ func GetSMBOptions(host DNHost, username, password string, hashes []byte, kerber
 			if err == nil && len(names) > 0 {
 				hostname = strings.TrimSuffix(names[0], ".")
 				logger.Debugf("Resolved %s to %s for Kerberos SPN", host.IP.String(), hostname)
+			} else if dcHostname != "" && domain != "" {
+				// construct FQDN from dc-hostname + domain when target is the DC itself
+				hostname = dcHostname + "." + domain
+				logger.Debugf("Using DC hostname for SPN: %s", hostname)
 			} else {
-				logger.Warnf("Kerberos requires a hostname for SPN but target %s has no hostname — authentication may fail", host.IP.String())
+				logger.Warnf("Kerberos requires a hostname for SPN but target %s has no hostname — use hunt command or specify target as hostname", host.IP.String())
 			}
 		}
 		var dcIPStr string

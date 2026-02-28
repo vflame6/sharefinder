@@ -29,6 +29,7 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 		options.ProxyDialer,
 		options.DomainController,
 		options.NullSession,
+		options.DCHostname,
 	)
 	if err != nil {
 		return hostResult, err
@@ -46,9 +47,15 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 	targetInfo := conn.GetTargetInfo()
 	hostResult.IP = host.IP.String()
 	hostResult.Time = time.Now()
-	hostResult.Version = targetInfo.GuessedOSVersion
-	hostResult.Hostname = targetInfo.NBComputerName
-	hostResult.Domain = targetInfo.DnsDomainName
+	if targetInfo != nil {
+		hostResult.Version = targetInfo.GuessedOSVersion
+		hostResult.Hostname = targetInfo.NBComputerName
+		hostResult.Domain = targetInfo.DnsDomainName
+	} else {
+		// Kerberos auth doesn't provide NTLM target info
+		hostResult.Hostname = host.Hostname
+		hostResult.Domain = options.Domain
+	}
 	hostResult.Signing = isSigningRequired
 
 	// get a list of shares

@@ -103,7 +103,7 @@ func NewLDAPConnection(host net.IP, username, password string, hash string, doma
 
 		// generate a minimal krb5.conf in a temp file
 		realm := strings.ToUpper(domain) // AD realm = uppercased DNS domain
-		krbConfPath, cleanup, err := writeMinimalKrb5Conf(realm, dcHostname+"."+domain)
+		krbConfPath, cleanup, err := writeMinimalKrb5Conf(realm, host.String())
 		if err != nil {
 			_ = l.Close()
 			return nil, fmt.Errorf("create krb5.conf: %w", err)
@@ -124,8 +124,14 @@ func NewLDAPConnection(host net.IP, username, password string, hash string, doma
 			// get TGT using password directly
 			gc, err = gssapi.NewClientWithPassword(username, realm, password, krbConfPath)
 			if err != nil {
-				_ = l.Close()
-				return nil, fmt.Errorf("gssapi: password auth: %w", err)
+				// GSSAPI password auth failed (e.g. proxy blocks KDC access)
+				// fall back to simple LDAP bind — Kerberos will still be used for SMB
+				logger.Warnf("Kerberos LDAP bind failed, falling back to simple bind for LDAP (SMB will still use Kerberos)")
+				if bindErr := l.Bind(username+"@"+domain, password); bindErr != nil {
+					_ = l.Close()
+					return nil, fmt.Errorf("LDAP bind failed: kerberos: %w, simple: %v", err, bindErr)
+				}
+				return conn, nil
 			}
 		} else {
 			_ = l.Close()
@@ -138,9 +144,14 @@ func NewLDAPConnection(host net.IP, username, password string, hash string, doma
 
 		// SASL GSSAPI bind
 		if err := l.GSSAPIBind(gc, servicePrincipal, ""); err != nil {
-			_ = l.Close()
+			// GSSAPI bind failed — fall back to simple bind
 			_ = gc.Close()
-			return nil, fmt.Errorf("kerberos GSSAPI bind failed: %w", err)
+			conn.gssClient = nil
+			logger.Warnf("Kerberos GSSAPI bind failed, falling back to simple bind for LDAP")
+			if bindErr := l.Bind(username+"@"+domain, password); bindErr != nil {
+				_ = l.Close()
+				return nil, fmt.Errorf("LDAP bind failed: kerberos: %w, simple: %v", err, bindErr)
+			}
 		}
 
 		return conn, nil
