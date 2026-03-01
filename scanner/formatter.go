@@ -57,7 +57,7 @@ func SprintDirectories(ip, share string, dirs []Directory) string {
 func SprintHost(h Host, exclude []string) string {
 	var result string
 
-	result += fmt.Sprintf("\n%-16s %-16s %-16s\n", "Share", "Permissions", "Decription")
+	result += fmt.Sprintf("\n%-16s %-16s %-16s\n", "Share", "Permissions", "Description")
 	result += fmt.Sprintf("%-16s %-16s %-16s\n", strings.Repeat("-", 5), strings.Repeat("-", 11), strings.Repeat("-", 10))
 
 	for _, share := range h.Shares {

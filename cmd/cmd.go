@@ -201,7 +201,7 @@ func ExecuteGuest(s *scanner.Scanner, target, username string) error {
 	return nil
 }
 
-func ExecuteAuth(s *scanner.Scanner, target, username, password, hash string, localAuth bool) error {
+func ExecuteAuth(s *scanner.Scanner, target, username, password, hash string, localAuth, kerberos bool, dcHostname string, dcIP net.IP) error {
 	var targetDomain string
 	var targetUsername string
 	var err error
@@ -236,12 +236,22 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password, hash string, lo
 		}
 	}
 
+	// check if dcHostname is provided with kerberos authentication
+	if kerberos && dcHostname == "" {
+		return errors.New("--kerberos can't be used without --dc-hostname")
+	}
+
 	s.Options.Username = targetUsername
 	s.Options.Password = password
 	s.Options.Hash = hash
 	s.Options.HashBytes = hashBytes
 	s.Options.Domain = targetDomain
 	s.Options.LocalAuth = localAuth
+	s.Options.Kerberos = kerberos
+	s.Options.DCHostname = dcHostname
+	if dcIP != nil {
+		s.Options.DomainController = dcIP
+	}
 
 	var wg sync.WaitGroup
 

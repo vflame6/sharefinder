@@ -32,3 +32,4 @@ main.out
 .air.toml
 tmp
 *.ccache
+sharefinder

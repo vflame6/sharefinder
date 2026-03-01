@@ -3,13 +3,16 @@ package scanner
 import (
 	"fmt"
 	"github.com/jfjallid/go-smb/smb"
-	"github.com/jfjallid/go-smb/smb/dcerpc"
+	"github.com/jfjallid/go-smb/dcerpc"
+	"github.com/jfjallid/go-smb/dcerpc/mssrvs"
+	"github.com/jfjallid/go-smb/dcerpc/smbtransport"
 	"github.com/jfjallid/go-smb/spnego"
 	"github.com/vflame6/sharefinder/logger"
 	"github.com/vflame6/sharefinder/utils"
 	"golang.org/x/net/proxy"
 	"io"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -18,8 +21,8 @@ type Connection struct {
 	session *smb.Connection
 }
 
-func NewSMBConnection(host DNHost, username, password string, hashes []byte, kerberos, localAuth bool, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer, dcIP net.IP, nullSession bool) (*Connection, error) {
-	options := GetSMBOptions(host, username, password, hashes, kerberos, localAuth, domain, timeout, smbPort, proxyDialer, dcIP, nullSession)
+func NewSMBConnection(host DNHost, username, password string, hashes []byte, kerberos, localAuth bool, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer, dcIP net.IP, nullSession bool, dcHostname string) (*Connection, error) {
+	options := GetSMBOptions(host, username, password, hashes, kerberos, localAuth, domain, timeout, smbPort, proxyDialer, dcIP, nullSession, dcHostname)
 
 	// establish the connection
 	session, err := smb.NewConnection(options)
@@ -33,7 +36,7 @@ func NewSMBConnection(host DNHost, username, password string, hashes []byte, ker
 	return conn, nil
 }
 
-func GetSMBOptions(host DNHost, username, password string, hashes []byte, kerberos, localAuth bool, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer, dcIP net.IP, nullSession bool) smb.Options {
+func GetSMBOptions(host DNHost, username, password string, hashes []byte, kerberos, localAuth bool, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer, dcIP net.IP, nullSession bool, dcHostname string) smb.Options {
 	smbOptions := smb.Options{
 		Host:                  host.IP.String(),
 		Port:                  smbPort,
@@ -44,14 +47,36 @@ func GetSMBOptions(host DNHost, username, password string, hashes []byte, kerber
 	}
 
 	if kerberos {
+		hostname := host.Hostname
+		if hostname == "" {
+			// Kerberos requires a hostname for SPN — attempt reverse DNS lookup
+			names, err := net.LookupAddr(host.IP.String())
+			if err == nil && len(names) > 0 {
+				hostname = strings.TrimSuffix(names[0], ".")
+				logger.Debugf("Resolved %s to %s for Kerberos SPN", host.IP.String(), hostname)
+			} else if dcHostname != "" && domain != "" {
+				// construct FQDN from dc-hostname + domain when target is the DC itself
+				hostname = dcHostname + "." + domain
+				logger.Debugf("Using DC hostname for SPN: %s", hostname)
+			} else {
+				logger.Warnf("Kerberos requires a hostname for SPN but target %s has no hostname — use hunt command or specify target as hostname", host.IP.String())
+			}
+		}
+		var dcIPStr string
+		if dcIP != nil && !dcIP.Equal(net.IPv4zero) {
+			dcIPStr = dcIP.String()
+		}
 		smbOptions.Initiator = &spnego.KRB5Initiator{
-			Domain:   domain,
-			User:     username,
-			Password: password,
-			Hash:     hashes,
-			AESKey:   []byte{},
-			SPN:      "cifs/" + host.Hostname,
-			DCIP:     dcIP.String(),
+			Domain:      domain,
+			User:        username,
+			Password:    password,
+			Hash:        hashes,
+			AESKey:      nil,
+			SPN:         "cifs/" + hostname,
+			DCIP:        dcIPStr,
+			DialTimeout: timeout,
+			ProxyDialer: proxyDialer,
+			Host:        hostname,
 		}
 	} else {
 		smbOptions.Initiator = &spnego.NTLMInitiator{
@@ -76,7 +101,7 @@ func (conn *Connection) GetTargetInfo() *smb.TargetInfo {
 	return conn.session.GetTargetInfo()
 }
 
-func (conn *Connection) GetSharesList() ([]dcerpc.NetShare, error) {
+func (conn *Connection) GetSharesList() ([]mssrvs.NetShare, error) {
 	share := "IPC$"
 	err := conn.session.TreeConnect(share)
 	if err != nil {
@@ -88,11 +113,16 @@ func (conn *Connection) GetSharesList() ([]dcerpc.NetShare, error) {
 		return nil, err
 	}
 	defer f.CloseFile()
-	bind, err := dcerpc.Bind(f, dcerpc.MSRPCUuidSrvSvc, 3, 0, dcerpc.MSRPCUuidNdr)
+	transport, err := smbtransport.NewSMBTransport(f)
 	if err != nil {
 		return nil, err
 	}
-	shares, err := bind.NetShareEnumAll(conn.host)
+	bind, err := dcerpc.Bind(transport, mssrvs.MSRPCUuidSrvSvc, 3, 0, dcerpc.MSRPCUuidNdr)
+	if err != nil {
+		return nil, err
+	}
+	rpccon := mssrvs.NewRPCCon(bind)
+	shares, err := rpccon.NetShareEnumAll(conn.host)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +144,9 @@ func (conn *Connection) CheckWriteAccess(share string) bool {
 	tempFile := utils.RandSeq(16) + ".txt"
 	tempData := utils.RandSeq(32)
 	//tempDir := RandSeq(16)
-	conn.session.TreeConnect(share)
+	if err := conn.session.TreeConnect(share); err != nil {
+		return false
+	}
 	defer conn.session.TreeDisconnect(share)
 
 	// try to write a file
@@ -165,6 +197,16 @@ func (conn *Connection) ListShare(share string) ([]smb.SharedFile, error) {
 }
 
 func (conn *Connection) ListDirectoryRecursively(share string, dir smb.SharedFile) ([]Directory, error) {
+	err := conn.session.TreeConnect(share)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.session.TreeDisconnect(share)
+
+	return conn.listDirectoryRecursivelyInternal(share, dir)
+}
+
+func (conn *Connection) listDirectoryRecursivelyInternal(share string, dir smb.SharedFile) ([]Directory, error) {
 	var result []Directory
 	var currentFiles []File
 
@@ -175,12 +217,6 @@ func (conn *Connection) ListDirectoryRecursively(share string, dir smb.SharedFil
 		lastWriteTime,
 		currentFiles,
 	)
-
-	err := conn.session.TreeConnect(share)
-	if err != nil {
-		return nil, err
-	}
-	defer conn.session.TreeDisconnect(share)
 
 	// process current directory
 	files, err := conn.session.ListDirectory(share, dir.FullPath, "*")
@@ -221,7 +257,7 @@ func (conn *Connection) ListDirectoryRecursively(share string, dir smb.SharedFil
 	// loop over all files to list all nested directories recursively
 	for _, file := range files {
 		if file.IsDir {
-			recurseDirectory, err := conn.ListDirectoryRecursively(share, file)
+			recurseDirectory, err := conn.listDirectoryRecursivelyInternal(share, file)
 			if err != nil {
 				logger.Error(fmt.Errorf("Failed to list directory %s\\%s\\%s: %s\n", conn.host, share, file.Name, err))
 			}

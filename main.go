@@ -5,6 +5,8 @@ import (
 	"github.com/vflame6/sharefinder/cmd"
 	"github.com/vflame6/sharefinder/logger"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -55,6 +57,9 @@ var (
 	authPasswordFlag  = authCommand.Flag("password", "User's password").Short('p').String()
 	authHashFlag      = authCommand.Flag("hashes", "NTLM hash of password to authenticate").Short('H').String()
 	authLocalAuthFlag = authCommand.Flag("local-auth", "Enable local authentication, the username is passed without domain").Bool()
+	authKerberosFlag  = authCommand.Flag("kerberos", "Use Kerberos authentication").Short('k').Bool()
+	authDcHostnameFlag = authCommand.Flag("dc-hostname", "Hostname of domain controller for Kerberos authentication").String()
+	authDcIPFlag      = authCommand.Flag("dc-ip", "IP of KDC when using Kerberos authentication").IP()
 
 	// hunt command
 	// hunt for targets from AD and find shares and permissions
@@ -110,6 +115,17 @@ func main() {
 		logger.Fatal(err)
 	}
 
+	// set up graceful shutdown on Ctrl+C
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		logger.Warn("Interrupt received, shutting down...")
+		scanner.Shutdown()
+		scanner.CloseOutputter()
+		os.Exit(1)
+	}()
+
 	// execute specified command
 	if command == nullCommand.FullCommand() {
 		err = cmd.ExecuteNull(scanner, *nullTargetArg)
@@ -118,7 +134,7 @@ func main() {
 		err = cmd.ExecuteGuest(scanner, *guestTargetArg, *guestUsernameFlag)
 	}
 	if command == authCommand.FullCommand() {
-		err = cmd.ExecuteAuth(scanner, *authTargetArg, *authUsernameFlag, *authPasswordFlag, *authHashFlag, *authLocalAuthFlag)
+		err = cmd.ExecuteAuth(scanner, *authTargetArg, *authUsernameFlag, *authPasswordFlag, *authHashFlag, *authLocalAuthFlag, *authKerberosFlag, *authDcHostnameFlag, *authDcIPFlag)
 	}
 	if command == huntCommand.FullCommand() {
 		err = cmd.ExecuteHunt(scanner, *huntUsernameFlag, *huntPasswordFlag, *huntHashFlag, *huntDcArg, *huntResolverFlag, *huntKerberosFlag, *huntDcHostnameFlag)

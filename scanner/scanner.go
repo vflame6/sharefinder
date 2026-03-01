@@ -175,16 +175,26 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 		resolver = s.Options.DomainController
 	}
 
-	// test if DNS works with UDP
+	// test DNS resolution — skip UDP when using SOCKS proxy (SOCKS5 doesn't support UDP relay)
 	testEntry := sr.Entries[0].GetAttributeValue("dNSHostName")
-	r := NewResolver("udp", resolver, s.Options.Timeout, s.Options.ProxyDialer)
-	_, err = r.LookupHost(testEntry)
-	if err != nil {
-		// test if DNS works with TCP
+	var r *Resolver
+	if s.Options.ProxyDialer != nil {
+		// go straight to TCP DNS through the proxy
 		r = NewResolver("tcp", resolver, s.Options.Timeout, s.Options.ProxyDialer)
 		_, err = r.LookupHost(testEntry)
 		if err != nil {
 			return nil, err
+		}
+	} else {
+		// try UDP first, fall back to TCP
+		r = NewResolver("udp", resolver, s.Options.Timeout, nil)
+		_, err = r.LookupHost(testEntry)
+		if err != nil {
+			r = NewResolver("tcp", resolver, s.Options.Timeout, nil)
+			_, err = r.LookupHost(testEntry)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 

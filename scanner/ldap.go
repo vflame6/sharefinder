@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"github.com/go-ldap/ldap/v3"
 	"github.com/go-ldap/ldap/v3/gssapi"
+	"github.com/jcmturner/gokrb5/v8/client"
+	"github.com/jcmturner/gokrb5/v8/config"
+	"github.com/jcmturner/gokrb5/v8/credentials"
 	"github.com/vflame6/sharefinder/logger"
 	"golang.org/x/net/proxy"
 	"math"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -96,52 +98,58 @@ func NewLDAPConnection(host net.IP, username, password string, hash string, doma
 
 	// --- Bind: Kerberos -> NTLM hash -> simple ---
 	if kerberos {
-		// 1) read ccache path from env (no system krb5.conf dependency)
-		ccachePath, err := ccachePathFromEnv()
-		if err != nil {
-			_ = l.Close()
-			return nil, err
-		}
-
-		// 2) generate a minimal krb5.conf in a temp file (no global files needed)
-		realm := strings.ToUpper(domain) // AD realm = uppercased DNS domain
 		if dcHostname == "" {
 			_ = l.Close()
 			return nil, fmt.Errorf("dcHostname is required for Kerberos (used as KDC and SPN host)")
 		}
-		krbConfPath, cleanup, err := writeMinimalKrb5Conf(realm, dcHostname+"."+domain)
+
+		// build krb5 config in memory — no temp files
+		realm := strings.ToUpper(domain)
+		krb5Conf, err := newKrb5Config(realm, host.String())
 		if err != nil {
 			_ = l.Close()
-			return nil, fmt.Errorf("create krb5.conf: %w", err)
+			return nil, fmt.Errorf("krb5 config: %w", err)
 		}
-		// ensure cleanup later if we fail after this
-		defer func() {
-			if conn.gssClient == nil { // didn’t succeed binding
-				_ = os.Remove(krbConfPath)
+
+		var gc *gssapi.Client
+
+		// try ccache first (KRB5CCNAME), fall back to password-based TGT
+		ccachePath, ccErr := ccachePathFromEnv()
+		if ccErr == nil {
+			ccache, err := credentials.LoadCCache(ccachePath)
+			if err != nil {
+				_ = l.Close()
+				return nil, fmt.Errorf("gssapi: load ccache file: %w", err)
 			}
-		}()
-
-		// 3) build GSSAPI client from ccache + our generated krb5.conf
-		gc, err := gssapi.NewClientFromCCache(ccachePath, krbConfPath)
-		if err != nil {
+			krbClient, err := client.NewFromCCache(ccache, krb5Conf)
+			if err != nil {
+				_ = l.Close()
+				return nil, fmt.Errorf("gssapi: ccache client: %w", err)
+			}
+			gc = &gssapi.Client{Client: krbClient}
+		} else if password != "" {
+			krbClient := client.NewWithPassword(username, realm, password, krb5Conf)
+			gc = &gssapi.Client{Client: krbClient}
+		} else {
 			_ = l.Close()
-			cleanup()
-			return nil, fmt.Errorf("gssapi: load ccache: %w", err)
+			return nil, fmt.Errorf("kerberos requires either KRB5CCNAME ccache or -p password")
 		}
-		conn.gssClient = gc // keep alive for SASL sign/seal
+		conn.gssClient = gc
 
-		// 4) SPN must be host-based ldap/<fqdn>
+		// SPN must be host-based ldap/<fqdn>
 		servicePrincipal := fmt.Sprintf("ldap/%s", strings.ToLower(dcHostname))
 
-		// 5) SASL GSSAPI bind (authzid usually empty)
+		// SASL GSSAPI bind
 		if err := l.GSSAPIBind(gc, servicePrincipal, ""); err != nil {
-			_ = l.Close()
+			// GSSAPI bind failed — fall back to simple bind
 			_ = gc.Close()
-			cleanup()
-			return nil, fmt.Errorf("kerberos GSSAPI bind failed: %w", err)
+			conn.gssClient = nil
+			logger.Warnf("Kerberos GSSAPI bind failed, falling back to simple bind for LDAP")
+			if bindErr := l.Bind(username+"@"+domain, password); bindErr != nil {
+				_ = l.Close()
+				return nil, fmt.Errorf("LDAP bind failed: kerberos: %w, simple: %v", err, bindErr)
+			}
 		}
-
-		cleanup()
 
 		return conn, nil
 	}
@@ -193,11 +201,9 @@ func ccachePathFromEnv() (string, error) {
 	return cc, nil
 }
 
-// writeMinimalKrb5Conf creates a tiny krb5.conf pointing to the given AD realm and KDC (dcHostname).
-// This avoids any dependency on system krb5.conf / krb5.ini.
-func writeMinimalKrb5Conf(realm, dcHostname string) (path string, cleanup func(), err error) {
-	content := fmt.Sprintf(`
-[libdefaults]
+// newKrb5Config builds a minimal krb5 config in memory for the given AD realm and KDC address.
+func newKrb5Config(realm, kdcAddr string) (*config.Config, error) {
+	confStr := fmt.Sprintf(`[libdefaults]
   default_realm = %s
   dns_lookup_kdc = false
   dns_canonicalize_hostname = false
@@ -209,14 +215,9 @@ func writeMinimalKrb5Conf(realm, dcHostname string) (path string, cleanup func()
 [domain_realm]
   .%s = %s
   %s = %s
-`, realm, realm, dcHostname, strings.ToLower(realm), realm, strings.ToLower(realm), realm)
+`, realm, realm, kdcAddr, strings.ToLower(realm), realm, strings.ToLower(realm), realm)
 
-	dir := os.TempDir()
-	file := filepath.Join(dir, fmt.Sprintf("krb5_%d.conf", time.Now().UnixNano()))
-	if err := os.WriteFile(file, []byte(strings.TrimSpace(content)+"\n"), 0600); err != nil {
-		return "", nil, err
-	}
-	return file, func() { _ = os.Remove(file) }, nil
+	return config.NewFromString(confStr)
 }
 
 func (conn *LDAPConnection) SearchComputers(baseDN string) (*ldap.SearchResult, error) {
@@ -228,7 +229,7 @@ func (conn *LDAPConnection) SearchComputers(baseDN string) (*ldap.SearchResult, 
 		0,
 		false,
 		"(objectCategory=Computer)",
-		[]string{},
+		[]string{"dNSHostName"},
 		nil,
 	)
 	sr, err := conn.connection.SearchWithPaging(searchRequest, math.MaxInt32)
