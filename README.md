@@ -71,7 +71,7 @@ Commands:
 
 ## Installation
 
-`sharefinder` requires **go1.24** to install successfully.
+`sharefinder` requires **go1.25** to install successfully.
 
 ```shell
 go install -v github.com/vflame6/sharefinder@latest
