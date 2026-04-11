@@ -141,8 +141,6 @@ func (s *Scanner) RunSMBEnumeration(wg *sync.WaitGroup) {
 
 // RunEnumerateDomainComputers is executed by hunt command to get a list of hosts
 func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
-	var results []DNHost
-
 	ldapConn, err := NewLDAPConnection(
 		s.Options.DomainController,
 		s.Options.Username,
@@ -159,15 +157,25 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 	}
 	defer ldapConn.Close()
 
-	// get a list of domain computers names
-	sr, err := ldapConn.SearchComputers(GetBaseDN(s.Options.Domain))
-	if err != nil {
-		return nil, err
-	}
-	if len(sr.Entries) == 0 {
-		return nil, errors.New("no domain computers found")
+	var searchBases []DomainPartition
+	if s.Options.Forest {
+		searchBases, err = ldapConn.SearchForestDomains()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		searchBases = []DomainPartition{{
+			Name:   strings.ToLower(s.Options.Domain),
+			BaseDN: GetBaseDN(s.Options.Domain),
+		}}
 	}
 
+	if len(searchBases) == 0 {
+		return nil, errors.New("no domain naming contexts found")
+	}
+
+	var results []DNHost
+	seenHosts := make(map[string]struct{})
 	var resolver net.IP
 	if s.Options.CustomResolver != nil {
 		resolver = s.Options.CustomResolver
@@ -175,44 +183,65 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 		resolver = s.Options.DomainController
 	}
 
-	// test DNS resolution — skip UDP when using SOCKS proxy (SOCKS5 doesn't support UDP relay)
-	testEntry := sr.Entries[0].GetAttributeValue("dNSHostName")
 	var r *Resolver
 	if s.Options.ProxyDialer != nil {
-		// go straight to TCP DNS through the proxy
 		r = NewResolver("tcp", resolver, s.Options.Timeout, s.Options.ProxyDialer)
-		_, err = r.LookupHost(testEntry)
-		if err != nil {
-			return nil, err
-		}
 	} else {
-		// try UDP first, fall back to TCP
 		r = NewResolver("udp", resolver, s.Options.Timeout, nil)
-		_, err = r.LookupHost(testEntry)
+	}
+
+	for i, searchBase := range searchBases {
+		logger.Warnf("Enumerating domain %s", searchBase.Name)
+		sr, err := ldapConn.SearchComputers(searchBase.BaseDN)
 		if err != nil {
-			r = NewResolver("tcp", resolver, s.Options.Timeout, nil)
-			_, err = r.LookupHost(testEntry)
-			if err != nil {
-				return nil, err
+			logger.Warnf("Skipping domain %s: %v", searchBase.Name, err)
+			continue
+		}
+		if len(sr.Entries) == 0 {
+			continue
+		}
+
+		if i == 0 {
+			testEntry := sr.Entries[0].GetAttributeValue("dNSHostName")
+			if s.Options.ProxyDialer != nil {
+				_, err = r.LookupHost(testEntry)
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				_, err = r.LookupHost(testEntry)
+				if err != nil {
+					r = NewResolver("tcp", resolver, s.Options.Timeout, nil)
+					_, err = r.LookupHost(testEntry)
+					if err != nil {
+						return nil, err
+					}
+				}
 			}
+		}
+
+		for _, entry := range sr.Entries {
+			hostname := entry.GetAttributeValue("dNSHostName")
+			if hostname == "" {
+				continue
+			}
+
+			possibleTarget, err := r.LookupHost(hostname)
+			if err != nil {
+				logger.Debug(err.Error())
+				continue
+			}
+			key := strings.ToLower(hostname) + "|" + possibleTarget.String()
+			if _, ok := seenHosts[key]; ok {
+				continue
+			}
+			seenHosts[key] = struct{}{}
+			results = append(results, DNHost{Hostname: hostname, IP: possibleTarget})
 		}
 	}
 
-	for _, entry := range sr.Entries {
-		hostname := entry.GetAttributeValue("dNSHostName")
-
-		// TODO: the host might have several IP addresses, so we need to process this situation somehow
-		// get target's IP address from DNS (first one)
-		possibleTarget, err := r.LookupHost(hostname)
-		if err != nil {
-			logger.Debug(err.Error())
-			continue
-		}
-		dnHost := &DNHost{
-			Hostname: hostname,
-			IP:       possibleTarget,
-		}
-		results = append(results, *dnHost)
+	if len(results) == 0 {
+		return nil, errors.New("no domain computers found")
 	}
 
 	return results, nil

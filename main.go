@@ -51,15 +51,15 @@ var (
 
 	// auth command
 	// find authenticated shares and permissions
-	authCommand       = app.Command("auth", "authenticated module")
-	authTargetArg     = authCommand.Arg("target", "Target, IP range or filename").Required().String()
-	authUsernameFlag  = authCommand.Flag("username", "Username in format DOMAIN\\username for domain auth, and just username for local auth").Short('u').Required().String()
-	authPasswordFlag  = authCommand.Flag("password", "User's password").Short('p').String()
-	authHashFlag      = authCommand.Flag("hashes", "NTLM hash of password to authenticate").Short('H').String()
-	authLocalAuthFlag = authCommand.Flag("local-auth", "Enable local authentication, the username is passed without domain").Bool()
-	authKerberosFlag  = authCommand.Flag("kerberos", "Use Kerberos authentication").Short('k').Bool()
+	authCommand        = app.Command("auth", "authenticated module")
+	authTargetArg      = authCommand.Arg("target", "Target, IP range or filename").Required().String()
+	authUsernameFlag   = authCommand.Flag("username", "Username in format DOMAIN\\username for domain auth, and just username for local auth").Short('u').Required().String()
+	authPasswordFlag   = authCommand.Flag("password", "User's password").Short('p').String()
+	authHashFlag       = authCommand.Flag("hashes", "NTLM hash of password to authenticate").Short('H').String()
+	authLocalAuthFlag  = authCommand.Flag("local-auth", "Enable local authentication, the username is passed without domain").Bool()
+	authKerberosFlag   = authCommand.Flag("kerberos", "Use Kerberos authentication").Short('k').Bool()
 	authDcHostnameFlag = authCommand.Flag("dc-hostname", "Hostname of domain controller for Kerberos authentication").String()
-	authDcIPFlag      = authCommand.Flag("dc-ip", "IP of KDC when using Kerberos authentication").IP()
+	authDcIPFlag       = authCommand.Flag("dc-ip", "IP of KDC when using Kerberos authentication").IP()
 
 	// hunt command
 	// hunt for targets from AD and find shares and permissions
@@ -69,6 +69,7 @@ var (
 	huntPasswordFlag   = huntCommand.Flag("password", "Domain user's password").Short('p').String()
 	huntHashFlag       = huntCommand.Flag("hashes", "NTLM hash of password to authenticate").Short('H').String()
 	huntResolverFlag   = huntCommand.Flag("resolver", "Custom DNS resolver IP address").Short('r').IP()
+	huntForestFlag     = huntCommand.Flag("forest", "Search all available domains in the current forest").Default("false").Bool()
 	huntKerberosFlag   = huntCommand.Flag("kerberos", "Use Kerberos authentication").Short('k').Bool()
 	huntDcHostnameFlag = huntCommand.Flag("dc-hostname", "Hostname of domain controller for Kerberos authentication").String()
 )
@@ -137,7 +138,7 @@ func main() {
 		err = cmd.ExecuteAuth(scanner, *authTargetArg, *authUsernameFlag, *authPasswordFlag, *authHashFlag, *authLocalAuthFlag, *authKerberosFlag, *authDcHostnameFlag, *authDcIPFlag)
 	}
 	if command == huntCommand.FullCommand() {
-		err = cmd.ExecuteHunt(scanner, *huntUsernameFlag, *huntPasswordFlag, *huntHashFlag, *huntDcArg, *huntResolverFlag, *huntKerberosFlag, *huntDcHostnameFlag)
+		err = cmd.ExecuteHunt(scanner, *huntUsernameFlag, *huntPasswordFlag, *huntHashFlag, *huntDcArg, *huntResolverFlag, *huntForestFlag, *huntKerberosFlag, *huntDcHostnameFlag)
 	}
 	if err != nil {
 		logger.Fatal(err)

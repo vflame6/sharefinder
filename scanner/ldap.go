@@ -22,6 +22,11 @@ type LDAPConnection struct {
 	gssClient  *gssapi.Client
 }
 
+type DomainPartition struct {
+	Name   string
+	BaseDN string
+}
+
 func GetBaseDN(domain string) string {
 	result := "dc="
 	dns := strings.Split(domain, ".")
@@ -237,4 +242,67 @@ func (conn *LDAPConnection) SearchComputers(baseDN string) (*ldap.SearchResult, 
 		return nil, err
 	}
 	return sr, nil
+}
+
+func (conn *LDAPConnection) SearchForestDomains() ([]DomainPartition, error) {
+	rootDSERequest := ldap.NewSearchRequest(
+		"",
+		ldap.ScopeBaseObject,
+		ldap.NeverDerefAliases,
+		1,
+		0,
+		false,
+		"(objectClass=*)",
+		[]string{"configurationNamingContext"},
+		nil,
+	)
+	rootDSEResult, err := conn.connection.Search(rootDSERequest)
+	if err != nil {
+		return nil, err
+	}
+	if len(rootDSEResult.Entries) == 0 {
+		return nil, fmt.Errorf("empty rootDSE response")
+	}
+
+	configNC := rootDSEResult.Entries[0].GetAttributeValue("configurationNamingContext")
+	if configNC == "" {
+		return nil, fmt.Errorf("configurationNamingContext not found")
+	}
+
+	searchRequest := ldap.NewSearchRequest(
+		configNC,
+		ldap.ScopeWholeSubtree,
+		ldap.NeverDerefAliases,
+		math.MaxInt32,
+		0,
+		false,
+		"(&(objectClass=crossRef)(systemFlags:1.2.840.113556.1.4.803:=2)(dnsRoot=*)(nCName=*))",
+		[]string{"dnsRoot", "nCName"},
+		nil,
+	)
+	sr, err := conn.connection.SearchWithPaging(searchRequest, math.MaxInt32)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]struct{})
+	results := make([]DomainPartition, 0, len(sr.Entries))
+	for _, entry := range sr.Entries {
+		name := strings.ToLower(strings.TrimSpace(entry.GetAttributeValue("dnsRoot")))
+		baseDN := strings.TrimSpace(entry.GetAttributeValue("nCName"))
+		if name == "" || baseDN == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		results = append(results, DomainPartition{Name: name, BaseDN: baseDN})
+	}
+
+	if len(results) == 0 {
+		return nil, fmt.Errorf("no forest domains found")
+	}
+
+	return results, nil
 }
