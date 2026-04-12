@@ -2,10 +2,11 @@ package scanner
 
 import (
 	"fmt"
-	"github.com/jfjallid/go-smb/smb"
 	"github.com/jfjallid/go-smb/dcerpc"
+	"github.com/jfjallid/go-smb/dcerpc/msscmr"
 	"github.com/jfjallid/go-smb/dcerpc/mssrvs"
 	"github.com/jfjallid/go-smb/dcerpc/smbtransport"
+	"github.com/jfjallid/go-smb/smb"
 	"github.com/jfjallid/go-smb/spnego"
 	"github.com/vflame6/sharefinder/logger"
 	"github.com/vflame6/sharefinder/utils"
@@ -127,6 +128,63 @@ func (conn *Connection) GetSharesList() ([]mssrvs.NetShare, error) {
 		return nil, err
 	}
 	return shares, nil
+}
+
+func (conn *Connection) CheckLocalAdmin() (bool, error) {
+	share := "IPC$"
+	if err := conn.session.TreeConnect(share); err != nil {
+		return false, err
+	}
+	defer conn.session.TreeDisconnect(share)
+
+	f, err := conn.session.OpenFile(share, msscmr.MSRPCSvcCtlPipe)
+	if err != nil {
+		return false, err
+	}
+	defer f.CloseFile()
+
+	transport, err := smbtransport.NewSMBTransport(f)
+	if err != nil {
+		return false, err
+	}
+	bind, err := dcerpc.Bind(transport, msscmr.MSRPCUuidSvcCtl, 2, 0, dcerpc.MSRPCUuidNdr)
+	if err != nil {
+		return false, err
+	}
+
+	rpccon := msscmr.NewRPCCon(bind)
+	req := msscmr.ROpenSCManagerWReq{
+		MachineName:   "DUMMY",
+		DatabaseName:  "ServicesActive",
+		DesiredAccess: msscmr.SCManagerCreateService,
+	}
+	reqBuf, err := req.MarshalBinary()
+	if err != nil {
+		return false, err
+	}
+
+	buffer, err := rpccon.MakeRequest(msscmr.SvcCtlROpenSCManagerW, reqBuf)
+	if err != nil {
+		return false, err
+	}
+
+	res := msscmr.ROpenSCManagerWRes{}
+	if err := res.UnmarshalBinary(buffer); err != nil {
+		return false, err
+	}
+
+	if res.ReturnCode == msscmr.ErrorSuccess {
+		rpccon.CloseServiceHandle(res.ContextHandle[:])
+		return true, nil
+	}
+	if res.ReturnCode == msscmr.ErrorAccessDenied {
+		return false, nil
+	}
+	if status, found := msscmr.ServiceResponseCodeMap[res.ReturnCode]; found {
+		return false, status
+	}
+
+	return false, fmt.Errorf("unexpected svcctl admin-check return code: 0x%x", res.ReturnCode)
 }
 
 func (conn *Connection) CheckReadAccess(share string) error {

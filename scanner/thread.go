@@ -57,6 +57,14 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 		hostResult.Domain = options.Domain
 	}
 	hostResult.Signing = isSigningRequired
+	if !options.NullSession {
+		isAdmin, adminErr := conn.CheckLocalAdmin()
+		if adminErr != nil {
+			logger.Warnf("Failed to determine local admin rights on %s: %v", host.IP.String(), adminErr)
+		} else {
+			hostResult.Admin = &isAdmin
+		}
+	}
 
 	// get a list of shares
 	logger.Debugf("Trying to list shares on %s (%s)", host.IP.String(), host.Hostname)
@@ -175,7 +183,7 @@ func smbThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
 			}
 
 			// format and print results on enumerated host
-			printResult := SPrintHostInfo(hostResult.IP, hostResult.Version, hostResult.Hostname, hostResult.Domain, hostResult.Signing)
+			printResult := SPrintHostInfoWithAdmin(hostResult.IP, hostResult.Version, hostResult.Hostname, hostResult.Domain, hostResult.Signing, hostResult.Admin)
 			if len(hostResult.Shares) > 0 {
 				printResult += SprintHost(hostResult, options.Exclude)
 

@@ -177,7 +177,7 @@ func TestParseSharefinderRun_Valid(t *testing.T) {
 	xmlData := `<?xml version="1.0" encoding="UTF-8"?>
 <SharefinderRun version="1.0" command="sharefinder auth" time_start="2024-01-01T00:00:00Z" formatted_time_start="01/01/2024 00:00">
   <hosts>
-    <host time="2024-01-01T00:00:01Z" ip="10.0.0.1" version="SMB2" hostname="DC01" domain="test.local" signing="true">
+    <host time="2024-01-01T00:00:01Z" ip="10.0.0.1" version="SMB2" hostname="DC01" domain="test.local" signing="true" admin="true">
       <share share_name="ADMIN$" description="Remote Admin" read_permission="true" write_permission="false">
         <file parent="" type="dir" name="docs" size="0" last_modified="2024-01-01T00:00:00Z"/>
       </share>
@@ -208,6 +208,9 @@ func TestParseSharefinderRun_Valid(t *testing.T) {
 	}
 	if !host.Signing {
 		t.Error("expected signing=true")
+	}
+	if host.Admin == nil || !*host.Admin {
+		t.Fatalf("expected admin=true, got %#v", host.Admin)
 	}
 	if len(host.Shares) != 2 {
 		t.Fatalf("expected 2 shares, got %d", len(host.Shares))
@@ -256,15 +259,25 @@ func TestParseSharefinderRun_Malformed(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSPrintHostInfo(t *testing.T) {
-	got := SPrintHostInfo("10.0.0.1", "SMB2", "DC01", "test.local", true)
-	expected := "[+] 10.0.0.1: SMB2 (name:DC01) (domain:test.local) (signing:true)"
+	adminTrue := true
+	got := SPrintHostInfoWithAdmin("10.0.0.1", "SMB2", "DC01", "test.local", true, &adminTrue)
+	expected := "[+] 10.0.0.1: SMB2 (name:DC01) (domain:test.local) (signing:true) (admin:true)"
 	if got != expected {
 		t.Errorf("expected %q, got %q", expected, got)
 	}
 
-	got2 := SPrintHostInfo("192.168.1.5", "SMB3", "SRV01", "corp.local", false)
+	adminFalse := false
+	got2 := SPrintHostInfoWithAdmin("192.168.1.5", "SMB3", "SRV01", "corp.local", false, &adminFalse)
 	if !strings.Contains(got2, "(signing:false)") {
 		t.Errorf("expected signing:false in output, got %q", got2)
+	}
+	if !strings.Contains(got2, "(admin:false)") {
+		t.Errorf("expected admin:false in output, got %q", got2)
+	}
+
+	got3 := SPrintHostInfoWithAdmin("192.168.1.6", "SMB3", "SRV02", "corp.local", false, nil)
+	if strings.Contains(got3, "admin:") {
+		t.Errorf("did not expect admin marker when status is unknown, got %q", got3)
 	}
 }
 
