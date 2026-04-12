@@ -285,9 +285,13 @@ func (conn *LDAPConnection) SearchForestDomains() ([]DomainPartition, error) {
 		return nil, err
 	}
 
+	return extractDomainPartitions(sr.Entries)
+}
+
+func extractDomainPartitions(entries []*ldap.Entry) ([]DomainPartition, error) {
 	seen := make(map[string]struct{})
-	results := make([]DomainPartition, 0, len(sr.Entries))
-	for _, entry := range sr.Entries {
+	results := make([]DomainPartition, 0, len(entries))
+	for _, entry := range entries {
 		name := strings.ToLower(strings.TrimSpace(entry.GetAttributeValue("dnsRoot")))
 		baseDN := strings.TrimSpace(entry.GetAttributeValue("nCName"))
 		if name == "" || baseDN == "" {
