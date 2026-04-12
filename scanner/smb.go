@@ -3,6 +3,7 @@ package scanner
 import (
 	"fmt"
 	"github.com/jfjallid/go-smb/dcerpc"
+	"github.com/jfjallid/go-smb/dcerpc/msrrp"
 	"github.com/jfjallid/go-smb/dcerpc/msscmr"
 	"github.com/jfjallid/go-smb/dcerpc/mssrvs"
 	"github.com/jfjallid/go-smb/dcerpc/smbtransport"
@@ -185,6 +186,75 @@ func (conn *Connection) CheckLocalAdmin() (bool, error) {
 	}
 
 	return false, fmt.Errorf("unexpected svcctl admin-check return code: 0x%x", res.ReturnCode)
+}
+
+func (conn *Connection) DetectWindowsVersion(fallback string) (string, error) {
+	share := "IPC$"
+	if err := conn.session.TreeConnect(share); err != nil {
+		return buildWindowsVersionString("", "", "", "", "", 0, fallback), err
+	}
+	defer conn.session.TreeDisconnect(share)
+
+	f, err := conn.session.OpenFile(share, msrrp.MSRRPPipe)
+	if err != nil {
+		return buildWindowsVersionString("", "", "", "", "", 0, fallback), err
+	}
+	defer f.CloseFile()
+
+	transport, err := smbtransport.NewSMBTransport(f)
+	if err != nil {
+		return buildWindowsVersionString("", "", "", "", "", 0, fallback), err
+	}
+	bind, err := dcerpc.Bind(transport, msrrp.MSRRPUuid, msrrp.MSRRPMajorVersion, msrrp.MSRRPMinorVersion, dcerpc.MSRPCUuidNdr)
+	if err != nil {
+		return buildWindowsVersionString("", "", "", "", "", 0, fallback), err
+	}
+
+	rpccon := msrrp.NewRPCCon(bind)
+	hklm, err := rpccon.OpenBaseKey(msrrp.HKEYLocalMachine)
+	if err != nil {
+		return buildWindowsVersionString("", "", "", "", "", 0, fallback), err
+	}
+	defer rpccon.CloseKeyHandle(hklm)
+
+	currentVersionKey, err := rpccon.OpenSubKey(hklm, `SOFTWARE\Microsoft\Windows NT\CurrentVersion`)
+	if err != nil {
+		return buildWindowsVersionString("", "", "", "", "", 0, fallback), err
+	}
+	defer rpccon.CloseKeyHandle(currentVersionKey)
+
+	queryString := func(name string) string {
+		value, _, err := rpccon.QueryValueExt(currentVersionKey, name)
+		if err != nil {
+			return ""
+		}
+		stringValue, ok := value.(string)
+		if !ok {
+			return ""
+		}
+		return strings.TrimSpace(stringValue)
+	}
+	queryDWORD := func(name string) uint32 {
+		value, _, err := rpccon.QueryValueExt(currentVersionKey, name)
+		if err != nil {
+			return 0
+		}
+		dwordValue, ok := value.(uint32)
+		if !ok {
+			return 0
+		}
+		return dwordValue
+	}
+
+	return buildWindowsVersionString(
+		queryString("ProductName"),
+		queryString("DisplayVersion"),
+		queryString("ReleaseId"),
+		queryString("CurrentVersion"),
+		queryString("CurrentBuildNumber"),
+		queryDWORD("UBR"),
+		fallback,
+	), nil
 }
 
 func (conn *Connection) CheckReadAccess(share string) error {

@@ -17,6 +17,8 @@ Created by Maksim Radaev/[@vflame6](https://github.com/vflame6)
 
 `sharefinder` is a network share discovery tool that enumerates shares, permissions and files in networks and domains.
 
+Authenticated scans report the target Windows version and build. When the account has local admin rights, Sharefinder also tries to refine that into the exact product/build from the remote registry.
+
 Authenticated scans also report SMB signing status and whether the supplied credentials have local admin rights on the target.
 
 ## Features

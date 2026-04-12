@@ -47,8 +47,11 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 	targetInfo := conn.GetTargetInfo()
 	hostResult.IP = host.IP.String()
 	hostResult.Time = time.Now()
+	hostResult.Version = "unknown"
 	if targetInfo != nil {
-		hostResult.Version = targetInfo.GuessedOSVersion
+		if targetInfo.GuessedOSVersion != "" {
+			hostResult.Version = targetInfo.GuessedOSVersion
+		}
 		hostResult.Hostname = targetInfo.NBComputerName
 		hostResult.Domain = targetInfo.DnsDomainName
 	} else {
@@ -63,6 +66,14 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 			logger.Warnf("Failed to determine local admin rights on %s: %v", host.IP.String(), adminErr)
 		} else {
 			hostResult.Admin = &isAdmin
+			if isAdmin {
+				version, versionErr := conn.DetectWindowsVersion(hostResult.Version)
+				if versionErr != nil {
+					logger.Debugf("Failed to query registry version on %s: %v", host.IP.String(), versionErr)
+				} else {
+					hostResult.Version = version
+				}
+			}
 		}
 	}
 
