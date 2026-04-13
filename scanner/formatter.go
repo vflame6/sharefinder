@@ -16,7 +16,15 @@ var (
 )
 
 func SPrintHostInfo(host, version, hostname, domain string, signing bool) string {
-	return fmt.Sprintf("[+] %s: %s (name:%s) (domain:%s) (signing:%v)", host, version, hostname, domain, signing)
+	return SPrintHostInfoWithAdmin(host, version, hostname, domain, signing, nil)
+}
+
+func SPrintHostInfoWithAdmin(host, version, hostname, domain string, signing bool, admin *bool) string {
+	result := fmt.Sprintf("[+] %s: %s (name:%s) (domain:%s) (signing:%v)", host, version, hostname, domain, signing)
+	if admin != nil {
+		result += fmt.Sprintf(" (admin:%v)", *admin)
+	}
+	return result
 }
 
 func SprintFiles(files []File) string {

@@ -104,6 +104,7 @@
                 <th>Domain</th>
                 <th>Version</th>
                 <th>Signing</th>
+                <th>Admin</th>
                 <th>Shares</th>
             </tr>
             </thead>
@@ -115,6 +116,7 @@
                     <td class="text-break">{{ $host.Domain }}</td>
                     <td>{{ $host.Version }}</td>
                     <td>{{ $host.Signing }}</td>
+                    <td>{{ $host.AdminStatus }}</td>
                     <td>{{ len $host.Shares }}</td>
                 </tr>
                 {{ end }}
@@ -148,6 +150,7 @@
                         <th>Domain</th>
                         <th>Version</th>
                         <th>Signing</th>
+                        <th>Admin</th>
                         <th>Shares</th>
                     </tr>
                     </thead>
@@ -158,6 +161,7 @@
                         <td class="text-break">{{ $host.Domain }}</td>
                         <td>{{ $host.Version }}</td>
                         <td>{{ $host.Signing }}</td>
+                        <td>{{ $host.AdminStatus }}</td>
                         <td>{{ len $host.Shares }}</td>
                     </tr>
                     </tbody>

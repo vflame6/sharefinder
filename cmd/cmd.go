@@ -271,7 +271,7 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password, hash string, lo
 	return nil
 }
 
-func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolver net.IP, kerberos bool, dcHostname string) error {
+func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolver net.IP, forest, kerberos bool, dcHostname string) error {
 	var targetDomain string
 	var targetUsername string
 	var err error
@@ -316,10 +316,15 @@ func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolv
 	s.Options.DomainController = dc
 	s.Options.DCHostname = dcHostname
 	s.Options.CustomResolver = resolver
+	s.Options.Forest = forest
 
 	var wg sync.WaitGroup
 
-	logger.Warnf("Starting %s domain enumeration", s.Options.Domain)
+	if s.Options.Forest {
+		logger.Warnf("Starting forest-wide enumeration from %s", s.Options.Domain)
+	} else {
+		logger.Warnf("Starting %s domain enumeration", s.Options.Domain)
+	}
 
 	// enumerate possible targets via domain controller
 	possibleTargets, err := s.RunEnumerateDomainComputers()

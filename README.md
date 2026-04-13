@@ -17,13 +17,17 @@ Created by Maksim Radaev/[@vflame6](https://github.com/vflame6)
 
 `sharefinder` is a network share discovery tool that enumerates shares, permissions and files in networks and domains.
 
+Authenticated scans report the target Windows version and build. When the account has local admin rights, Sharefinder also tries to refine that into the exact product/build from the remote registry.
+
+Authenticated scans also report SMB signing status and whether the supplied credentials have local admin rights on the target.
+
 ## Features
 
 ![sharefinder](static/sharefinder_demo.png)
 
 Main commands:
 
-- `hunt`: hunt network shares inside Active Directory domain
+- `hunt`: hunt network shares inside an Active Directory domain, or across the forest with `--forest`
 - `auth`: search for shares with specified credentials
 - `guest`: search for shares accessible with guest authentication
 - `null`: search for shares accessible by null session
@@ -67,6 +71,10 @@ Commands:
   guest [<flags>] <target>
   auth --username=USERNAME [<flags>] <target>
   hunt --username=USERNAME [<flags>] <dc>
+
+Examples:
+  sharefinder hunt -u CORP\\alice -p 'Password123!' 10.0.0.10
+  sharefinder hunt -u CORP\\alice -p 'Password123!' --forest 10.0.0.10
 ```
 
 ## Installation

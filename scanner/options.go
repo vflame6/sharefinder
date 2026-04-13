@@ -16,6 +16,7 @@ type Options struct {
 	Exclude            []string // --exclude
 	FileTXT            *os.File
 	FileXML            *os.File
+	Forest             bool   // --forest (hunt only)
 	Hash               string // --hashes
 	HashBytes          []byte // --hashes
 	Kerberos           bool
