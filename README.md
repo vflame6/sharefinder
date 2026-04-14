@@ -71,10 +71,6 @@ Commands:
   guest [<flags>] <target>
   auth --username=USERNAME [<flags>] <target>
   hunt --username=USERNAME [<flags>] <dc>
-
-Examples:
-  sharefinder hunt -u CORP\\alice -p 'Password123!' 10.0.0.10
-  sharefinder hunt -u CORP\\alice -p 'Password123!' --forest 10.0.0.10
 ```
 
 ## Installation
