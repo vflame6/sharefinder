@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"path/filepath"
+	"strconv"
 	"time"
 )
 
@@ -30,7 +31,15 @@ type Host struct {
 	Hostname string    `xml:"hostname,attr"`
 	Domain   string    `xml:"domain,attr"`
 	Signing  bool      `xml:"signing,attr"`
+	Admin    *bool     `xml:"admin,attr,omitempty"`
 	Shares   []Share   `xml:"share"`
+}
+
+func (h Host) AdminStatus() string {
+	if h.Admin == nil {
+		return "unknown"
+	}
+	return strconv.FormatBool(*h.Admin)
 }
 
 type Share struct {
