@@ -63,7 +63,8 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 	if !options.NullSession {
 		isAdmin, adminErr := conn.CheckLocalAdmin()
 		if adminErr != nil {
-			logger.Warnf("Failed to determine local admin rights on %s: %v", host.IP.String(), adminErr)
+			// Access-denied is the common, expected case for non-admin sessions; keep it debug-only.
+			logger.Debugf("Failed to determine local admin rights on %s: %v", host.IP.String(), adminErr)
 		} else {
 			hostResult.Admin = &isAdmin
 			if isAdmin {

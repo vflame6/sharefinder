@@ -3,6 +3,7 @@ package scanner
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"github.com/vflame6/sharefinder/logger"
 	"net"
 	"os"
@@ -141,6 +142,8 @@ func (s *Scanner) RunSMBEnumeration(wg *sync.WaitGroup) {
 
 // RunEnumerateDomainComputers is executed by hunt command to get a list of hosts
 func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
+	// Regular LDAP for forest discovery: the GC's partial attribute set excludes
+	// crossRef.systemFlags, so a config-NC crossRef search on 3268 returns 0 hits.
 	ldapConn, err := NewLDAPConnection(
 		s.Options.DomainController,
 		s.Options.Username,
@@ -151,6 +154,7 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 		s.Options.ProxyDialer,
 		s.Options.Kerberos,
 		s.Options.DCHostname,
+		false,
 	)
 	if err != nil {
 		return nil, err
@@ -174,6 +178,30 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 		return nil, errors.New("no domain naming contexts found")
 	}
 
+	// Prefer GC for cross-domain SearchComputers (one connection covers the forest).
+	// If GC is unreachable we keep ldapConn and chase referrals per-domain below.
+	queryConn := ldapConn
+	if s.Options.Forest {
+		gcConn, gcErr := NewLDAPConnection(
+			s.Options.DomainController,
+			s.Options.Username,
+			s.Options.Password,
+			s.Options.Hash,
+			strings.ToLower(s.Options.Domain),
+			s.Options.Timeout,
+			s.Options.ProxyDialer,
+			s.Options.Kerberos,
+			s.Options.DCHostname,
+			true,
+		)
+		if gcErr != nil {
+			logger.Warnf("Global Catalog unavailable on %s, will chase per-domain referrals: %v", s.Options.DomainController, gcErr)
+		} else {
+			defer gcConn.Close()
+			queryConn = gcConn
+		}
+	}
+
 	var results []DNHost
 	seenHosts := make(map[string]struct{})
 	var resolver net.IP
@@ -192,7 +220,18 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 
 	for i, searchBase := range searchBases {
 		logger.Warnf("Enumerating domain %s", searchBase.Name)
-		sr, err := ldapConn.SearchComputers(searchBase.BaseDN)
+		sr, err := queryConn.SearchComputers(searchBase.BaseDN)
+		if err != nil && isLDAPReferral(err) {
+			// Referral-chase fallback: connect directly to a DC of the referred domain.
+			logger.Warnf("Domain %s referred — chasing via direct DC connection", searchBase.Name)
+			altConn, dialErr := s.dialDCForDomain(searchBase.Name, &r, resolver)
+			if dialErr != nil {
+				logger.Warnf("Skipping domain %s: %v", searchBase.Name, dialErr)
+				continue
+			}
+			sr, err = altConn.SearchComputers(searchBase.BaseDN)
+			altConn.Close()
+		}
 		if err != nil {
 			logger.Warnf("Skipping domain %s: %v", searchBase.Name, err)
 			continue
@@ -245,6 +284,51 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 	}
 
 	return results, nil
+}
+
+// dialDCForDomain resolves domainName via DNS and opens a regular LDAP connection
+// to a DC of that domain. Used when the Global Catalog is unavailable and a
+// SearchComputers query against the user-specified DC returned an LDAP referral.
+// AD-integrated DNS registers the domain name itself as A records for every DC,
+// so a plain host lookup yields a usable target. The resolver pointer is updated
+// in-place if a UDP→TCP retry succeeds, mirroring the test-entry validation below.
+func (s *Scanner) dialDCForDomain(domainName string, r **Resolver, resolverIP net.IP) (*LDAPConnection, error) {
+	ip, err := (*r).LookupHost(domainName)
+	if err != nil && s.Options.ProxyDialer == nil {
+		tcpResolver := NewResolver("tcp", resolverIP, s.Options.Timeout, nil)
+		if ip2, err2 := tcpResolver.LookupHost(domainName); err2 == nil {
+			ip, err = ip2, nil
+			*r = tcpResolver
+		}
+	}
+	if err != nil {
+		return nil, fmt.Errorf("DNS lookup for %s: %w", domainName, err)
+	}
+
+	dcHostname := s.Options.DCHostname
+	if s.Options.Kerberos {
+		// Kerberos SPN must match the alt DC's hostname; reverse-resolve the IP.
+		// Cross-realm Kerberos may still fail downstream — the in-memory krb5 config
+		// has only the user's realm — but failing fast here gives a clearer error.
+		names, rerr := net.LookupAddr(ip.String())
+		if rerr != nil || len(names) == 0 {
+			return nil, fmt.Errorf("kerberos referral fallback to %s requires reverse-DNS for SPN: %v", ip, rerr)
+		}
+		dcHostname = strings.TrimSuffix(names[0], ".")
+	}
+
+	return NewLDAPConnection(
+		ip,
+		s.Options.Username,
+		s.Options.Password,
+		s.Options.Hash,
+		strings.ToLower(s.Options.Domain),
+		s.Options.Timeout,
+		s.Options.ProxyDialer,
+		s.Options.Kerberos,
+		dcHostname,
+		false,
+	)
 }
 
 // OutputHTML is used to generate HTML output from XML output

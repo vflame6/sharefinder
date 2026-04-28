@@ -269,42 +269,39 @@ func (conn *Connection) CheckReadAccess(share string) error {
 }
 
 func (conn *Connection) CheckWriteAccess(share string) bool {
-	tempFile := utils.RandSeq(16) + ".txt"
-	tempData := utils.RandSeq(32)
-	//tempDir := RandSeq(16)
 	if err := conn.session.TreeConnect(share); err != nil {
 		return false
 	}
 	defer conn.session.TreeDisconnect(share)
 
-	// try to write a file
-	dataSent := false // Track if data has been sent
+	// Try a file first, then fall back to a directory: NTFS ACLs can grant
+	// AddSubdirectory without AddFile (or vice versa), so a single probe can
+	// miss real write access.
+	tempFile := utils.RandSeq(16) + ".txt"
+	tempData := utils.RandSeq(32)
+	dataSent := false
 	err := conn.session.PutFile(share, tempFile, 0, func(buffer []byte) (int, error) {
 		if dataSent {
-			return 0, io.EOF // Indicate end of file
+			return 0, io.EOF
 		}
-		copy(buffer, tempData) // Copy data into buffer
-		dataSent = true        // Mark as sent
+		copy(buffer, tempData)
+		dataSent = true
 		return len(tempData), nil
 	})
 	if err == nil {
-		err = conn.session.DeleteFile(share, tempFile)
-		if err != nil {
-			logger.Error(fmt.Errorf("failed to delete created file %s on share %s\\%s", tempFile, conn.host, share))
+		if delErr := conn.session.DeleteFile(share, tempFile); delErr != nil {
+			logger.Error(fmt.Errorf("failed to delete created file %s on share %s\\%s: %w", tempFile, conn.host, share, delErr))
 		}
 		return true
 	}
 
-	// TODO: review why it works bad. The library outputs error 0xc0000061 and I can't get it silent
-	// if failed to create a file, try create a directory
-	//err = conn.session.MkdirAll(share, tempDir)
-	//if err == nil {
-	//	err = conn.session.DeleteDir(share, tempDir)
-	//	if err != nil {
-	//		logger.Error(fmt.Errorf("[!] Failed to delete created directory %s on share %s\\%s", tempDir, conn.host, share))
-	//	}
-	//	return true
-	//}
+	tempDir := utils.RandSeq(16)
+	if err := conn.session.MkdirAll(share, tempDir); err == nil {
+		if delErr := conn.session.DeleteDir(share, tempDir); delErr != nil {
+			logger.Error(fmt.Errorf("failed to delete created directory %s on share %s\\%s: %w", tempDir, conn.host, share, delErr))
+		}
+		return true
+	}
 
 	return false
 }

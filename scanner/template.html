@@ -1,24 +1,29 @@
     <style>
         body {
             padding-top: 56px; /* Adjusts for the fixed navbar height */
+            background-color: #fafbfc;
         }
         .footer {
             margin-top:56px;
-            padding-top:56px;
+            padding-top:32px;
+            padding-bottom:32px;
             width: 100%;
-            height: 160px;
             background-color: #f5f5f5;
         }
         .panel-heading {
             display: flex;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
         }
-        .bi-chevron-down {
-            font-size: 1rem;
-            margin-right: 3px;
+        .panel-heading:hover {
+            background-color: #f0f1f3;
         }
+        .bi-chevron-down,
         .bi-chevron-right {
             font-size: 1rem;
-            margin-right: 3px;
+            margin-right: 6px;
+            color: #6c757d;
         }
         h2 {
             padding-top: 24px;
@@ -28,6 +33,43 @@
         }
         h6 {
             padding-top: 4px;
+        }
+        .stat-card {
+            background: #fff;
+            border: 1px solid #e6e8eb;
+            border-radius: .5rem;
+            padding: .85rem 1rem;
+            height: 100%;
+        }
+        .stat-card .stat-label {
+            font-size: .75rem;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            color: #6c757d;
+        }
+        .stat-card .stat-value {
+            font-size: 1.6rem;
+            font-weight: 600;
+            line-height: 1.1;
+            margin-top: .15rem;
+        }
+        .stat-card.stat-warn .stat-value { color: #997404; }
+        .stat-card.stat-danger .stat-value { color: #b02a37; }
+        .stat-card.stat-success .stat-value { color: #146c43; }
+        .command-box {
+            background: #1e1e1e;
+            color: #f1f1f1;
+            border-radius: .5rem;
+            padding: .9rem 1.1rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: .9rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin: 0;
+        }
+        .command-box .cmd-prompt {
+            color: #6cb6ff;
+            user-select: none;
         }
     </style>
 
@@ -87,10 +129,49 @@
 </nav>
 
 <div id="content" class="container-md">
-    <div id="summary" class="mt-4 p-5 bg-light rounded">
-        <h1>Sharefinder Scan Report</h1>
-        <h2 class="text-muted pt-0">sharefinder {{ .Version }}</h2>
-        <p id="summary-time" class="lead">{{ .FormattedTimeStart }} - {{ .TimeEnd.FormattedTime }}</p>
+    <div id="summary" class="mt-4 p-4 p-md-5 bg-light rounded">
+        <h1 class="mb-1">Sharefinder Scan Report</h1>
+        <p class="text-muted mb-4">sharefinder {{ .Version }} &middot; {{ .FormattedTimeStart }} – {{ .TimeEnd.FormattedTime }}</p>
+
+        {{ if .Command }}
+        <div class="mb-4">
+            <div class="text-muted small text-uppercase mb-1" style="letter-spacing:.04em;">Executed command</div>
+            <pre class="command-box"><span class="cmd-prompt">$ </span>sharefinder {{ .Command }}</pre>
+        </div>
+        {{ end }}
+
+        <div class="row g-2">
+            <div class="col-6 col-md">
+                <div class="stat-card">
+                    <div class="stat-label">Hosts</div>
+                    <div class="stat-value">{{ .HostCount }}</div>
+                </div>
+            </div>
+            <div class="col-6 col-md">
+                <div class="stat-card">
+                    <div class="stat-label">Shares</div>
+                    <div class="stat-value">{{ .ShareCount }}</div>
+                </div>
+            </div>
+            <div class="col-6 col-md">
+                <div class="stat-card stat-warn">
+                    <div class="stat-label">Readable</div>
+                    <div class="stat-value">{{ .ReadableShareCount }}</div>
+                </div>
+            </div>
+            <div class="col-6 col-md">
+                <div class="stat-card stat-danger">
+                    <div class="stat-label">Writable</div>
+                    <div class="stat-value">{{ .WritableShareCount }}</div>
+                </div>
+            </div>
+            <div class="col-6 col-md">
+                <div class="stat-card stat-success">
+                    <div class="stat-label">Admin</div>
+                    <div class="stat-value">{{ .AdminHostCount }}</div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Summary of identified hosts with version number, hostname, domain name, signing, SMBv1, number of shares -->
@@ -115,8 +196,15 @@
                     <td>{{ $host.Hostname }}</td>
                     <td class="text-break">{{ $host.Domain }}</td>
                     <td>{{ $host.Version }}</td>
-                    <td>{{ $host.Signing }}</td>
-                    <td>{{ $host.AdminStatus }}</td>
+                    <td>
+                        {{ if $host.Signing }}<span class="badge text-bg-success">Required</span>
+                        {{ else }}<span class="badge text-bg-warning">Not required</span>{{ end }}
+                    </td>
+                    <td>
+                        {{ if eq $host.AdminStatus "true" }}<span class="badge text-bg-danger">Yes</span>
+                        {{ else if eq $host.AdminStatus "false" }}<span class="badge text-bg-secondary">No</span>
+                        {{ else }}<span class="badge text-bg-light text-muted border">Unknown</span>{{ end }}
+                    </td>
                     <td>{{ len $host.Shares }}</td>
                 </tr>
                 {{ end }}
@@ -132,10 +220,10 @@
     </script>
 
     <!-- Detailed results for each identified host. -->
-    <h2>Shares</h2>
+    <h2 class="mb-2">Shares</h2>
     <div id="shares">
         {{ range $host := .Hosts }}
-        <div class="panel panel-default border rounded pt-2 mt-1 bg-light">
+        <div class="panel panel-default border rounded pt-2 mb-2 bg-light">
             <div onclick="toggleChevron(this)" class="panel-heading px-3" data-bs-toggle="collapse" data-bs-target="#{{ $host.IP }}" role="button">
                 <i class="bi bi-chevron-down"></i>
                 <h5 class="panel-title pt-0">{{ $host.IP }} ({{ $host.Hostname }})</h5>
@@ -160,8 +248,15 @@
                         <td>{{ $host.Hostname }}</td>
                         <td class="text-break">{{ $host.Domain }}</td>
                         <td>{{ $host.Version }}</td>
-                        <td>{{ $host.Signing }}</td>
-                        <td>{{ $host.AdminStatus }}</td>
+                        <td>
+                            {{ if $host.Signing }}<span class="badge text-bg-success">Required</span>
+                            {{ else }}<span class="badge text-bg-warning">Not required</span>{{ end }}
+                        </td>
+                        <td>
+                            {{ if eq $host.AdminStatus "true" }}<span class="badge text-bg-danger">Yes</span>
+                            {{ else if eq $host.AdminStatus "false" }}<span class="badge text-bg-secondary">No</span>
+                            {{ else }}<span class="badge text-bg-light text-muted border">Unknown</span>{{ end }}
+                        </td>
                         <td>{{ len $host.Shares }}</td>
                     </tr>
                     </tbody>
