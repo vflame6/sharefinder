@@ -88,7 +88,7 @@ func (o *OutputWriter) Write(content string, writer io.Writer) error {
 }
 
 func (o *OutputWriter) WriteXMLHeader(version string, commandLine []string, startTime time.Time, writer io.Writer) error {
-	cmd := escapeXML(strings.Join(commandLine, " "))
+	cmd := escapeXML(strings.Join(MaskCredentials(commandLine), " "))
 	header := fmt.Sprintf("<SharefinderRun version=\"%s\" command=\"%s\" time_start=\"%s\" formatted_time_start=\"%s\">\n", version, cmd, startTime.Format("2006-01-02T15:04:05Z07:00"), startTime.Format(dateTimeSecondsFormat))
 
 	content := xml.Header

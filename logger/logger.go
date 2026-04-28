@@ -6,7 +6,25 @@ import (
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/jfjallid/golog"
 )
+
+// goSmbLogPackages lists go-smb subpackages whose internal loggers are silenced
+// in non-debug mode. The library logs RPC faults at Error level; for our use
+// cases (e.g. DCERPC access-denied while probing local-admin rights without
+// privileges) those are expected, not actionable, and clutter normal output.
+var goSmbLogPackages = []string{
+	"github.com/jfjallid/go-smb/smb",
+	"github.com/jfjallid/go-smb/dcerpc",
+	"github.com/jfjallid/go-smb/dcerpc/msrrp",
+	"github.com/jfjallid/go-smb/dcerpc/msscmr",
+	"github.com/jfjallid/go-smb/dcerpc/mssrvs",
+	"github.com/jfjallid/go-smb/spnego",
+	"github.com/jfjallid/go-smb/krb5ssp",
+	"github.com/jfjallid/go-smb/ntlmssp",
+	"github.com/jfjallid/go-smb/gss",
+}
 
 // CustomLogger provides formatted logging with multi-line indentation
 type CustomLogger struct {
@@ -36,6 +54,15 @@ func SetLoggerOptions(debug, quiet bool) error {
 
 	Log.Debug = debug
 	Log.Quiet = quiet
+
+	libLevel := golog.LevelNotice
+	if !debug {
+		libLevel = golog.LevelNone
+	}
+	for _, name := range goSmbLogPackages {
+		golog.Get(name).SetLogLevel(libLevel)
+	}
+
 	return nil
 }
 

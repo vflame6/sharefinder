@@ -1,10 +1,35 @@
 package scanner
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/go-ldap/ldap/v3"
 )
+
+func TestIsLDAPReferral(t *testing.T) {
+	if isLDAPReferral(nil) {
+		t.Fatal("nil should not be treated as a referral")
+	}
+	if isLDAPReferral(fmt.Errorf("plain error")) {
+		t.Fatal("non-LDAP error should not be a referral")
+	}
+
+	refErr := &ldap.Error{ResultCode: ldap.LDAPResultReferral, Err: fmt.Errorf("ref")}
+	if !isLDAPReferral(refErr) {
+		t.Fatal("LDAPResultReferral should be detected")
+	}
+
+	other := &ldap.Error{ResultCode: ldap.LDAPResultOperationsError, Err: fmt.Errorf("other")}
+	if isLDAPReferral(other) {
+		t.Fatal("non-referral LDAP error should return false")
+	}
+
+	wrapped := fmt.Errorf("context: %w", refErr)
+	if !isLDAPReferral(wrapped) {
+		t.Fatal("wrapped referral should be detected via errors.As")
+	}
+}
 
 func TestGetBaseDN(t *testing.T) {
 	tests := []struct {

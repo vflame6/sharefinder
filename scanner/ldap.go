@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"github.com/go-ldap/ldap/v3"
 	"github.com/go-ldap/ldap/v3/gssapi"
@@ -16,6 +17,16 @@ import (
 	"strings"
 	"time"
 )
+
+// isLDAPReferral reports whether err is an LDAP referral response (result code 10),
+// which AD returns for searches against a non-local domain partition over 389/636.
+func isLDAPReferral(err error) bool {
+	var le *ldap.Error
+	if errors.As(err, &le) {
+		return le.ResultCode == ldap.LDAPResultReferral
+	}
+	return false
+}
 
 type LDAPConnection struct {
 	connection *ldap.Conn
@@ -34,12 +45,19 @@ func GetBaseDN(domain string) string {
 	return result
 }
 
-func NewLDAPConnection(host net.IP, username, password string, hash string, domain string, timeout time.Duration, proxyDialer proxy.Dialer, kerberos bool, dcHostname string) (*LDAPConnection, error) {
+func NewLDAPConnection(host net.IP, username, password string, hash string, domain string, timeout time.Duration, proxyDialer proxy.Dialer, kerberos bool, dcHostname string, useGC bool) (*LDAPConnection, error) {
 	var l *ldap.Conn
 	var err error
 
-	dialLDAPS := fmt.Sprintf("%s:636", host.String())
-	dialLDAP := fmt.Sprintf("%s:389", host.String())
+	// GC ports (3268/3269) avoid LDAP referrals for cross-domain searches; required by --forest.
+	var dialLDAPS, dialLDAP string
+	if useGC {
+		dialLDAPS = fmt.Sprintf("%s:3269", host.String())
+		dialLDAP = fmt.Sprintf("%s:3268", host.String())
+	} else {
+		dialLDAPS = fmt.Sprintf("%s:636", host.String())
+		dialLDAP = fmt.Sprintf("%s:389", host.String())
+	}
 
 	var dialer proxy.Dialer
 	if proxyDialer != nil {
