@@ -33,3 +33,6 @@ main.out
 tmp
 *.ccache
 sharefinder
+CLAUDE.md
+.claude
+docs
