@@ -8,7 +8,7 @@ require (
 	github.com/jcmturner/gokrb5/v8 v8.4.4
 	github.com/jfjallid/go-smb v0.7.0
 	github.com/jfjallid/golog v0.3.5
-	golang.org/x/net v0.53.0
+	golang.org/x/net v0.54.0
 )
 
 require (
@@ -28,5 +28,5 @@ require (
 	github.com/jfjallid/mstypes v0.0.1 // indirect
 	github.com/jfjallid/ndr v0.0.2 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
-	golang.org/x/crypto v0.50.0 // indirect
+	golang.org/x/crypto v0.51.0 // indirect
 )
