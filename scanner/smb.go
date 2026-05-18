@@ -23,6 +23,12 @@ type Connection struct {
 	session *smb.Connection
 }
 
+func logCloseError(action string, err error) {
+	if err != nil {
+		logger.Debugf("%s: %v", action, err)
+	}
+}
+
 func NewSMBConnection(host DNHost, username, password string, hashes []byte, kerberos, localAuth bool, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer, dcIP net.IP, nullSession bool, dcHostname string) (*Connection, error) {
 	options := GetSMBOptions(host, username, password, hashes, kerberos, localAuth, domain, timeout, smbPort, proxyDialer, dcIP, nullSession, dcHostname)
 
@@ -109,12 +115,16 @@ func (conn *Connection) GetSharesList() ([]mssrvs.NetShare, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer conn.session.TreeDisconnect(share)
+	defer func() {
+		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
+	}()
 	f, err := conn.session.OpenFile(share, "srvsvc")
 	if err != nil {
 		return nil, err
 	}
-	defer f.CloseFile()
+	defer func() {
+		logCloseError("failed to close srvsvc pipe", f.CloseFile())
+	}()
 	transport, err := smbtransport.NewSMBTransport(f)
 	if err != nil {
 		return nil, err
@@ -136,13 +146,17 @@ func (conn *Connection) CheckLocalAdmin() (bool, error) {
 	if err := conn.session.TreeConnect(share); err != nil {
 		return false, err
 	}
-	defer conn.session.TreeDisconnect(share)
+	defer func() {
+		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
+	}()
 
 	f, err := conn.session.OpenFile(share, msscmr.MSRPCSvcCtlPipe)
 	if err != nil {
 		return false, err
 	}
-	defer f.CloseFile()
+	defer func() {
+		logCloseError("failed to close svcctl pipe", f.CloseFile())
+	}()
 
 	transport, err := smbtransport.NewSMBTransport(f)
 	if err != nil {
@@ -193,13 +207,17 @@ func (conn *Connection) DetectWindowsVersion(fallback string) (string, error) {
 	if err := conn.session.TreeConnect(share); err != nil {
 		return buildWindowsVersionString("", "", "", "", "", 0, fallback), err
 	}
-	defer conn.session.TreeDisconnect(share)
+	defer func() {
+		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
+	}()
 
 	f, err := conn.session.OpenFile(share, msrrp.MSRRPPipe)
 	if err != nil {
 		return buildWindowsVersionString("", "", "", "", "", 0, fallback), err
 	}
-	defer f.CloseFile()
+	defer func() {
+		logCloseError("failed to close winreg pipe", f.CloseFile())
+	}()
 
 	transport, err := smbtransport.NewSMBTransport(f)
 	if err != nil {
@@ -215,13 +233,17 @@ func (conn *Connection) DetectWindowsVersion(fallback string) (string, error) {
 	if err != nil {
 		return buildWindowsVersionString("", "", "", "", "", 0, fallback), err
 	}
-	defer rpccon.CloseKeyHandle(hklm)
+	defer func() {
+		logCloseError("failed to close hklm key handle", rpccon.CloseKeyHandle(hklm))
+	}()
 
 	currentVersionKey, err := rpccon.OpenSubKey(hklm, `SOFTWARE\Microsoft\Windows NT\CurrentVersion`)
 	if err != nil {
 		return buildWindowsVersionString("", "", "", "", "", 0, fallback), err
 	}
-	defer rpccon.CloseKeyHandle(currentVersionKey)
+	defer func() {
+		logCloseError("failed to close current version key handle", rpccon.CloseKeyHandle(currentVersionKey))
+	}()
 
 	queryString := func(name string) string {
 		value, _, err := rpccon.QueryValueExt(currentVersionKey, name)
@@ -262,7 +284,9 @@ func (conn *Connection) CheckReadAccess(share string) error {
 	if err != nil {
 		return err
 	}
-	defer conn.session.TreeDisconnect(share)
+	defer func() {
+		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
+	}()
 
 	_, err = conn.session.ListShare(share, "", false)
 	return err
@@ -272,11 +296,10 @@ func (conn *Connection) CheckWriteAccess(share string) bool {
 	if err := conn.session.TreeConnect(share); err != nil {
 		return false
 	}
-	defer conn.session.TreeDisconnect(share)
+	defer func() {
+		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
+	}()
 
-	// Try a file first, then fall back to a directory: NTFS ACLs can grant
-	// AddSubdirectory without AddFile (or vice versa), so a single probe can
-	// miss real write access.
 	tempFile := utils.RandSeq(16) + ".txt"
 	tempData := utils.RandSeq(32)
 	dataSent := false
@@ -294,16 +317,26 @@ func (conn *Connection) CheckWriteAccess(share string) bool {
 		}
 		return true
 	}
-
-	tempDir := utils.RandSeq(16)
-	if err := conn.session.MkdirAll(share, tempDir); err == nil {
-		if delErr := conn.session.DeleteDir(share, tempDir); delErr != nil {
-			logger.Error(fmt.Errorf("failed to delete created directory %s on share %s\\%s: %w", tempDir, conn.host, share, delErr))
-		}
-		return true
+	if isExpectedSMBWriteDeniedError(err) {
+		logger.Debugf("write probe denied on share %s\\%s: %v", conn.host, share, err)
+	} else {
+		logger.Debugf("write probe failed on share %s\\%s: %v", conn.host, share, err)
 	}
 
 	return false
+}
+
+func isExpectedSMBWriteDeniedError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "0xc0000061") ||
+		strings.Contains(msg, "status_privilege_not_held") ||
+		strings.Contains(msg, "privilege not held") ||
+		strings.Contains(msg, "0xc0000022") ||
+		strings.Contains(msg, "status_access_denied") ||
+		strings.Contains(msg, "access denied")
 }
 
 func (conn *Connection) ListShare(share string) ([]smb.SharedFile, error) {
@@ -312,7 +345,9 @@ func (conn *Connection) ListShare(share string) ([]smb.SharedFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer conn.session.TreeDisconnect(share)
+	defer func() {
+		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
+	}()
 
 	files, err := conn.session.ListDirectory(share, "", "")
 	if err != nil {
@@ -326,7 +361,9 @@ func (conn *Connection) ListDirectoryRecursively(share string, dir smb.SharedFil
 	if err != nil {
 		return nil, err
 	}
-	defer conn.session.TreeDisconnect(share)
+	defer func() {
+		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
+	}()
 
 	return conn.listDirectoryRecursivelyInternal(share, dir)
 }
@@ -384,7 +421,7 @@ func (conn *Connection) listDirectoryRecursivelyInternal(share string, dir smb.S
 		if file.IsDir {
 			recurseDirectory, err := conn.listDirectoryRecursivelyInternal(share, file)
 			if err != nil {
-				logger.Error(fmt.Errorf("Failed to list directory %s\\%s\\%s: %s\n", conn.host, share, file.Name, err))
+				logger.Error(fmt.Errorf("failed to list directory %s\\%s\\%s: %w", conn.host, share, file.Name, err))
 			}
 			result = append(result, recurseDirectory...)
 		} else {

@@ -21,6 +21,8 @@ Authenticated scans report the target Windows version and build. When the accoun
 
 Authenticated scans also report SMB signing status and whether the supplied credentials have local admin rights on the target.
 
+Write-access probing uses a single temporary-file create/delete attempt. SMB errors such as `0xc0000061` (`STATUS_PRIVILEGE_NOT_HELD`) and `0xc0000022` (`STATUS_ACCESS_DENIED`) are classified as expected write-denied results and only appear in debug output. The old directory-creation fallback is intentionally disabled because the SMB library can print noisy privilege errors even when the final result is simply "no write access".
+
 ## Features
 
 ![sharefinder](static/sharefinder_demo.png)

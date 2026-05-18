@@ -48,7 +48,7 @@ func NewCustomLogger() *CustomLogger {
 
 // SetLoggerOptions configures debug and quiet parameters
 func SetLoggerOptions(debug, quiet bool) error {
-	if debug == true && quiet == true {
+	if debug && quiet {
 		return fmt.Errorf("debug mode can not be used with quiet mode")
 	}
 

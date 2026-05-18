@@ -1,7 +1,6 @@
 package scanner
 
 import (
-	"errors"
 	"fmt"
 	"github.com/vflame6/sharefinder/logger"
 	"github.com/vflame6/sharefinder/utils"
@@ -190,7 +189,7 @@ func smbThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
 
 			// failed on authentication
 			if hostResult.IP == "" {
-				logger.Error(errors.New(fmt.Sprintf("Error during authentication on %s: %v", host.IP, err)))
+				logger.Error(fmt.Errorf("error during authentication on %s: %v", host.IP, err))
 				continue
 			}
 
@@ -225,7 +224,7 @@ func smbThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
 
 			// got an error during shares enumeration
 			if err != nil {
-				logger.Error(errors.New(fmt.Sprintf("Error during shares enumeration on %s: %v", host.IP, err)))
+				logger.Error(fmt.Errorf("error during shares enumeration on %s: %v", host.IP, err))
 				continue
 			}
 		}
