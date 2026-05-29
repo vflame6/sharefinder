@@ -7,7 +7,7 @@ require (
 	github.com/go-ldap/ldap/v3 v3.4.13
 	github.com/jcmturner/gokrb5/v8 v8.4.4
 	github.com/jfjallid/go-smb v0.7.0
-	github.com/jfjallid/golog v0.3.5
+	github.com/jfjallid/golog v0.3.6
 	golang.org/x/net v0.53.0
 )
 
