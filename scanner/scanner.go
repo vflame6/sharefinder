@@ -95,7 +95,11 @@ func (s *Scanner) ParseTargets(target string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			logger.Error(err)
+		}
+	}()
 
 	// scan the file
 	scanner := bufio.NewScanner(file)
@@ -159,7 +163,11 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer ldapConn.Close()
+	defer func() {
+		if err := ldapConn.Close(); err != nil {
+			logger.Error(err)
+		}
+	}()
 
 	var searchBases []DomainPartition
 	if s.Options.Forest {
@@ -197,7 +205,11 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 		if gcErr != nil {
 			logger.Warnf("Global Catalog unavailable on %s, will chase per-domain referrals: %v", s.Options.DomainController, gcErr)
 		} else {
-			defer gcConn.Close()
+			defer func() {
+				if err := gcConn.Close(); err != nil {
+					logger.Error(err)
+				}
+			}()
 			queryConn = gcConn
 		}
 	}
@@ -230,7 +242,9 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 				continue
 			}
 			sr, err = altConn.SearchComputers(searchBase.BaseDN)
-			altConn.Close()
+			if closeErr := altConn.Close(); closeErr != nil {
+				logger.Error(closeErr)
+			}
 		}
 		if err != nil {
 			logger.Warnf("Skipping domain %s: %v", searchBase.Name, err)
