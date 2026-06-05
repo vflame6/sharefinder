@@ -6,7 +6,7 @@ require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/go-ldap/ldap/v3 v3.4.13
 	github.com/jcmturner/gokrb5/v8 v8.4.4
-	github.com/jfjallid/go-smb v0.8.2
+	github.com/jfjallid/go-smb v0.9.0
 	github.com/jfjallid/golog v0.3.6
 	golang.org/x/net v0.55.0
 )

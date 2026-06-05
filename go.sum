@@ -34,8 +34,8 @@ github.com/jcmturner/gokrb5/v8 v8.4.4 h1:x1Sv4HaTpepFkXbt2IkL29DXRf8sOfZXo8eRKh6
 github.com/jcmturner/gokrb5/v8 v8.4.4/go.mod h1:1btQEpgT6k+unzCwX1KdWMEwPPkkgBtP+F6aCACiMrs=
 github.com/jcmturner/rpc/v2 v2.0.3 h1:7FXXj8Ti1IaVFpSAziCZWNzbNuZmnvw/i6CqLNdWfZY=
 github.com/jcmturner/rpc/v2 v2.0.3/go.mod h1:VUJYCIDm3PVOEHw8sgt091/20OJjskO/YJki3ELg/Hc=
-github.com/jfjallid/go-smb v0.8.2 h1:tacOfrY2pNMNJF0K8z/p5SZrejLlmtj2udaO9PTX9as=
-github.com/jfjallid/go-smb v0.8.2/go.mod h1:n92uo7BxPhu92OebTdjMtHO0NH+Ysk8r2URdvgPpOa8=
+github.com/jfjallid/go-smb v0.9.0 h1:oGFYO9uHMtzHma8tRrJGWXjAHFVM3lGwJu01AFoAo8Y=
+github.com/jfjallid/go-smb v0.9.0/go.mod h1:j3JzZQY395kmKxE6ZoNy+SjIMm5x7Nfgmr7ZNhF3mXA=
 github.com/jfjallid/gofork v1.7.6 h1:OYyS2HH597860gkDxxjNsl+NZRxoAnuRI6ZsP++kYKE=
 github.com/jfjallid/gofork v1.7.6/go.mod h1:r1EH4W9KY5iqtiGhAupnbzMRONsLDApdJ9EZH5NWFSc=
 github.com/jfjallid/gokrb5/v8 v8.6.3 h1:fXw7wWPWoBWz5i51/xnwcwQFcKfXP1nKhV1rOR61+oM=
