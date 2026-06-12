@@ -6,7 +6,7 @@ require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/go-ldap/ldap/v3 v3.4.13
 	github.com/jcmturner/gokrb5/v8 v8.4.4
-	github.com/jfjallid/go-smb v0.8.2
+	github.com/jfjallid/go-smb v0.10.1
 	github.com/jfjallid/golog v0.3.6
 	golang.org/x/net v0.55.0
 )
@@ -24,7 +24,7 @@ require (
 	github.com/jcmturner/goidentity/v6 v6.0.1 // indirect
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
 	github.com/jfjallid/gofork v1.7.6 // indirect
-	github.com/jfjallid/gokrb5/v8 v8.6.3 // indirect
+	github.com/jfjallid/gokrb5/v9 v9.0.0 // indirect
 	github.com/jfjallid/mstypes v0.0.2 // indirect
 	github.com/jfjallid/ndr v0.1.1 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
