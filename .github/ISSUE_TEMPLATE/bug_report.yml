@@ -1,0 +1,44 @@
+name: Bug report
+description: Something does not work as described
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please remove passwords, hashes and client names from everything you paste.
+  - type: input
+    id: version
+    attributes:
+      label: sharefinder version
+      description: Output of `sharefinder --version`
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command line
+      description: The command you ran, with credentials removed
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: target
+    attributes:
+      label: Target
+      description: Target operating system or SMB server, for example Windows Server 2022 or Samba 4.20
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead?
+      description: Include the output, run with --debug if you can
+      render: text
+    validations:
+      required: true

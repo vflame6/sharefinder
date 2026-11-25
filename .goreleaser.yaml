@@ -1,3 +1,47 @@
+version: 2
+
+project_name: sharefinder
+
 builds:
-  - ldflags:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
       - -s -w -X github.com/vflame6/sharefinder/cmd.VERSION={{.Tag}}
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: checksums.txt
+
+# Release notes are written by hand in CHANGELOG.md and passed with
+# --release-notes by the release workflow.
+changelog:
+  disable: true
+
+dockers_v2:
+  - images:
+      - ghcr.io/vflame6/sharefinder
+    tags:
+      - "{{ .Version }}"
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    dockerfile: Dockerfile.release
+    labels:
+      org.opencontainers.image.source: https://github.com/vflame6/sharefinder
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.licenses: MIT

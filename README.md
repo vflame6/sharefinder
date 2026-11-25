@@ -45,25 +45,43 @@ Here is the help menu for the tool.
 ```yaml
 usage: sharefinder [<flags>] <command> [<args> ...]
 
-  sharefinder is a network share discovery tool that enumerates shares, permissions and files in networks and domains.
+sharefinder is a network share discovery tool that enumerates shares,
+permissions and files in networks and domains.
 
 Flags:
-  -h, --[no-]help      Show context-sensitive help (also try --help-long and --help-man).
-  --[no-]debug     Enable debug mode, print debug messages
-  --[no-]quiet     Enable quiet mode, print only results
-  -o, --output=""      Filename to write output in raw format
-  --output-xml=""  Filename to write XML formatted output
-  --output-all=""  Filename to write output in all formats
-  --[no-]html      Generate HTML report (requires XML output)
-  --threads=10     Number of threads
-  --timeout=5s     Seconds to wait for connection
-  --smb-port=445   Target port of SMB service
-  --proxy=""       SOCKS-proxy address to use for connection in format IP:PORT
+  -h, --[no-]help            Show context-sensitive help (also try --help-long
+                             and --help-man).
+      --[no-]debug           Enable debug mode, print debug messages
+      --[no-]quiet           Enable quiet mode, print only results
+  -o, --output=""            Filename to write output in raw format
+      --output-xml=""        Filename to write XML formatted output
+      --output-all=""        Filename to write output in all formats
+      --[no-]html            Generate HTML report (requires XML output)
+      --threads=10           Number of threads
+      --timeout=5s           Seconds to wait for connection
+      --io-timeout=30s       Abort an SMB or LDAP operation when the server
+                             sends nothing for this long
+      --smb-port=445         Target port of SMB service
+      --proxy=""             SOCKS-proxy address to use for connection in format
+                             IP:PORT
+      --max-auth-failures=1  Stop the scan after this many rejected logons;
+                             0 disables the guard
   -e, --exclude="IPC$,NETLOGON,ADMIN$,print$,C$"
-  Exclude list
-  --[no-]list      List readable shares
-  --[no-]recurse   List readable shares recursively
-  --[no-]version   Show application version.
+                             Exclude list
+      --exclude-hosts=""     Skip these targets: IPs, CIDRs, ranges, hostnames
+                             (comma-separated) or a file
+      --[no-]list            List readable shares
+      --[no-]recurse         List readable shares recursively
+      --depth=5              Maximum directory depth below the share root for
+                             --recurse (0 lists the root only)
+      --[no-]follow-links    Descend into directory symlinks and junctions
+                             during --recurse
+      --max-files=0          Stop listing a share after this many entries (0 =
+                             no limit)
+      --write-check=file     How to test write access: mask (open the share root
+                             with write rights, creates nothing), file (create
+                             and delete a temporary file) or off
+      --[no-]version         Show application version.
 
 Commands:
   help [<command>...]
@@ -73,9 +91,39 @@ Commands:
   hunt --username=USERNAME [<flags>] <dc>
 ```
 
+### Targets
+
+A target is an IP address, a CIDR (`10.0.0.0/24`; `/31` and `/32` work), a
+range (`10.0.0.1-50` or `10.0.0.1-10.0.0.50`), a hostname or FQDN, a
+comma-separated list of those, or a file with one or more per line (`#` starts
+a comment). Duplicates are scanned once. `--exclude-hosts` takes the same
+syntax and keeps targets out of scope, also when a hostname resolves into an
+excluded block.
+
+### Safe defaults
+
+- **Account lockout:** with a wrong password only one logon is sent; the scan
+  stops after `--max-auth-failures` rejected logons (default 1). A server that
+  maps a failed logon to its Guest account counts as a rejection, and every
+  host line shows the session type it was scanned with (`user`, `guest`,
+  `null`).
+- **Write check:** `--write-check file` (default) creates and deletes a random
+  file in each disk share root. `--write-check mask` only opens the share root
+  with write access rights and leaves nothing behind; `--write-check off` skips
+  the check.
+- **Recursion:** `--recurse` stops 5 levels below the share root (`--depth`),
+  does not follow directory symlinks or junctions (`--follow-links`) and can be
+  capped per share with `--max-files`.
+- **Hung hosts and Ctrl+C:** every read and write is bounded by `--io-timeout`.
+  Ctrl+C stops the scan within seconds and still writes the partial results;
+  a second Ctrl+C exits at once.
+- **LDAP:** `hunt` never sends a password over plain LDAP unless
+  `--allow-plaintext-ldap` is given, and a failed Kerberos bind does not fall
+  back to a password bind.
+
 ## Installation
 
-`sharefinder` requires **go1.25** to install successfully.
+`sharefinder` requires **go1.25** or newer to install successfully.
 
 ```shell
 go install -v github.com/vflame6/sharefinder@latest
@@ -83,18 +131,24 @@ go install -v github.com/vflame6/sharefinder@latest
 
 Compiled versions are available on [Release Binaries](https://github.com/vflame6/sharefinder/releases) page.
 
+Run the container image:
+
+```shell
+docker run --rm ghcr.io/vflame6/sharefinder -h
+```
+
 To Build:
 
 ```
-go build -o sharefinder main.go
+go build -o sharefinder .
 ```
 
 Build with Docker:
 
 ```shell
-docker build -t sharefinder . 
+docker build -t sharefinder .
 ```
 
 ## Contributing
 
-Feel free to open an issue if something does not work, or if you have any issues. New ideas to improve the tool are much appreciated.
+Feel free to open an issue if something does not work, or if you have any issues. New ideas to improve the tool are much appreciated. See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and [SECURITY.md](SECURITY.md) to report vulnerabilities.

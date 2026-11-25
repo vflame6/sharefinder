@@ -50,7 +50,7 @@ func SprintDirectories(ip, share string, dirs []Directory) string {
 	if len(dirs) > 0 {
 		for _, dir := range dirs {
 			shareListResult += fmt.Sprintf("Listing directory %s\\%s\\%s\n", ip, share, dir.Name)
-			shareListResult += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "Type", "Size", "LastWriteTime", "ShareName")
+			shareListResult += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "Type", "Size", "LastWriteTime", "Name")
 			shareListResult += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "----", "----", "-------------", "----")
 			for _, file := range dir.Files {
 				lastWrite := time.Time.Format(file.LastModified, dateTimeFormat)
@@ -116,7 +116,7 @@ func SprintShares(h Host, exclude []string) string {
 		}
 
 		result += fmt.Sprintf("Listing share %s\\%s\n", h.IP, share.ShareName)
-		result += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "Type", "Size", "LastWriteTime", "ShareName")
+		result += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "Type", "Size", "LastWriteTime", "Name")
 		result += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "----", "----", "-------------", "----")
 		result += SprintFiles(share.Files)
 		result += "\n"

@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"encoding/xml"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -250,5 +251,30 @@ func TestNewScanner(t *testing.T) {
 	}
 	if !s.TimeStart.Equal(ts) {
 		t.Errorf("TimeStart mismatch")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Listing headers
+// ---------------------------------------------------------------------------
+
+func TestListingHeaders_NameColumn(t *testing.T) {
+	wantHeader := fmt.Sprintf("%-4s  %8s  %-16s  %s", "Type", "Size", "LastWriteTime", "Name")
+	h := Host{IP: "10.0.0.1", Shares: []Share{{
+		ShareName:      "Data",
+		ReadPermission: true,
+		Files:          []File{{Type: "file", Name: "a.txt"}},
+		Directories:    []Directory{{Name: "IT", Files: []File{{Type: "file", Name: "b.txt"}}}},
+	}}}
+	for name, out := range map[string]string{
+		"SprintShares":      SprintShares(h, nil),
+		"SprintDirectories": SprintDirectories(h.IP, "Data", h.Shares[0].Directories),
+	} {
+		if strings.Contains(out, "ShareName") {
+			t.Errorf("%s labels the file name column ShareName:\n%s", name, out)
+		}
+		if !strings.Contains(out, wantHeader+"\n") {
+			t.Errorf("%s lacks the header %q:\n%s", name, wantHeader, out)
+		}
 	}
 }
