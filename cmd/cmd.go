@@ -301,7 +301,7 @@ func ExecuteAuth(ctx context.Context, s *scanner.Scanner, target, username, pass
 	return runScan(ctx, s, "auth", produce)
 }
 
-func ExecuteHunt(ctx context.Context, s *scanner.Scanner, username, password, hash string, dc, resolver net.IP, forest, kerberos bool, dcHostname string) error {
+func ExecuteHunt(ctx context.Context, s *scanner.Scanner, username, password, hash string, dc, resolver net.IP, forest, kerberos bool, dcHostname string, allowPlaintextLDAP bool) error {
 	var targetDomain string
 	var targetUsername string
 	var err error
@@ -347,6 +347,7 @@ func ExecuteHunt(ctx context.Context, s *scanner.Scanner, username, password, ha
 	s.Options.DCHostname = dcHostname
 	s.Options.CustomResolver = resolver
 	s.Options.Forest = forest
+	s.Options.AllowPlaintextLDAP = allowPlaintextLDAP
 
 	if s.Options.Forest {
 		logger.Warnf("Starting forest-wide enumeration from %s", s.Options.Domain)

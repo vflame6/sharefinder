@@ -92,17 +92,7 @@ func TargetsFromList(hosts []DNHost) Producer {
 func (s *Scanner) RunEnumerateDomainComputers(ctx context.Context) ([]DNHost, error) {
 	// Regular LDAP for forest discovery: the GC's partial attribute set excludes
 	// crossRef.systemFlags, so a config-NC crossRef search on 3268 returns 0 hits.
-	ldapConn, err := NewLDAPConnection(
-		s.Options.DomainController,
-		s.Options.Username,
-		s.Options.Password,
-		s.Options.Hash,
-		strings.ToLower(s.Options.Domain),
-		s.Options.Dialer,
-		s.Options.Kerberos,
-		s.Options.DCHostname,
-		false,
-	)
+	ldapConn, err := NewLDAPConnection(ctx, s.ldapOptions(s.Options.DomainController, s.Options.DCHostname, false))
 	if err != nil {
 		return nil, err
 	}
@@ -133,17 +123,7 @@ func (s *Scanner) RunEnumerateDomainComputers(ctx context.Context) ([]DNHost, er
 	// If GC is unreachable we keep ldapConn and chase referrals per-domain below.
 	queryConn := ldapConn
 	if s.Options.Forest {
-		gcConn, gcErr := NewLDAPConnection(
-			s.Options.DomainController,
-			s.Options.Username,
-			s.Options.Password,
-			s.Options.Hash,
-			strings.ToLower(s.Options.Domain),
-			s.Options.Dialer,
-			s.Options.Kerberos,
-			s.Options.DCHostname,
-			true,
-		)
+		gcConn, gcErr := NewLDAPConnection(ctx, s.ldapOptions(s.Options.DomainController, s.Options.DCHostname, true))
 		if gcErr != nil {
 			logger.Warnf("Global Catalog unavailable on %s, will chase per-domain referrals: %v", s.Options.DomainController, gcErr)
 		} else {
@@ -276,17 +256,23 @@ func (s *Scanner) dialDCForDomain(ctx context.Context, domainName string, r **Re
 		dcHostname = strings.TrimSuffix(names[0], ".")
 	}
 
-	return NewLDAPConnection(
-		ip,
-		s.Options.Username,
-		s.Options.Password,
-		s.Options.Hash,
-		strings.ToLower(s.Options.Domain),
-		s.Options.Dialer,
-		s.Options.Kerberos,
-		dcHostname,
-		false,
-	)
+	return NewLDAPConnection(ctx, s.ldapOptions(ip, dcHostname, false))
+}
+
+// ldapOptions describes an LDAP connection to host with the scan's credentials.
+func (s *Scanner) ldapOptions(host net.IP, dcHostname string, useGC bool) LDAPOptions {
+	return LDAPOptions{
+		Host:           host,
+		Username:       s.Options.Username,
+		Password:       s.Options.Password,
+		Hash:           s.Options.Hash,
+		Domain:         strings.ToLower(s.Options.Domain),
+		DCHostname:     dcHostname,
+		Kerberos:       s.Options.Kerberos,
+		UseGC:          useGC,
+		AllowPlaintext: s.Options.AllowPlaintextLDAP,
+		Dialer:         s.Options.Dialer,
+	}
 }
 
 // OutputHTML is used to generate HTML output from XML output

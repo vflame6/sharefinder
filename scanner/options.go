@@ -8,6 +8,7 @@ import (
 
 // Options is a struct to store scanner's configuration
 type Options struct {
+	AllowPlaintextLDAP bool       // --allow-plaintext-ldap (hunt)
 	AuthGuard          *AuthGuard // --max-auth-failures
 	CustomResolver     net.IP     // --resolver
 	DCHostname         string
