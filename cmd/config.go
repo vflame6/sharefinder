@@ -19,6 +19,8 @@ type Config struct {
 	SmbPort   int           // --smb-port
 	Proxy     string        // --proxy
 
+	MaxAuthFailures int // --max-auth-failures
+
 	Exclude      string // --exclude
 	ExcludeHosts string // --exclude-hosts
 	List         bool   // --list

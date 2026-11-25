@@ -43,6 +43,10 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		return nil, errors.New("cannot use --recurse without --list")
 	}
 
+	if cfg.MaxAuthFailures < 0 {
+		return nil, errors.New("--max-auth-failures must be 0 (no limit) or more")
+	}
+
 	// every SMB, LDAP and proxied DNS connection goes through this dialer: it
 	// applies the connect and I/O timeouts and can close everything on Ctrl+C
 	dialer, err := scanner.NewDialer(cfg.Proxy, cfg.Timeout, cfg.IOTimeout)
@@ -130,6 +134,7 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		DomainController:   net.IPv4zero,
 		Exclude:            excludeList,
 		ExcludeHosts:       excludeHosts,
+		AuthGuard:          scanner.NewAuthGuard(cfg.MaxAuthFailures),
 		FileTXT:            file,
 		FileXML:            fileXML,
 		Hash:               "",
@@ -160,7 +165,7 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 func runScan(ctx context.Context, s *scanner.Scanner, module string, produce scanner.Producer) error {
 	err := s.Run(ctx, produce)
 	s.TimeEnd = time.Now()
-	if ctx.Err() != nil {
+	if ctx.Err() != nil || err != nil {
 		logger.Warnf("Stopped %s module at %s", module, s.TimeEnd.Format("02/01/2006 15:04:05"))
 		return err
 	}
@@ -193,6 +198,7 @@ func ExecuteNull(ctx context.Context, s *scanner.Scanner, target string) error {
 
 	// configure options to use null session
 	s.Options.NullSession = true
+	s.Options.Mode = scanner.AuthNull
 
 	produce, err := loadTargets(s, target)
 	if err != nil {
@@ -212,6 +218,7 @@ func ExecuteGuest(ctx context.Context, s *scanner.Scanner, target, username stri
 		s.Options.Username = "anonymous_" + utils.RandSeq(8)
 	}
 	logger.Warnf("Using username for Guest access: %s", s.Options.Username)
+	s.Options.Mode = scanner.AuthGuest
 
 	produce, err := loadTargets(s, target)
 	if err != nil {

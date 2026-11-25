@@ -31,11 +31,12 @@ var (
 	outputHTMLFlag = app.Flag("html", "Generate HTML report (requires XML output)").Default("false").Bool()
 
 	// connection flags
-	threadsFlag   = app.Flag("threads", "Number of threads").Default("10").Int()
-	timeoutFlag   = app.Flag("timeout", "Seconds to wait for connection").Default("5s").Duration()
-	ioTimeoutFlag = app.Flag("io-timeout", "Abort an SMB or LDAP operation when the server sends nothing for this long").Default("30s").Duration()
-	smbPortFlag   = app.Flag("smb-port", "Target port of SMB service").Default("445").Int()
-	proxyFlag     = app.Flag("proxy", "SOCKS-proxy address to use for connection in format IP:PORT").Default("").String()
+	threadsFlag         = app.Flag("threads", "Number of threads").Default("10").Int()
+	timeoutFlag         = app.Flag("timeout", "Seconds to wait for connection").Default("5s").Duration()
+	ioTimeoutFlag       = app.Flag("io-timeout", "Abort an SMB or LDAP operation when the server sends nothing for this long").Default("30s").Duration()
+	smbPortFlag         = app.Flag("smb-port", "Target port of SMB service").Default("445").Int()
+	proxyFlag           = app.Flag("proxy", "SOCKS-proxy address to use for connection in format IP:PORT").Default("").String()
+	maxAuthFailuresFlag = app.Flag("max-auth-failures", "Stop the scan after this many rejected logons; 0 disables the guard").Default("1").Int()
 
 	// SMB interaction flags
 	excludeFlag      = app.Flag("exclude", "Exclude list").Short('e').Default("IPC$,NETLOGON,ADMIN$,print$,C$").String()
@@ -102,22 +103,23 @@ func main() {
 
 	// set up a scanner
 	scanner, err := cmd.CreateScanner(cmd.Config{
-		Version:      cmd.VERSION,
-		CommandLine:  os.Args[1:],
-		TimeStart:    time.Now(),
-		OutputRaw:    *outputRawFlag,
-		OutputXML:    *outputXMLFlag,
-		OutputAll:    *outputAllFlag,
-		OutputHTML:   *outputHTMLFlag,
-		Threads:      *threadsFlag,
-		Timeout:      *timeoutFlag,
-		IOTimeout:    *ioTimeoutFlag,
-		SmbPort:      *smbPortFlag,
-		Proxy:        *proxyFlag,
-		Exclude:      *excludeFlag,
-		ExcludeHosts: *excludeHostsFlag,
-		List:         *listFlag,
-		Recurse:      *recurseFlag,
+		Version:         cmd.VERSION,
+		CommandLine:     os.Args[1:],
+		TimeStart:       time.Now(),
+		OutputRaw:       *outputRawFlag,
+		OutputXML:       *outputXMLFlag,
+		OutputAll:       *outputAllFlag,
+		OutputHTML:      *outputHTMLFlag,
+		Threads:         *threadsFlag,
+		Timeout:         *timeoutFlag,
+		IOTimeout:       *ioTimeoutFlag,
+		SmbPort:         *smbPortFlag,
+		Proxy:           *proxyFlag,
+		MaxAuthFailures: *maxAuthFailuresFlag,
+		Exclude:         *excludeFlag,
+		ExcludeHosts:    *excludeHostsFlag,
+		List:            *listFlag,
+		Recurse:         *recurseFlag,
 	})
 	if err != nil {
 		logger.Fatal(err)

@@ -8,7 +8,8 @@ import (
 
 // Options is a struct to store scanner's configuration
 type Options struct {
-	CustomResolver     net.IP // --resolver
+	AuthGuard          *AuthGuard // --max-auth-failures
+	CustomResolver     net.IP     // --resolver
 	DCHostname         string
 	Dialer             *Dialer // --proxy, --timeout, --io-timeout
 	Domain             string  // part of --username
@@ -24,6 +25,7 @@ type Options struct {
 	Kerberos           bool
 	List               bool // --list
 	LocalAuth          bool // --local-auth
+	Mode               AuthMode
 	NullSession        bool
 	OutputRawFileName  string
 	OutputXMLFileName  string

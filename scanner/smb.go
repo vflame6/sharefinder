@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/jfjallid/go-smb/dcerpc"
 	"github.com/jfjallid/go-smb/dcerpc/msrrp"
@@ -29,15 +30,43 @@ func logCloseError(action string, err error) {
 }
 
 // NewSMBConnection dials host through o.Dialer, negotiates SMB and
-// authenticates with the credentials in o.
+// authenticates with the credentials in o. With real credentials the session
+// setup, the only step that sends them, runs under o.AuthGuard so a wrong
+// password cannot reach every target. Errors are *StageError values.
 func NewSMBConnection(ctx context.Context, host DNHost, o *Options) (*Connection, error) {
 	options := GetSMBOptions(ctx, host, o)
+	options.ManualLogin = true
 
-	// establish the connection
+	// dial and negotiate; no credentials are sent yet
 	session, err := smb.NewConnection(options)
 	if err != nil {
+		if session != nil {
+			// go-smb hands back a half-open connection on error
+			session.Close()
+		}
+		return nil, &StageError{Stage: StageConnect, Host: host.Address(), Err: err}
+	}
+
+	logon := func() error {
+		if err := session.SessionSetup(); err != nil {
+			return &StageError{Stage: StageAuth, Host: host.Address(), Err: err}
+		}
+		return nil
+	}
+	if o.Mode == AuthUser && o.AuthGuard != nil {
+		err = o.AuthGuard.Do(ctx, logon)
+	} else {
+		err = logon()
+	}
+	if err != nil {
+		session.Close()
+		var stageErr *StageError
+		if !errors.As(err, &stageErr) {
+			err = &StageError{Stage: StageAuth, Host: host.Address(), Err: err}
+		}
 		return nil, err
 	}
+
 	conn := &Connection{
 		host:    host.Address(),
 		session: session,

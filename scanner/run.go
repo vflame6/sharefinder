@@ -13,7 +13,7 @@ type Producer func(ctx context.Context, out chan<- DNHost) error
 // When ctx is cancelled (Ctrl+C) every connection the dialer handed out is
 // closed, so in-flight hosts fail at once instead of being waited for; workers
 // stop taking new targets and Run returns the cancellation cause. A producer
-// error stops the run the same way and is returned.
+// error, or the AuthGuard tripping, stops the run the same way and is returned.
 func (s *Scanner) Run(ctx context.Context, produce Producer) error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
@@ -21,6 +21,17 @@ func (s *Scanner) Run(ctx context.Context, produce Producer) error {
 	// normally must not close the dialer for later phases.
 	stop := context.AfterFunc(ctx, s.Options.Dialer.CloseAll)
 	defer stop()
+
+	// Too many rejected logons stop the whole run, not only the host.
+	if guard := s.Options.AuthGuard; guard != nil {
+		go func() {
+			select {
+			case <-guard.Done():
+				cancel(guard.Err())
+			case <-ctx.Done():
+			}
+		}()
+	}
 
 	targets := make(chan DNHost, 256)
 	var wg sync.WaitGroup
