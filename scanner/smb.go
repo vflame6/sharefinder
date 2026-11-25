@@ -39,7 +39,7 @@ func NewSMBConnection(ctx context.Context, host DNHost, o *Options) (*Connection
 		return nil, err
 	}
 	conn := &Connection{
-		host:    host.IP.String(),
+		host:    host.Address(),
 		session: session,
 	}
 	return conn, nil
@@ -50,7 +50,7 @@ func NewSMBConnection(ctx context.Context, host DNHost, o *Options) (*Connection
 // and can be closed when the scan is cancelled.
 func GetSMBOptions(ctx context.Context, host DNHost, o *Options) smb.Options {
 	smbOptions := smb.Options{
-		Host:                  host.IP.String(),
+		Host:                  host.Address(),
 		Port:                  o.SmbPort,
 		RequireMessageSigning: false,
 		ForceSMB2:             false,
@@ -62,16 +62,16 @@ func GetSMBOptions(ctx context.Context, host DNHost, o *Options) smb.Options {
 		hostname := host.Hostname
 		if hostname == "" {
 			// Kerberos requires a hostname for SPN — attempt reverse DNS lookup
-			names, err := net.DefaultResolver.LookupAddr(ctx, host.IP.String())
+			names, err := net.DefaultResolver.LookupAddr(ctx, host.Address())
 			if err == nil && len(names) > 0 {
 				hostname = strings.TrimSuffix(names[0], ".")
-				logger.Debugf("Resolved %s to %s for Kerberos SPN", host.IP.String(), hostname)
+				logger.Debugf("Resolved %s to %s for Kerberos SPN", host.Address(), hostname)
 			} else if o.DCHostname != "" && o.Domain != "" {
 				// construct FQDN from dc-hostname + domain when target is the DC itself
 				hostname = o.DCHostname + "." + o.Domain
 				logger.Debugf("Using DC hostname for SPN: %s", hostname)
 			} else {
-				logger.Warnf("Kerberos requires a hostname for SPN but target %s has no hostname — use hunt command or specify target as hostname", host.IP.String())
+				logger.Warnf("Kerberos requires a hostname for SPN but target %s has no hostname — use hunt command or specify target as hostname", host.Address())
 			}
 		}
 		var dcIPStr string

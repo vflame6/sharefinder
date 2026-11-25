@@ -1,16 +1,15 @@
 package scanner
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
-	"github.com/vflame6/sharefinder/logger"
 	"net"
-	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/vflame6/sharefinder/logger"
 )
 
 // Scanner is a struct so store scanner's configuration and execute commands
@@ -22,6 +21,7 @@ type Scanner struct {
 	Threads     int
 
 	closeOnce sync.Once
+	scanned   sync.Map // addresses already scanned, for deduplication
 }
 
 type DNHost struct {
@@ -72,48 +72,6 @@ func (s *Scanner) closeOutputs() {
 			}
 		}
 	}
-}
-
-// ParseTargets parses an IP address, IP range, CIDR or a file with one of
-// those per line. The whole input is validated before any host is returned.
-func ParseTargets(target string) ([]DNHost, error) {
-	var lines []string
-
-	if _, err := os.Stat(target); errors.Is(err, os.ErrNotExist) {
-		// not a file: parse the argument itself
-		lines = []string{target}
-	} else {
-		file, err := os.Open(target)
-		if err != nil {
-			return nil, err
-		}
-		defer func() {
-			if err := file.Close(); err != nil {
-				logger.Error(err)
-			}
-		}()
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			if line := strings.TrimSpace(scanner.Text()); line != "" {
-				lines = append(lines, line)
-			}
-		}
-		if err := scanner.Err(); err != nil {
-			return nil, err
-		}
-	}
-
-	var hosts []DNHost
-	for _, line := range lines {
-		targets, err := ParseIPOrCIDR(line)
-		if err != nil {
-			return nil, err
-		}
-		for _, t := range targets {
-			hosts = append(hosts, DNHost{IP: net.ParseIP(t)})
-		}
-	}
-	return hosts, nil
 }
 
 // TargetsFromList returns a Producer that sends hosts in order.

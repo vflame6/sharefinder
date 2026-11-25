@@ -2,14 +2,15 @@ package main
 
 import (
 	"context"
-	"github.com/alecthomas/kingpin/v2"
-	"github.com/vflame6/sharefinder/cmd"
-	"github.com/vflame6/sharefinder/logger"
 	"os"
 	"os/signal"
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/alecthomas/kingpin/v2"
+	"github.com/vflame6/sharefinder/cmd"
+	"github.com/vflame6/sharefinder/logger"
 )
 
 // program options
@@ -37,9 +38,10 @@ var (
 	proxyFlag     = app.Flag("proxy", "SOCKS-proxy address to use for connection in format IP:PORT").Default("").String()
 
 	// SMB interaction flags
-	excludeFlag = app.Flag("exclude", "Exclude list").Short('e').Default("IPC$,NETLOGON,ADMIN$,print$,C$").String()
-	listFlag    = app.Flag("list", "List readable shares").Default("false").Bool()
-	recurseFlag = app.Flag("recurse", "List readable shares recursively").Default("false").Bool()
+	excludeFlag      = app.Flag("exclude", "Exclude list").Short('e').Default("IPC$,NETLOGON,ADMIN$,print$,C$").String()
+	excludeHostsFlag = app.Flag("exclude-hosts", "Skip these targets: IPs, CIDRs, ranges, hostnames (comma-separated) or a file").Default("").String()
+	listFlag         = app.Flag("list", "List readable shares").Default("false").Bool()
+	recurseFlag      = app.Flag("recurse", "List readable shares recursively").Default("false").Bool()
 
 	// null command
 	// find null sessions shares and permissions
@@ -100,21 +102,22 @@ func main() {
 
 	// set up a scanner
 	scanner, err := cmd.CreateScanner(cmd.Config{
-		Version:     cmd.VERSION,
-		CommandLine: os.Args[1:],
-		TimeStart:   time.Now(),
-		OutputRaw:   *outputRawFlag,
-		OutputXML:   *outputXMLFlag,
-		OutputAll:   *outputAllFlag,
-		OutputHTML:  *outputHTMLFlag,
-		Threads:     *threadsFlag,
-		Timeout:     *timeoutFlag,
-		IOTimeout:   *ioTimeoutFlag,
-		SmbPort:     *smbPortFlag,
-		Proxy:       *proxyFlag,
-		Exclude:     *excludeFlag,
-		List:        *listFlag,
-		Recurse:     *recurseFlag,
+		Version:      cmd.VERSION,
+		CommandLine:  os.Args[1:],
+		TimeStart:    time.Now(),
+		OutputRaw:    *outputRawFlag,
+		OutputXML:    *outputXMLFlag,
+		OutputAll:    *outputAllFlag,
+		OutputHTML:   *outputHTMLFlag,
+		Threads:      *threadsFlag,
+		Timeout:      *timeoutFlag,
+		IOTimeout:    *ioTimeoutFlag,
+		SmbPort:      *smbPortFlag,
+		Proxy:        *proxyFlag,
+		Exclude:      *excludeFlag,
+		ExcludeHosts: *excludeHostsFlag,
+		List:         *listFlag,
+		Recurse:      *recurseFlag,
 	})
 	if err != nil {
 		logger.Fatal(err)

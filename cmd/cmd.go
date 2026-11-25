@@ -4,13 +4,15 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"github.com/vflame6/sharefinder/logger"
-	"github.com/vflame6/sharefinder/scanner"
-	"github.com/vflame6/sharefinder/utils"
+	"fmt"
 	"net"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/vflame6/sharefinder/logger"
+	"github.com/vflame6/sharefinder/scanner"
+	"github.com/vflame6/sharefinder/utils"
 )
 
 // CreateScanner validates the global options, opens the requested output
@@ -46,6 +48,16 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 	dialer, err := scanner.NewDialer(cfg.Proxy, cfg.Timeout, cfg.IOTimeout)
 	if err != nil {
 		return nil, err
+	}
+
+	// scope control: these targets are never scanned, also when a hostname
+	// or a hunt result resolves into them
+	var excludeHosts *scanner.TargetSet
+	if cfg.ExcludeHosts != "" {
+		excludeHosts, err = scanner.ParseExcludeSpec(cfg.ExcludeHosts)
+		if err != nil {
+			return nil, fmt.Errorf("--exclude-hosts: %w", err)
+		}
 	}
 
 	outputWriter := scanner.NewOutputWriter()
@@ -117,6 +129,7 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		Domain:             "",
 		DomainController:   net.IPv4zero,
 		Exclude:            excludeList,
+		ExcludeHosts:       excludeHosts,
 		FileTXT:            file,
 		FileXML:            fileXML,
 		Hash:               "",
@@ -155,17 +168,37 @@ func runScan(ctx context.Context, s *scanner.Scanner, module string, produce sca
 	return err
 }
 
+// loadTargets parses the target argument, removes --exclude-hosts and returns
+// a producer for what is left.
+func loadTargets(s *scanner.Scanner, target string) (scanner.Producer, error) {
+	set, err := scanner.ParseTargetSpec(target)
+	if err != nil {
+		return nil, err
+	}
+	total := set.Len()
+	set.Subtract(s.Options.ExcludeHosts)
+	if set.Len() == 0 {
+		return nil, errors.New("no targets left after --exclude-hosts")
+	}
+	if excluded := total - set.Len(); excluded > 0 {
+		logger.Warnf("Loaded %d targets (%d excluded by --exclude-hosts)", set.Len(), excluded)
+	} else {
+		logger.Debugf("Loaded %d targets", set.Len())
+	}
+	return scanner.TargetsProducer(set), nil
+}
+
 func ExecuteNull(ctx context.Context, s *scanner.Scanner, target string) error {
 	logger.Warn("Executing null module")
 
 	// configure options to use null session
 	s.Options.NullSession = true
 
-	hosts, err := scanner.ParseTargets(target)
+	produce, err := loadTargets(s, target)
 	if err != nil {
 		return err
 	}
-	return runScan(ctx, s, "null", scanner.TargetsFromList(hosts))
+	return runScan(ctx, s, "null", produce)
 }
 
 func ExecuteGuest(ctx context.Context, s *scanner.Scanner, target, username string) error {
@@ -180,11 +213,11 @@ func ExecuteGuest(ctx context.Context, s *scanner.Scanner, target, username stri
 	}
 	logger.Warnf("Using username for Guest access: %s", s.Options.Username)
 
-	hosts, err := scanner.ParseTargets(target)
+	produce, err := loadTargets(s, target)
 	if err != nil {
 		return err
 	}
-	return runScan(ctx, s, "guest", scanner.TargetsFromList(hosts))
+	return runScan(ctx, s, "guest", produce)
 }
 
 func ExecuteAuth(ctx context.Context, s *scanner.Scanner, target, username, password, hash string, localAuth, kerberos bool, dcHostname string, dcIP net.IP) error {
@@ -239,11 +272,11 @@ func ExecuteAuth(ctx context.Context, s *scanner.Scanner, target, username, pass
 		s.Options.DomainController = dcIP
 	}
 
-	hosts, err := scanner.ParseTargets(target)
+	produce, err := loadTargets(s, target)
 	if err != nil {
 		return err
 	}
-	return runScan(ctx, s, "auth", scanner.TargetsFromList(hosts))
+	return runScan(ctx, s, "auth", produce)
 }
 
 func ExecuteHunt(ctx context.Context, s *scanner.Scanner, username, password, hash string, dc, resolver net.IP, forest, kerberos bool, dcHostname string) error {

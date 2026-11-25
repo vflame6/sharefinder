@@ -13,7 +13,8 @@ type Options struct {
 	Dialer             *Dialer // --proxy, --timeout, --io-timeout
 	Domain             string  // part of --username
 	DomainController   net.IP
-	Exclude            []string // --exclude
+	Exclude            []string   // --exclude
+	ExcludeHosts       *TargetSet // --exclude-hosts
 	FileTXT            *os.File
 	FileXML            *os.File
 	Forest             bool          // --forest (hunt only)

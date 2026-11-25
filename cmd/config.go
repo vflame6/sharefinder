@@ -19,7 +19,8 @@ type Config struct {
 	SmbPort   int           // --smb-port
 	Proxy     string        // --proxy
 
-	Exclude string // --exclude
-	List    bool   // --list
-	Recurse bool   // --recurse
+	Exclude      string // --exclude
+	ExcludeHosts string // --exclude-hosts
+	List         bool   // --list
+	Recurse      bool   // --recurse
 }

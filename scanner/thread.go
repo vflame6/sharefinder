@@ -14,7 +14,7 @@ func enumerateHost(ctx context.Context, host DNHost, options *Options) (Host, er
 	var shareResult []Share
 
 	// get an SMB connection with NTLM authentication method
-	logger.Debugf("Trying to establish SMB connection to %s (%s)", host.IP.String(), host.Hostname)
+	logger.Debugf("Trying to establish SMB connection to %s (%s)", host.Address(), host.Hostname)
 	conn, err := NewSMBConnection(ctx, host, options)
 	if err != nil {
 		return hostResult, err
@@ -26,11 +26,11 @@ func enumerateHost(ctx context.Context, host DNHost, options *Options) (Host, er
 	if !conn.session.IsAuthenticated() {
 		return hostResult, fmt.Errorf("not authenticated status on host %s after successful connection", host)
 	}
-	logger.Debugf("Successfully established SMB connection to %s (%s)", host.IP.String(), host.Hostname)
+	logger.Debugf("Successfully established SMB connection to %s (%s)", host.Address(), host.Hostname)
 
 	// get base info about connected target
 	targetInfo := conn.GetTargetInfo()
-	hostResult.IP = host.IP.String()
+	hostResult.IP = host.Address()
 	hostResult.Time = time.Now()
 	hostResult.Version = "unknown"
 	if targetInfo != nil {
@@ -49,13 +49,13 @@ func enumerateHost(ctx context.Context, host DNHost, options *Options) (Host, er
 		isAdmin, adminErr := conn.CheckLocalAdmin()
 		if adminErr != nil {
 			// Access-denied is the common, expected case for non-admin sessions; keep it debug-only.
-			logger.Debugf("Failed to determine local admin rights on %s: %v", host.IP.String(), adminErr)
+			logger.Debugf("Failed to determine local admin rights on %s: %v", host.Address(), adminErr)
 		} else {
 			hostResult.Admin = &isAdmin
 			if isAdmin {
 				version, versionErr := conn.DetectWindowsVersion(hostResult.Version)
 				if versionErr != nil {
-					logger.Debugf("Failed to query registry version on %s: %v", host.IP.String(), versionErr)
+					logger.Debugf("Failed to query registry version on %s: %v", host.Address(), versionErr)
 				} else {
 					hostResult.Version = version
 				}
@@ -64,12 +64,12 @@ func enumerateHost(ctx context.Context, host DNHost, options *Options) (Host, er
 	}
 
 	// get a list of shares
-	logger.Debugf("Trying to list shares on %s (%s)", host.IP.String(), host.Hostname)
+	logger.Debugf("Trying to list shares on %s (%s)", host.Address(), host.Hostname)
 	shares, err := conn.GetSharesList()
 	if err != nil {
 		return hostResult, err
 	}
-	logger.Debugf("Successfully listed shares on %s (%s)", host.IP.String(), host.Hostname)
+	logger.Debugf("Successfully listed shares on %s (%s)", host.Address(), host.Hostname)
 
 	// get permissions on shares
 	for _, share := range shares {
@@ -166,13 +166,26 @@ func enumerateHost(ctx context.Context, host DNHost, options *Options) (Host, er
 func (s *Scanner) scanHost(ctx context.Context, host DNHost) {
 	options := s.Options
 
+	// resolve hostnames, apply --exclude-hosts and skip duplicates
+	host, ok, err := s.resolveTarget(ctx, host)
+	if err != nil {
+		if ctx.Err() == nil {
+			logger.Error(err)
+		}
+		return
+	}
+	if !ok {
+		logger.Debugf("Skipping %s: excluded or already scanned", host.Address())
+		return
+	}
+
 	// enumerate the host. Will receive the Host struct or an error
 	hostResult, enumErr := enumerateHost(ctx, host, options)
 
 	// failed on authentication
 	if hostResult.IP == "" {
 		if ctx.Err() == nil {
-			logger.Error(fmt.Errorf("error during authentication on %s: %v", host.IP, enumErr))
+			logger.Error(fmt.Errorf("error during authentication on %s: %v", host.Address(), enumErr))
 		}
 		return
 	}
@@ -204,6 +217,6 @@ func (s *Scanner) scanHost(ctx context.Context, host DNHost) {
 
 	// got an error during shares enumeration
 	if enumErr != nil && ctx.Err() == nil {
-		logger.Error(fmt.Errorf("error during shares enumeration on %s: %v", host.IP, enumErr))
+		logger.Error(fmt.Errorf("error during shares enumeration on %s: %v", host.Address(), enumErr))
 	}
 }
