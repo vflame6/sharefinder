@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"github.com/vflame6/sharefinder/logger"
@@ -19,7 +20,8 @@ type Scanner struct {
 	TimeStart   time.Time
 	TimeEnd     time.Time
 	Threads     int
-	Stop        chan bool
+
+	closeOnce sync.Once
 }
 
 type DNHost struct {
@@ -34,12 +36,20 @@ func NewScanner(options *Options, commandLine []string, timeStart time.Time, thr
 		CommandLine: commandLine,
 		TimeStart:   timeStart,
 		Threads:     threads,
-		Stop:        make(chan bool),
 	}
 }
 
-// CloseOutputter is a function to close output files channels
+// CloseOutputter terminates and closes the output files and renders the HTML
+// report. It runs once: the normal exit path and the interrupt path may both
+// call it.
 func (s *Scanner) CloseOutputter() {
+	s.closeOnce.Do(s.closeOutputs)
+}
+
+func (s *Scanner) closeOutputs() {
+	if s.TimeEnd.IsZero() {
+		s.TimeEnd = time.Now()
+	}
 	if s.Options.FileTXT != nil {
 		_ = s.Options.FileTXT.Close()
 	}
@@ -64,88 +74,64 @@ func (s *Scanner) CloseOutputter() {
 	}
 }
 
-// ParseTargets function used to parse IP-address, IP-range or file and pass them in targets channel
-func (s *Scanner) ParseTargets(target string) error {
-	var targets []string
+// ParseTargets parses an IP address, IP range, CIDR or a file with one of
+// those per line. The whole input is validated before any host is returned.
+func ParseTargets(target string) ([]DNHost, error) {
+	var lines []string
 
-	// check if the file with specified name is NOT available
 	if _, err := os.Stat(target); errors.Is(err, os.ErrNotExist) {
-		// target file does not exist
-		// try to parse specified string as IP/CIDR
-		targets, err = ParseIPOrCIDR(target)
+		// not a file: parse the argument itself
+		lines = []string{target}
+	} else {
+		file, err := os.Open(target)
 		if err != nil {
-			return err
+			return nil, err
 		}
-
-		// pass to targets channel
-		for _, t := range targets {
-			dnHost := &DNHost{
-				Hostname: "",
-				IP:       net.ParseIP(t),
+		defer func() {
+			if err := file.Close(); err != nil {
+				logger.Error(err)
 			}
-			s.Options.Target <- *dnHost
+		}()
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			if line := strings.TrimSpace(scanner.Text()); line != "" {
+				lines = append(lines, line)
+			}
 		}
-		// close the channel if targets are over
-		close(s.Options.Target)
+		if err := scanner.Err(); err != nil {
+			return nil, err
+		}
+	}
+
+	var hosts []DNHost
+	for _, line := range lines {
+		targets, err := ParseIPOrCIDR(line)
+		if err != nil {
+			return nil, err
+		}
+		for _, t := range targets {
+			hosts = append(hosts, DNHost{IP: net.ParseIP(t)})
+		}
+	}
+	return hosts, nil
+}
+
+// TargetsFromList returns a Producer that sends hosts in order.
+func TargetsFromList(hosts []DNHost) Producer {
+	return func(ctx context.Context, out chan<- DNHost) error {
+		for _, h := range hosts {
+			select {
+			case <-ctx.Done():
+				return context.Cause(ctx)
+			case out <- h:
+			}
+		}
 		return nil
-	}
-
-	// if the file is available, read it and then parse it
-	file, err := os.Open(target)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			logger.Error(err)
-		}
-	}()
-
-	// scan the file
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		// skip empty line
-		line := strings.TrimSpace(scanner.Text())
-		if len(line) == 0 {
-			continue
-		}
-
-		// try to parse specified string as IP/CIDR
-		targets, err = ParseIPOrCIDR(line)
-		if err != nil {
-			return err
-		}
-		for _, t := range targets {
-			dnHost := &DNHost{
-				Hostname: "",
-				IP:       net.ParseIP(t),
-			}
-			s.Options.Target <- *dnHost
-		}
-	}
-	// close the channel if targets are over
-	close(s.Options.Target)
-	return nil
-}
-
-// ParseTargetsInMemory is used to parse a list of targets and pass them in targets list
-func (s *Scanner) ParseTargetsInMemory(targets []DNHost) {
-	for _, target := range targets {
-		s.Options.Target <- target
-	}
-	close(s.Options.Target)
-}
-
-// RunSMBEnumeration is executed by auth command
-func (s *Scanner) RunSMBEnumeration(wg *sync.WaitGroup) {
-	for i := 0; i < s.Threads; i++ {
-		wg.Add(1)
-		go smbThread(s.Stop, s.Options, wg)
 	}
 }
 
 // RunEnumerateDomainComputers is executed by hunt command to get a list of hosts
-func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
+func (s *Scanner) RunEnumerateDomainComputers(ctx context.Context) ([]DNHost, error) {
 	// Regular LDAP for forest discovery: the GC's partial attribute set excludes
 	// crossRef.systemFlags, so a config-NC crossRef search on 3268 returns 0 hits.
 	ldapConn, err := NewLDAPConnection(
@@ -234,7 +220,7 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 		if err != nil && isLDAPReferral(err) {
 			// Referral-chase fallback: connect directly to a DC of the referred domain.
 			logger.Warnf("Domain %s referred — chasing via direct DC connection", searchBase.Name)
-			altConn, dialErr := s.dialDCForDomain(searchBase.Name, &r, resolver)
+			altConn, dialErr := s.dialDCForDomain(ctx, searchBase.Name, &r, resolver)
 			if dialErr != nil {
 				logger.Warnf("Skipping domain %s: %v", searchBase.Name, dialErr)
 				continue
@@ -255,15 +241,15 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 		if i == 0 {
 			testEntry := sr.Entries[0].GetAttributeValue("dNSHostName")
 			if s.Options.Dialer.Proxied() {
-				_, err = r.LookupHost(testEntry)
+				_, err = r.LookupHost(ctx, testEntry)
 				if err != nil {
 					return nil, err
 				}
 			} else {
-				_, err = r.LookupHost(testEntry)
+				_, err = r.LookupHost(ctx, testEntry)
 				if err != nil {
 					r = NewResolver("tcp", resolver, s.Options.Timeout, nil)
-					_, err = r.LookupHost(testEntry)
+					_, err = r.LookupHost(ctx, testEntry)
 					if err != nil {
 						return nil, err
 					}
@@ -272,12 +258,15 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 		}
 
 		for _, entry := range sr.Entries {
+			if ctx.Err() != nil {
+				return nil, context.Cause(ctx)
+			}
 			hostname := entry.GetAttributeValue("dNSHostName")
 			if hostname == "" {
 				continue
 			}
 
-			possibleTarget, err := r.LookupHost(hostname)
+			possibleTarget, err := r.LookupHost(ctx, hostname)
 			if err != nil {
 				logger.Debug(err.Error())
 				continue
@@ -304,11 +293,11 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 // AD-integrated DNS registers the domain name itself as A records for every DC,
 // so a plain host lookup yields a usable target. The resolver pointer is updated
 // in-place if a UDP→TCP retry succeeds, mirroring the test-entry validation below.
-func (s *Scanner) dialDCForDomain(domainName string, r **Resolver, resolverIP net.IP) (*LDAPConnection, error) {
-	ip, err := (*r).LookupHost(domainName)
+func (s *Scanner) dialDCForDomain(ctx context.Context, domainName string, r **Resolver, resolverIP net.IP) (*LDAPConnection, error) {
+	ip, err := (*r).LookupHost(ctx, domainName)
 	if err != nil && !s.Options.Dialer.Proxied() {
 		tcpResolver := NewResolver("tcp", resolverIP, s.Options.Timeout, nil)
-		if ip2, err2 := tcpResolver.LookupHost(domainName); err2 == nil {
+		if ip2, err2 := tcpResolver.LookupHost(ctx, domainName); err2 == nil {
 			ip, err = ip2, nil
 			*r = tcpResolver
 		}
@@ -322,7 +311,7 @@ func (s *Scanner) dialDCForDomain(domainName string, r **Resolver, resolverIP ne
 		// Kerberos SPN must match the alt DC's hostname; reverse-resolve the IP.
 		// Cross-realm Kerberos may still fail downstream — the in-memory krb5 config
 		// has only the user's realm — but failing fast here gives a clearer error.
-		names, rerr := net.LookupAddr(ip.String())
+		names, rerr := net.DefaultResolver.LookupAddr(ctx, ip.String())
 		if rerr != nil || len(names) == 0 {
 			return nil, fmt.Errorf("kerberos referral fallback to %s requires reverse-DNS for SPN: %v", ip, rerr)
 		}
@@ -362,12 +351,4 @@ func (s *Scanner) OutputHTML(data []byte) error {
 	}
 
 	return nil
-}
-
-// Shutdown is a function to stop the scan by external caller
-func (s *Scanner) Shutdown() {
-	for i := 0; i < s.Threads; i++ {
-		s.Stop <- true
-	}
-	close(s.Stop)
 }

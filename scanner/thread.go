@@ -6,17 +6,16 @@ import (
 	"github.com/vflame6/sharefinder/logger"
 	"github.com/vflame6/sharefinder/utils"
 	"slices"
-	"sync"
 	"time"
 )
 
-func enumerateHost(host DNHost, options *Options) (Host, error) {
+func enumerateHost(ctx context.Context, host DNHost, options *Options) (Host, error) {
 	var hostResult Host
 	var shareResult []Share
 
 	// get an SMB connection with NTLM authentication method
 	logger.Debugf("Trying to establish SMB connection to %s (%s)", host.IP.String(), host.Hostname)
-	conn, err := NewSMBConnection(context.Background(), host, options)
+	conn, err := NewSMBConnection(ctx, host, options)
 	if err != nil {
 		return hostResult, err
 	}
@@ -74,6 +73,9 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 
 	// get permissions on shares
 	for _, share := range shares {
+		if ctx.Err() != nil {
+			break
+		}
 		// check if share is in exclude list
 		if slices.Contains(options.Exclude, share.Name) {
 			continue
@@ -98,6 +100,9 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 	// list share if such option is specified
 	if options.List {
 		for i := 0; i < len(shareResult); i++ {
+			if ctx.Err() != nil {
+				break
+			}
 			// skip share if no read permission
 			if !shareResult[i].ReadPermission {
 				continue
@@ -154,66 +159,51 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 	return hostResult, nil
 }
 
-func smbThread(s <-chan bool, options *Options, wg *sync.WaitGroup) {
-	// reduce the number of WaitGroup after returning from function
-	defer wg.Done()
+// scanHost enumerates one target, prints its results and writes them to the
+// output files. After cancellation the partial results are still written, but
+// per-host errors, which then only reflect the closed connections, are not
+// reported.
+func (s *Scanner) scanHost(ctx context.Context, host DNHost) {
+	options := s.Options
 
-	for {
-		select {
-		case <-s:
-			// stop if the stop channel is closed
-			return
-		default:
-			// receive a target from target channel
-			host, ok := <-options.Target
-			if !ok {
-				// stop if the target list is over
-				return
-			}
+	// enumerate the host. Will receive the Host struct or an error
+	hostResult, enumErr := enumerateHost(ctx, host, options)
 
-			// enumerate the host. Will receive the Host struct or an error
-			hostResult, err := enumerateHost(host, options)
-
-			// failed on authentication
-			if hostResult.IP == "" {
-				logger.Error(fmt.Errorf("error during authentication on %s: %v", host.IP, err))
-				continue
-			}
-
-			// format and print results on enumerated host
-			printResult := SPrintHostInfoWithAdmin(hostResult.IP, hostResult.Version, hostResult.Hostname, hostResult.Domain, hostResult.Signing, hostResult.Admin)
-			if len(hostResult.Shares) > 0 {
-				printResult += SprintHost(hostResult, options.Exclude)
-
-				if options.List {
-					printResult += SprintShares(hostResult, options.Exclude)
-				}
-			}
-			logger.Info(printResult)
-
-			// write results to a file if such option is specified
-			if options.FileTXT != nil {
-				// try to write raw version
-				logger.Debugf("Writing the results in raw format to %s", options.OutputRawFileName)
-				err = options.Writer.Write(printResult, options.FileTXT)
-				if err != nil {
-					logger.Error(err)
-				}
-			}
-			if options.FileXML != nil {
-				// try to write XML version
-				logger.Debugf("Writing the results in XML format to %s", options.OutputXMLFileName)
-				err = options.Writer.WriteXMLHost(hostResult, options.FileXML)
-				if err != nil {
-					logger.Error(err)
-				}
-			}
-
-			// got an error during shares enumeration
-			if err != nil {
-				logger.Error(fmt.Errorf("error during shares enumeration on %s: %v", host.IP, err))
-				continue
-			}
+	// failed on authentication
+	if hostResult.IP == "" {
+		if ctx.Err() == nil {
+			logger.Error(fmt.Errorf("error during authentication on %s: %v", host.IP, enumErr))
 		}
+		return
+	}
+
+	// format and print results on enumerated host
+	printResult := SPrintHostInfoWithAdmin(hostResult.IP, hostResult.Version, hostResult.Hostname, hostResult.Domain, hostResult.Signing, hostResult.Admin)
+	if len(hostResult.Shares) > 0 {
+		printResult += SprintHost(hostResult, options.Exclude)
+
+		if options.List {
+			printResult += SprintShares(hostResult, options.Exclude)
+		}
+	}
+	logger.Info(printResult)
+
+	// write results to a file if such option is specified
+	if options.FileTXT != nil {
+		logger.Debugf("Writing the results in raw format to %s", options.OutputRawFileName)
+		if err := options.Writer.Write(printResult, options.FileTXT); err != nil {
+			logger.Error(err)
+		}
+	}
+	if options.FileXML != nil {
+		logger.Debugf("Writing the results in XML format to %s", options.OutputXMLFileName)
+		if err := options.Writer.WriteXMLHost(hostResult, options.FileXML); err != nil {
+			logger.Error(err)
+		}
+	}
+
+	// got an error during shares enumeration
+	if enumErr != nil && ctx.Err() == nil {
+		logger.Error(fmt.Errorf("error during shares enumeration on %s: %v", host.IP, enumErr))
 	}
 }

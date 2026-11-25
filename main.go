@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/vflame6/sharefinder/cmd"
 	"github.com/vflame6/sharefinder/logger"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -118,29 +120,44 @@ func main() {
 		logger.Fatal(err)
 	}
 
-	// set up graceful shutdown on Ctrl+C
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	// Ctrl+C or SIGTERM cancels ctx: every open connection is closed, workers
+	// stop, and the outputs are terminated below. After the first signal the
+	// default handler is restored, so a second Ctrl+C exits immediately.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	var finished atomic.Bool
 	go func() {
-		<-sigChan
-		logger.Warn("Interrupt received, shutting down...")
-		scanner.Shutdown()
-		scanner.CloseOutputter()
-		os.Exit(1)
+		<-ctx.Done()
+		if finished.Load() {
+			return
+		}
+		stop()
+		logger.Warn("Interrupt received: stopping and writing partial results (press Ctrl+C again to exit immediately)")
 	}()
+	// Unblock any phase (LDAP, DNS, SMB) that is waiting on the network.
+	context.AfterFunc(ctx, scanner.Options.Dialer.CloseAll)
 
 	// execute specified command
 	if command == nullCommand.FullCommand() {
-		err = cmd.ExecuteNull(scanner, *nullTargetArg)
+		err = cmd.ExecuteNull(ctx, scanner, *nullTargetArg)
 	}
 	if command == guestCommand.FullCommand() {
-		err = cmd.ExecuteGuest(scanner, *guestTargetArg, *guestUsernameFlag)
+		err = cmd.ExecuteGuest(ctx, scanner, *guestTargetArg, *guestUsernameFlag)
 	}
 	if command == authCommand.FullCommand() {
-		err = cmd.ExecuteAuth(scanner, *authTargetArg, *authUsernameFlag, *authPasswordFlag, *authHashFlag, *authLocalAuthFlag, *authKerberosFlag, *authDcHostnameFlag, *authDcIPFlag)
+		err = cmd.ExecuteAuth(ctx, scanner, *authTargetArg, *authUsernameFlag, *authPasswordFlag, *authHashFlag, *authLocalAuthFlag, *authKerberosFlag, *authDcHostnameFlag, *authDcIPFlag)
 	}
 	if command == huntCommand.FullCommand() {
-		err = cmd.ExecuteHunt(scanner, *huntUsernameFlag, *huntPasswordFlag, *huntHashFlag, *huntDcArg, *huntResolverFlag, *huntForestFlag, *huntKerberosFlag, *huntDcHostnameFlag)
+		err = cmd.ExecuteHunt(ctx, scanner, *huntUsernameFlag, *huntPasswordFlag, *huntHashFlag, *huntDcArg, *huntResolverFlag, *huntForestFlag, *huntKerberosFlag, *huntDcHostnameFlag)
+	}
+	interrupted := ctx.Err() != nil
+	finished.Store(true)
+	stop()
+
+	// terminate and close every output file, also after an interrupt
+	scanner.CloseOutputter()
+
+	if interrupted {
+		os.Exit(130)
 	}
 	if err != nil {
 		logger.Fatal(err)

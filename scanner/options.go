@@ -28,10 +28,9 @@ type Options struct {
 	OutputXMLFileName  string
 	OutputHTML         bool // --html
 	OutputHTMLFileName string
-	Password           string // --password
-	Recurse            bool   // --recurse
-	SmbPort            int    // --smb-port
-	Target             chan DNHost
+	Password           string        // --password
+	Recurse            bool          // --recurse
+	SmbPort            int           // --smb-port
 	Timeout            time.Duration // --timeout
 	Username           string        // part of --username
 	Writer             *OutputWriter

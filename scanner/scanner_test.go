@@ -386,9 +386,7 @@ func TestSprintFiles(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestNewScanner(t *testing.T) {
-	opts := &Options{
-		Target: make(chan DNHost),
-	}
+	opts := &Options{}
 	cmdLine := []string{"sharefinder", "auth", "-t", "10.0.0.1"}
 	ts := time.Now()
 
@@ -406,13 +404,6 @@ func TestNewScanner(t *testing.T) {
 	if !s.TimeStart.Equal(ts) {
 		t.Errorf("TimeStart mismatch")
 	}
-	if s.Stop == nil {
-		t.Error("Stop channel not initialized")
-	}
-
-	// Verify Stop channel is usable (non-nil, unbuffered)
-	go func() { s.Stop <- true }()
-	<-s.Stop
 }
 
 // ---------------------------------------------------------------------------
@@ -420,19 +411,9 @@ func TestNewScanner(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestParseTargets_IPString(t *testing.T) {
-	opts := &Options{
-		Target: make(chan DNHost, 10),
-	}
-	s := NewScanner(opts, nil, time.Now(), 1)
-
-	err := s.ParseTargets("192.168.1.1")
+	hosts, err := ParseTargets("192.168.1.1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var hosts []DNHost
-	for h := range opts.Target {
-		hosts = append(hosts, h)
 	}
 	if len(hosts) != 1 {
 		t.Fatalf("expected 1 host, got %d", len(hosts))
@@ -453,19 +434,9 @@ func TestParseTargets_FromFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	opts := &Options{
-		Target: make(chan DNHost, 10),
-	}
-	s := NewScanner(opts, nil, time.Now(), 1)
-
-	err := s.ParseTargets(fpath)
+	hosts, err := ParseTargets(fpath)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var hosts []DNHost
-	for h := range opts.Target {
-		hosts = append(hosts, h)
 	}
 	if len(hosts) != 3 {
 		t.Fatalf("expected 3 hosts, got %d", len(hosts))
@@ -480,19 +451,9 @@ func TestParseTargets_FileWithEmptyLines(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	opts := &Options{
-		Target: make(chan DNHost, 10),
-	}
-	s := NewScanner(opts, nil, time.Now(), 1)
-
-	err := s.ParseTargets(fpath)
+	hosts, err := ParseTargets(fpath)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var hosts []DNHost
-	for h := range opts.Target {
-		hosts = append(hosts, h)
 	}
 	if len(hosts) != 3 {
 		t.Fatalf("expected 3 hosts (empty lines skipped), got %d", len(hosts))
@@ -500,13 +461,7 @@ func TestParseTargets_FileWithEmptyLines(t *testing.T) {
 }
 
 func TestParseTargets_NonexistentFileInvalidIP(t *testing.T) {
-	opts := &Options{
-		Target: make(chan DNHost, 10),
-	}
-	s := NewScanner(opts, nil, time.Now(), 1)
-
-	err := s.ParseTargets("not-a-real-file-or-ip")
-	if err == nil {
+	if _, err := ParseTargets("not-a-real-file-or-ip"); err == nil {
 		t.Fatal("expected error for nonexistent file + invalid IP")
 	}
 }
@@ -519,21 +474,22 @@ func TestParseTargets_CIDRFromFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	opts := &Options{
-		Target: make(chan DNHost, 10),
-	}
-	s := NewScanner(opts, nil, time.Now(), 1)
-
-	err := s.ParseTargets(fpath)
+	hosts, err := ParseTargets(fpath)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
-	var hosts []DNHost
-	for h := range opts.Target {
-		hosts = append(hosts, h)
-	}
 	if len(hosts) != 2 {
 		t.Fatalf("expected 2 hosts from /30 CIDR, got %d", len(hosts))
+	}
+}
+
+func TestParseTargets_InvalidLineRejectsWholeFile(t *testing.T) {
+	dir := t.TempDir()
+	fpath := filepath.Join(dir, "targets.txt")
+	if err := os.WriteFile(fpath, []byte("10.0.0.1\nnot an ip\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if hosts, err := ParseTargets(fpath); err == nil {
+		t.Fatalf("expected an error, got %d hosts", len(hosts))
 	}
 }

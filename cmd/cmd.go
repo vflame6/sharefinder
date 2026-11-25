@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"github.com/vflame6/sharefinder/logger"
@@ -9,7 +10,6 @@ import (
 	"net"
 	"os"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -133,7 +133,6 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		Password:           "",
 		Recurse:            cfg.Recurse,
 		SmbPort:            cfg.SmbPort,
-		Target:             make(chan scanner.DNHost, 256),
 		Timeout:            cfg.Timeout,
 		Username:           "",
 		Writer:             outputWriter,
@@ -144,28 +143,32 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 	return s, nil
 }
 
-func ExecuteNull(s *scanner.Scanner, target string) error {
+// runScan enumerates the hosts produce sends and logs how the module ended.
+func runScan(ctx context.Context, s *scanner.Scanner, module string, produce scanner.Producer) error {
+	err := s.Run(ctx, produce)
+	s.TimeEnd = time.Now()
+	if ctx.Err() != nil {
+		logger.Warnf("Stopped %s module at %s", module, s.TimeEnd.Format("02/01/2006 15:04:05"))
+		return err
+	}
+	logger.Warnf("Finished executing %s module at %s", module, s.TimeEnd.Format("02/01/2006 15:04:05"))
+	return err
+}
+
+func ExecuteNull(ctx context.Context, s *scanner.Scanner, target string) error {
 	logger.Warn("Executing null module")
 
 	// configure options to use null session
 	s.Options.NullSession = true
 
-	var wg sync.WaitGroup
-	s.RunSMBEnumeration(&wg)
-	err := s.ParseTargets(target)
+	hosts, err := scanner.ParseTargets(target)
 	if err != nil {
 		return err
 	}
-	wg.Wait()
-
-	// finish the execution
-	s.TimeEnd = time.Now()
-	logger.Warnf("Finished executing null module at %s", s.TimeEnd.Format("02/01/2006 15:04:05"))
-	s.CloseOutputter()
-	return nil
+	return runScan(ctx, s, "null", scanner.TargetsFromList(hosts))
 }
 
-func ExecuteGuest(s *scanner.Scanner, target, username string) error {
+func ExecuteGuest(ctx context.Context, s *scanner.Scanner, target, username string) error {
 	logger.Warn("Executing guest module")
 
 	if username != "" {
@@ -177,22 +180,14 @@ func ExecuteGuest(s *scanner.Scanner, target, username string) error {
 	}
 	logger.Warnf("Using username for Guest access: %s", s.Options.Username)
 
-	var wg sync.WaitGroup
-	s.RunSMBEnumeration(&wg)
-	err := s.ParseTargets(target)
+	hosts, err := scanner.ParseTargets(target)
 	if err != nil {
 		return err
 	}
-	wg.Wait()
-
-	// finish the execution
-	s.TimeEnd = time.Now()
-	logger.Warnf("Finished executing anon module at %s", s.TimeEnd.Format("02/01/2006 15:04:05"))
-	s.CloseOutputter()
-	return nil
+	return runScan(ctx, s, "guest", scanner.TargetsFromList(hosts))
 }
 
-func ExecuteAuth(s *scanner.Scanner, target, username, password, hash string, localAuth, kerberos bool, dcHostname string, dcIP net.IP) error {
+func ExecuteAuth(ctx context.Context, s *scanner.Scanner, target, username, password, hash string, localAuth, kerberos bool, dcHostname string, dcIP net.IP) error {
 	var targetDomain string
 	var targetUsername string
 	var err error
@@ -244,25 +239,14 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password, hash string, lo
 		s.Options.DomainController = dcIP
 	}
 
-	var wg sync.WaitGroup
-
-	// run the enumeration threads
-	s.RunSMBEnumeration(&wg)
-	// parse targets and send them to targets channel
-	err = s.ParseTargets(target)
+	hosts, err := scanner.ParseTargets(target)
 	if err != nil {
 		return err
 	}
-	wg.Wait()
-
-	// finish the execution
-	s.TimeEnd = time.Now()
-	logger.Warnf("Finished executing auth module at %s", s.TimeEnd.Format("02/01/2006 15:04:05"))
-	s.CloseOutputter()
-	return nil
+	return runScan(ctx, s, "auth", scanner.TargetsFromList(hosts))
 }
 
-func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolver net.IP, forest, kerberos bool, dcHostname string) error {
+func ExecuteHunt(ctx context.Context, s *scanner.Scanner, username, password, hash string, dc, resolver net.IP, forest, kerberos bool, dcHostname string) error {
 	var targetDomain string
 	var targetUsername string
 	var err error
@@ -309,8 +293,6 @@ func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolv
 	s.Options.CustomResolver = resolver
 	s.Options.Forest = forest
 
-	var wg sync.WaitGroup
-
 	if s.Options.Forest {
 		logger.Warnf("Starting forest-wide enumeration from %s", s.Options.Domain)
 	} else {
@@ -318,22 +300,12 @@ func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolv
 	}
 
 	// enumerate possible targets via domain controller
-	possibleTargets, err := s.RunEnumerateDomainComputers()
+	possibleTargets, err := s.RunEnumerateDomainComputers(ctx)
 	if err != nil {
 		return err
 	}
 
 	logger.Warnf("Found %d domain computers. Starting SMB shares enumeration...", len(possibleTargets))
 
-	// check for shares and permissions on identified targets
-	s.RunSMBEnumeration(&wg)
-	// send identified targets for processing channel
-	s.ParseTargetsInMemory(possibleTargets)
-	wg.Wait()
-
-	// finish the execution
-	s.TimeEnd = time.Now()
-	logger.Warnf("Finished executing hunt module at %s", s.TimeEnd.Format("02/01/2006 15:04:05"))
-	s.CloseOutputter()
-	return nil
+	return runScan(ctx, s, "hunt", scanner.TargetsFromList(possibleTargets))
 }

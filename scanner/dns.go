@@ -31,8 +31,8 @@ func NewResolver(protocol string, resolverIP net.IP, timeout time.Duration, dial
 }
 
 // LookupHost resolves a hostname to its first valid IP
-func (r *Resolver) LookupHost(host string) (net.IP, error) {
-	ips, err := r.resolver.LookupHost(context.Background(), host)
+func (r *Resolver) LookupHost(ctx context.Context, host string) (net.IP, error) {
+	ips, err := r.resolver.LookupHost(ctx, host)
 	if err != nil {
 		return nil, err
 	}
