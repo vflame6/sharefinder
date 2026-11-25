@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"fmt"
 	"github.com/jfjallid/go-smb/dcerpc"
 	"github.com/jfjallid/go-smb/dcerpc/msrrp"
@@ -11,11 +12,9 @@ import (
 	"github.com/jfjallid/go-smb/spnego"
 	"github.com/vflame6/sharefinder/logger"
 	"github.com/vflame6/sharefinder/utils"
-	"golang.org/x/net/proxy"
 	"io"
 	"net"
 	"strings"
-	"time"
 )
 
 type Connection struct {
@@ -29,8 +28,10 @@ func logCloseError(action string, err error) {
 	}
 }
 
-func NewSMBConnection(host DNHost, username, password string, hashes []byte, kerberos, localAuth bool, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer, dcIP net.IP, nullSession bool, dcHostname string) (*Connection, error) {
-	options := GetSMBOptions(host, username, password, hashes, kerberos, localAuth, domain, timeout, smbPort, proxyDialer, dcIP, nullSession, dcHostname)
+// NewSMBConnection dials host through o.Dialer, negotiates SMB and
+// authenticates with the credentials in o.
+func NewSMBConnection(ctx context.Context, host DNHost, o *Options) (*Connection, error) {
+	options := GetSMBOptions(ctx, host, o)
 
 	// establish the connection
 	session, err := smb.NewConnection(options)
@@ -44,56 +45,63 @@ func NewSMBConnection(host DNHost, username, password string, hashes []byte, ker
 	return conn, nil
 }
 
-func GetSMBOptions(host DNHost, username, password string, hashes []byte, kerberos, localAuth bool, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer, dcIP net.IP, nullSession bool, dcHostname string) smb.Options {
+// GetSMBOptions builds the go-smb options for host from the scanner options.
+// Every connection goes through o.Dialer so that it carries the I/O timeout
+// and can be closed when the scan is cancelled.
+func GetSMBOptions(ctx context.Context, host DNHost, o *Options) smb.Options {
 	smbOptions := smb.Options{
 		Host:                  host.IP.String(),
-		Port:                  smbPort,
+		Port:                  o.SmbPort,
 		RequireMessageSigning: false,
 		ForceSMB2:             false,
-		DialTimeout:           timeout,
-		ProxyDialer:           proxyDialer,
+		DialTimeout:           o.Timeout,
+		ProxyDialer:           o.Dialer,
 	}
 
-	if kerberos {
+	if o.Kerberos {
 		hostname := host.Hostname
 		if hostname == "" {
 			// Kerberos requires a hostname for SPN — attempt reverse DNS lookup
-			names, err := net.LookupAddr(host.IP.String())
+			names, err := net.DefaultResolver.LookupAddr(ctx, host.IP.String())
 			if err == nil && len(names) > 0 {
 				hostname = strings.TrimSuffix(names[0], ".")
 				logger.Debugf("Resolved %s to %s for Kerberos SPN", host.IP.String(), hostname)
-			} else if dcHostname != "" && domain != "" {
+			} else if o.DCHostname != "" && o.Domain != "" {
 				// construct FQDN from dc-hostname + domain when target is the DC itself
-				hostname = dcHostname + "." + domain
+				hostname = o.DCHostname + "." + o.Domain
 				logger.Debugf("Using DC hostname for SPN: %s", hostname)
 			} else {
 				logger.Warnf("Kerberos requires a hostname for SPN but target %s has no hostname — use hunt command or specify target as hostname", host.IP.String())
 			}
 		}
 		var dcIPStr string
-		if dcIP != nil && !dcIP.Equal(net.IPv4zero) {
-			dcIPStr = dcIP.String()
+		if o.DomainController != nil && !o.DomainController.Equal(net.IPv4zero) {
+			dcIPStr = o.DomainController.String()
 		}
-		smbOptions.Initiator = &spnego.KRB5Initiator{
-			Domain:      domain,
-			User:        username,
-			Password:    password,
-			Hash:        hashes,
+		initiator := &spnego.KRB5Initiator{
+			Domain:      o.Domain,
+			User:        o.Username,
+			Password:    o.Password,
+			Hash:        o.HashBytes,
 			AESKey:      nil,
 			SPN:         "cifs/" + hostname,
 			DCIP:        dcIPStr,
-			DialTimeout: timeout,
-			ProxyDialer: proxyDialer,
+			DialTimeout: o.Timeout,
 			Host:        hostname,
 		}
+		// The KDC is reached through the SOCKS proxy only when one is set.
+		if o.Dialer.Proxied() {
+			initiator.ProxyDialer = o.Dialer
+		}
+		smbOptions.Initiator = initiator
 	} else {
 		smbOptions.Initiator = &spnego.NTLMInitiator{
-			Domain:      domain,
-			User:        username,
-			Password:    password,
-			Hash:        hashes,
-			LocalUser:   localAuth,
-			NullSession: nullSession,
+			Domain:      o.Domain,
+			User:        o.Username,
+			Password:    o.Password,
+			Hash:        o.HashBytes,
+			LocalUser:   o.LocalAuth,
+			NullSession: o.NullSession,
 		}
 	}
 

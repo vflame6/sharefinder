@@ -1,7 +1,6 @@
 package scanner
 
 import (
-	"golang.org/x/net/proxy"
 	"net"
 	"os"
 	"time"
@@ -11,14 +10,16 @@ import (
 type Options struct {
 	CustomResolver     net.IP // --resolver
 	DCHostname         string
-	Domain             string // part of --username
+	Dialer             *Dialer // --proxy, --timeout, --io-timeout
+	Domain             string  // part of --username
 	DomainController   net.IP
 	Exclude            []string // --exclude
 	FileTXT            *os.File
 	FileXML            *os.File
-	Forest             bool   // --forest (hunt only)
-	Hash               string // --hashes
-	HashBytes          []byte // --hashes
+	Forest             bool          // --forest (hunt only)
+	Hash               string        // --hashes
+	HashBytes          []byte        // --hashes
+	IOTimeout          time.Duration // --io-timeout
 	Kerberos           bool
 	List               bool // --list
 	LocalAuth          bool // --local-auth
@@ -27,10 +28,9 @@ type Options struct {
 	OutputXMLFileName  string
 	OutputHTML         bool // --html
 	OutputHTMLFileName string
-	Password           string       // --password
-	ProxyDialer        proxy.Dialer // --proxy
-	Recurse            bool         // --recurse
-	SmbPort            int          // --smb-port
+	Password           string // --password
+	Recurse            bool   // --recurse
+	SmbPort            int    // --smb-port
 	Target             chan DNHost
 	Timeout            time.Duration // --timeout
 	Username           string        // part of --username

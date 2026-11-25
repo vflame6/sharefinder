@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"fmt"
 	"github.com/vflame6/sharefinder/logger"
 	"github.com/vflame6/sharefinder/utils"
@@ -15,21 +16,7 @@ func enumerateHost(host DNHost, options *Options) (Host, error) {
 
 	// get an SMB connection with NTLM authentication method
 	logger.Debugf("Trying to establish SMB connection to %s (%s)", host.IP.String(), host.Hostname)
-	conn, err := NewSMBConnection(
-		host,
-		options.Username,
-		options.Password,
-		options.HashBytes,
-		options.Kerberos,
-		options.LocalAuth,
-		options.Domain,
-		options.Timeout,
-		options.SmbPort,
-		options.ProxyDialer,
-		options.DomainController,
-		options.NullSession,
-		options.DCHostname,
-	)
+	conn, err := NewSMBConnection(context.Background(), host, options)
 	if err != nil {
 		return hostResult, err
 	}

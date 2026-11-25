@@ -154,8 +154,7 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 		s.Options.Password,
 		s.Options.Hash,
 		strings.ToLower(s.Options.Domain),
-		s.Options.Timeout,
-		s.Options.ProxyDialer,
+		s.Options.Dialer,
 		s.Options.Kerberos,
 		s.Options.DCHostname,
 		false,
@@ -196,8 +195,7 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 			s.Options.Password,
 			s.Options.Hash,
 			strings.ToLower(s.Options.Domain),
-			s.Options.Timeout,
-			s.Options.ProxyDialer,
+			s.Options.Dialer,
 			s.Options.Kerberos,
 			s.Options.DCHostname,
 			true,
@@ -224,8 +222,8 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 	}
 
 	var r *Resolver
-	if s.Options.ProxyDialer != nil {
-		r = NewResolver("tcp", resolver, s.Options.Timeout, s.Options.ProxyDialer)
+	if s.Options.Dialer.Proxied() {
+		r = NewResolver("tcp", resolver, s.Options.Timeout, s.Options.Dialer)
 	} else {
 		r = NewResolver("udp", resolver, s.Options.Timeout, nil)
 	}
@@ -256,7 +254,7 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 
 		if i == 0 {
 			testEntry := sr.Entries[0].GetAttributeValue("dNSHostName")
-			if s.Options.ProxyDialer != nil {
+			if s.Options.Dialer.Proxied() {
 				_, err = r.LookupHost(testEntry)
 				if err != nil {
 					return nil, err
@@ -308,7 +306,7 @@ func (s *Scanner) RunEnumerateDomainComputers() ([]DNHost, error) {
 // in-place if a UDP→TCP retry succeeds, mirroring the test-entry validation below.
 func (s *Scanner) dialDCForDomain(domainName string, r **Resolver, resolverIP net.IP) (*LDAPConnection, error) {
 	ip, err := (*r).LookupHost(domainName)
-	if err != nil && s.Options.ProxyDialer == nil {
+	if err != nil && !s.Options.Dialer.Proxied() {
 		tcpResolver := NewResolver("tcp", resolverIP, s.Options.Timeout, nil)
 		if ip2, err2 := tcpResolver.LookupHost(domainName); err2 == nil {
 			ip, err = ip2, nil
@@ -337,8 +335,7 @@ func (s *Scanner) dialDCForDomain(domainName string, r **Resolver, resolverIP ne
 		s.Options.Password,
 		s.Options.Hash,
 		strings.ToLower(s.Options.Domain),
-		s.Options.Timeout,
-		s.Options.ProxyDialer,
+		s.Options.Dialer,
 		s.Options.Kerberos,
 		dcHostname,
 		false,

@@ -6,45 +6,51 @@ import (
 	"github.com/vflame6/sharefinder/logger"
 	"github.com/vflame6/sharefinder/scanner"
 	"github.com/vflame6/sharefinder/utils"
-	"golang.org/x/net/proxy"
 	"net"
-	"net/url"
 	"os"
 	"strings"
 	"sync"
 	"time"
 )
 
-func CreateScanner(version string, commandLine []string, timeStart time.Time, outputRaw, outputXML, outputAll string, outputHTML bool, threads int, timeout time.Duration, exclude string, list, recurse bool, smbPort int, proxyStr string) (*scanner.Scanner, error) {
+// CreateScanner validates the global options, opens the requested output
+// files and returns a scanner without credentials; commands add those.
+func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 	var outputRawFileName string
 	var outputXMLFileName string
 	var outputHTMLFileName string
-	var outputWriter *scanner.OutputWriter
 	var file *os.File
 	var fileXML *os.File
 	var err error
-	var proxyDialer proxy.Dialer
+
+	outputHTML := cfg.OutputHTML
 
 	// HTML output is available only if basic output is specified
 	// it is done like that because HTML file is generated based on generated XML
-	if outputHTML && outputXML == "" {
+	if outputHTML && cfg.OutputXML == "" {
 		return nil, errors.New("cannot use --html without --output-xml")
 	}
 
-	if (outputXML != "" || outputRaw != "" || outputHTML) && outputAll != "" {
+	if (cfg.OutputXML != "" || cfg.OutputRaw != "" || outputHTML) && cfg.OutputAll != "" {
 		return nil, errors.New("cannot use --output-all with --output-raw, --output-xml or --html")
 	}
 
 	// recursive output is available only if the list option is specified
 	// it is done like that just to make the execution clear and avoid user mistakes
-	if recurse && !list {
+	if cfg.Recurse && !cfg.List {
 		return nil, errors.New("cannot use --recurse without --list")
 	}
 
-	outputWriter = scanner.NewOutputWriter()
-	if outputRaw != "" {
-		// trim suffix of output filename if it matches with txt/xml/html
-		outputRawFileName = outputRaw + ".txt"
+	// every SMB, LDAP and proxied DNS connection goes through this dialer: it
+	// applies the connect and I/O timeouts and can close everything on Ctrl+C
+	dialer, err := scanner.NewDialer(cfg.Proxy, cfg.Timeout, cfg.IOTimeout)
+	if err != nil {
+		return nil, err
+	}
+
+	outputWriter := scanner.NewOutputWriter()
+	if cfg.OutputRaw != "" {
+		outputRawFileName = cfg.OutputRaw + ".txt"
 		logger.Debugf("Output in Raw format option is specified. Output file name: %s", outputRawFileName)
 
 		// create raw text output file
@@ -54,9 +60,8 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 		}
 	}
 
-	if outputXML != "" {
-		// trim suffix of output filename if it matches with txt/xml/html
-		outputXMLFileName = outputXML + ".xml"
+	if cfg.OutputXML != "" {
+		outputXMLFileName = cfg.OutputXML + ".xml"
 		logger.Debugf("Output in XML format option is specified. Output file name: %s", outputXMLFileName)
 
 		// create XML output file and write an XML header line to it
@@ -64,25 +69,24 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 		if err != nil {
 			return nil, err
 		}
-		err = outputWriter.WriteXMLHeader(version, commandLine, timeStart, fileXML)
+		err = outputWriter.WriteXMLHeader(cfg.Version, cfg.CommandLine, cfg.TimeStart, fileXML)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	if outputHTML {
-		outputHTMLFileName = outputXML + ".html"
+		outputHTMLFileName = cfg.OutputXML + ".html"
 	}
 
-	if outputAll != "" {
-		logger.Debugf("Output all formats option is specified. Output file name: %s", outputAll)
+	if cfg.OutputAll != "" {
+		logger.Debugf("Output all formats option is specified. Output file name: %s", cfg.OutputAll)
 
 		// set HTML output variable to true in case of --output-all
 		outputHTML = true
-		outputHTMLFileName = outputAll + ".html"
+		outputHTMLFileName = cfg.OutputAll + ".html"
 
-		// trim suffix of output filename if it matches with txt/xml/html
-		outputRawFileName = outputAll + ".txt"
+		outputRawFileName = cfg.OutputAll + ".txt"
 
 		// create raw text output file
 		file, err = outputWriter.CreateFile(outputRawFileName, false)
@@ -90,39 +94,26 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 			return nil, err
 		}
 
-		outputXMLFileName = outputAll + ".xml"
+		outputXMLFileName = cfg.OutputAll + ".xml"
 		// create XML output file and write an XML header line to it
 		fileXML, err = outputWriter.CreateFile(outputXMLFileName, false)
 		if err != nil {
 			return nil, err
 		}
-		err = outputWriter.WriteXMLHeader(version, commandLine, timeStart, fileXML)
+		err = outputWriter.WriteXMLHeader(cfg.Version, cfg.CommandLine, cfg.TimeStart, fileXML)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	// excludeList is created from string of words divided by ","
-	excludeList := strings.Split(exclude, ",")
-
-	// parse proxyStr string in a format IP:PORT
-	if proxyStr != "" {
-		proxyURL, err := url.Parse("socks5://" + proxyStr)
-		if err != nil {
-			return nil, errors.New("invalid proxy setting, try IP:PORT")
-		}
-		proxyDialer, err = proxy.SOCKS5("tcp", proxyURL.Host, nil, proxy.Direct)
-		if err != nil {
-			return nil, errors.New("invalid proxy setting, try IP:PORT")
-		}
-	} else {
-		proxyDialer = nil
-	}
+	excludeList := strings.Split(cfg.Exclude, ",")
 
 	// scanner options are created without credentials just to specify global flags
 	// the credentials will be specified on execution of authenticated modules
 	options := &scanner.Options{
 		DCHostname:         "",
+		Dialer:             dialer,
 		Domain:             "",
 		DomainController:   net.IPv4zero,
 		Exclude:            excludeList,
@@ -130,8 +121,9 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 		FileXML:            fileXML,
 		Hash:               "",
 		HashBytes:          []byte{},
+		IOTimeout:          cfg.IOTimeout,
 		Kerberos:           false,
-		List:               list,
+		List:               cfg.List,
 		LocalAuth:          false,
 		NullSession:        false,
 		OutputHTML:         outputHTML,
@@ -139,17 +131,16 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 		OutputRawFileName:  outputRawFileName,
 		OutputXMLFileName:  outputXMLFileName,
 		Password:           "",
-		ProxyDialer:        proxyDialer,
-		Recurse:            recurse,
-		SmbPort:            smbPort,
+		Recurse:            cfg.Recurse,
+		SmbPort:            cfg.SmbPort,
 		Target:             make(chan scanner.DNHost, 256),
-		Timeout:            timeout,
+		Timeout:            cfg.Timeout,
 		Username:           "",
 		Writer:             outputWriter,
 	}
 
 	// create and return a scanner object
-	s := scanner.NewScanner(options, commandLine, timeStart, threads)
+	s := scanner.NewScanner(options, cfg.CommandLine, cfg.TimeStart, cfg.Threads)
 	return s, nil
 }
 

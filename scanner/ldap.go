@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 	"github.com/jcmturner/gokrb5/v8/config"
 	"github.com/jcmturner/gokrb5/v8/credentials"
 	"github.com/vflame6/sharefinder/logger"
-	"golang.org/x/net/proxy"
 	"math"
 	"net"
 	"os"
@@ -45,41 +45,41 @@ func GetBaseDN(domain string) string {
 	return result
 }
 
-func NewLDAPConnection(host net.IP, username, password string, hash string, domain string, timeout time.Duration, proxyDialer proxy.Dialer, kerberos bool, dcHostname string, useGC bool) (*LDAPConnection, error) {
+func NewLDAPConnection(host net.IP, username, password string, hash string, domain string, dialer *Dialer, kerberos bool, dcHostname string, useGC bool) (*LDAPConnection, error) {
 	var l *ldap.Conn
 	var err error
 
 	// GC ports (3268/3269) avoid LDAP referrals for cross-domain searches; required by --forest.
 	var dialLDAPS, dialLDAP string
 	if useGC {
-		dialLDAPS = fmt.Sprintf("%s:3269", host.String())
-		dialLDAP = fmt.Sprintf("%s:3268", host.String())
+		dialLDAPS = net.JoinHostPort(host.String(), "3269")
+		dialLDAP = net.JoinHostPort(host.String(), "3268")
 	} else {
-		dialLDAPS = fmt.Sprintf("%s:636", host.String())
-		dialLDAP = fmt.Sprintf("%s:389", host.String())
+		dialLDAPS = net.JoinHostPort(host.String(), "636")
+		dialLDAP = net.JoinHostPort(host.String(), "389")
 	}
 
-	var dialer proxy.Dialer
-	if proxyDialer != nil {
-		dialer = proxyDialer
-	} else {
-		dialer = &net.Dialer{Timeout: timeout}
-	}
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: true,
 	}
+	ioTimeout := dialer.IOTimeout()
 
 	// LDAP connection setup
 
 	// try to connect over LDAPS
 	var isLDAPS bool
-	connect, err := dialer.Dial("tcp", dialLDAPS)
+	connect, err := dialer.DialTracked(context.Background(), "tcp", dialLDAPS)
 	if err == nil {
 		// Wrap raw TCP connection in TLS with our config
 		tlsConn := tls.Client(connect, tlsConfig)
 
-		// Force handshake now so errors are caught early
-		if err = tlsConn.Handshake(); err != nil {
+		// Force the handshake now, bounded by the connect timeout, so a server
+		// that accepts TCP but never speaks TLS cannot hang the scan.
+		handshakeCtx, cancel := context.WithTimeout(context.Background(), dialer.ConnectTimeout())
+		err = tlsConn.HandshakeContext(handshakeCtx)
+		cancel()
+		if err != nil {
+			_ = connect.Close()
 			isLDAPS = false
 		} else {
 			// Hand the TLS connection to go-ldap
@@ -95,24 +95,33 @@ func NewLDAPConnection(host net.IP, username, password string, hash string, doma
 		// try LDAP with STARTTLS if LDAPS is failed
 		logger.Warnf("Failed to connect to LDAPS on %s, trying LDAP with STARTTLS", dialLDAPS)
 
-		connect, err = dialer.Dial("tcp", dialLDAP)
+		connect, err = dialer.DialTracked(context.Background(), "tcp", dialLDAP)
 		if err != nil {
 			return nil, err
 		}
 		l = ldap.NewConn(connect, false)
 		l.Start()
+		// Bound the StartTLS exchange and handshake, then lift the deadline:
+		// afterwards go-ldap's request timeout governs the connection.
+		if ioTimeout > 0 {
+			_ = connect.SetDeadline(time.Now().Add(ioTimeout))
+		}
 		err = l.StartTLS(tlsConfig)
+		_ = connect.SetDeadline(time.Time{})
 
 		// if all of that failed go plain LDAP
 		if err != nil {
 			logger.Warnf("Failed to set up STARTTLS on %s, trying plain LDAP", dialLDAP)
-			connect, err = dialer.Dial("tcp", dialLDAP)
+			connect, err = dialer.DialTracked(context.Background(), "tcp", dialLDAP)
 			if err != nil {
 				return nil, err
 			}
 			l = ldap.NewConn(connect, false)
 			l.Start()
 		}
+	}
+	if ioTimeout > 0 {
+		l.SetTimeout(ioTimeout)
 	}
 
 	conn := &LDAPConnection{connection: l}
