@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jfjallid/go-smb/smb"
 	"github.com/vflame6/sharefinder/logger"
 	"github.com/vflame6/sharefinder/utils"
 )
@@ -106,6 +107,7 @@ func enumerateHost(ctx context.Context, host DNHost, options *Options) (Host, er
 
 	// list share if such option is specified
 	if options.List {
+		limits := ListLimits{MaxDepth: options.Depth, FollowLinks: options.FollowLinks, MaxFiles: options.MaxFiles}
 		for i := 0; i < len(shareResult); i++ {
 			if ctx.Err() != nil {
 				break
@@ -114,56 +116,63 @@ func enumerateHost(ctx context.Context, host DNHost, options *Options) (Host, er
 			if !shareResult[i].ReadPermission {
 				continue
 			}
-
-			// here we loop over all files 2 times to process directories at first and files at second
-			files, err := conn.ListShare(shareResult[i].ShareName)
-			if err != nil {
-				logger.Warnf("Failed to list share %s\\%s: %s", conn.host, shareResult[i].ShareName, err.Error())
-			}
-
-			// loop over all files 2 times to process directories at first
-			// it is done like that to make directories in the top of the output
-			for _, file := range files {
-				if file.IsDir {
-					lastWriteTime := utils.ConvertToUnixTimestamp(file.LastWriteTime)
-
-					fileType := "dir"
-
-					singleFile := NewFile(fileType, file.Name, utils.GetFilePath(file.FullPath), file.Size, lastWriteTime)
-					shareResult[i].Files = append(shareResult[i].Files, *singleFile)
-
-					// list all directories recursively if such option is specified
-					if options.Recurse {
-						recurseDirectory, err := conn.ListDirectoryRecursively(shareResult[i].ShareName, file)
-						if err != nil {
-							logger.Warnf("Failed to list directory %s\\%s\\%s: %s", conn.host, shareResult[i].ShareName, file.Name, err.Error())
-						}
-						shareResult[i].Directories = append(shareResult[i].Directories, recurseDirectory...)
-					}
-				} else {
-					continue
-				}
-			}
-			// process files
-			for _, file := range files {
-				if !file.IsDir {
-					lastWriteTime := utils.ConvertToUnixTimestamp(file.LastWriteTime)
-
-					fileType := "file"
-					if file.IsJunction {
-						fileType = "link"
-					}
-
-					singleFile := NewFile(fileType, file.Name, utils.GetFilePath(file.FullPath), file.Size, lastWriteTime)
-					shareResult[i].Files = append(shareResult[i].Files, *singleFile)
-				} else {
-					continue
-				}
-			}
+			listShare(ctx, conn, &shareResult[i], limits, options.Recurse)
 		}
 	}
 	hostResult.Shares = append(hostResult.Shares, shareResult...)
 	return hostResult, nil
+}
+
+// listShare lists a readable share within limits into share.Files (the root)
+// and share.Directories (each subdirectory, pre-order).
+func listShare(ctx context.Context, conn *Connection, share *Share, limits ListLimits, recurse bool) {
+	emit := func(dir smb.SharedFile, depth int, entries []smb.SharedFile) {
+		files := listingFiles(entries)
+		if depth == 0 {
+			share.Files = files
+			return
+		}
+		lastWrite := utils.ConvertToUnixTimestamp(dir.LastWriteTime)
+		share.Directories = append(share.Directories, *NewDirectory(dir.FullPath, dir.Size, lastWrite, files))
+	}
+	onErr := func(dir string, err error) {
+		logger.Warnf("Failed to list directory %s\\%s\\%s: %v", conn.host, share.ShareName, dir, err)
+	}
+
+	stats, err := conn.WalkShare(ctx, share.ShareName, limits, recurse, emit, onErr)
+	if err != nil && ctx.Err() == nil {
+		logger.Warnf("Failed to list share %s\\%s: %v", conn.host, share.ShareName, err)
+	}
+	share.Truncated = stats.Truncated
+	if stats.Truncated {
+		logger.Warnf("\\\\%s\\%s: listing truncated at %d entries (--max-files)", conn.host, share.ShareName, limits.MaxFiles)
+	}
+	if stats.DepthLimited {
+		logger.Warnf("\\\\%s\\%s: directories deeper than --depth %d were not listed", conn.host, share.ShareName, limits.MaxDepth)
+	}
+}
+
+// listingFiles converts directory entries, directories first. Symlinks and
+// junctions, directories or not, are typed "link".
+func listingFiles(entries []smb.SharedFile) []File {
+	files := make([]File, 0, len(entries))
+	for _, dirsFirst := range []bool{true, false} {
+		for _, entry := range entries {
+			if entry.IsDir != dirsFirst {
+				continue
+			}
+			fileType := "file"
+			if entry.IsDir {
+				fileType = "dir"
+			}
+			if entry.IsJunction {
+				fileType = "link"
+			}
+			lastWrite := utils.ConvertToUnixTimestamp(entry.LastWriteTime)
+			files = append(files, *NewFile(fileType, entry.Name, utils.GetFilePath(entry.FullPath), entry.Size, lastWrite))
+		}
+	}
+	return files
 }
 
 // scanHost enumerates one target, prints its results and writes them to the

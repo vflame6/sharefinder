@@ -46,6 +46,12 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 	if cfg.MaxAuthFailures < 0 {
 		return nil, errors.New("--max-auth-failures must be 0 (no limit) or more")
 	}
+	if cfg.Depth < 0 {
+		return nil, errors.New("--depth must be 0 (share root only) or more")
+	}
+	if cfg.MaxFiles < 0 {
+		return nil, errors.New("--max-files must be 0 (no limit) or more")
+	}
 
 	writeCheck, err := scanner.ParseWriteCheckMode(cfg.WriteCheck)
 	if err != nil {
@@ -141,6 +147,9 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		ExcludeHosts:       excludeHosts,
 		AuthGuard:          scanner.NewAuthGuard(cfg.MaxAuthFailures),
 		WriteCheck:         writeCheck,
+		Depth:              cfg.Depth,
+		FollowLinks:        cfg.FollowLinks,
+		MaxFiles:           cfg.MaxFiles,
 		FileTXT:            file,
 		FileXML:            fileXML,
 		Hash:               "",

@@ -14,7 +14,6 @@ import (
 	"github.com/jfjallid/go-smb/smb"
 	"github.com/jfjallid/go-smb/spnego"
 	"github.com/vflame6/sharefinder/logger"
-	"github.com/vflame6/sharefinder/utils"
 )
 
 type Connection struct {
@@ -330,95 +329,16 @@ func isExpectedSMBWriteDeniedError(err error) bool {
 		strings.Contains(msg, "access denied")
 }
 
-func (conn *Connection) ListShare(share string) ([]smb.SharedFile, error) {
-	// Connect to share
-	err := conn.session.TreeConnect(share)
-	if err != nil {
-		return nil, err
+// WalkShare connects to share and lists it within lim; see walkShare.
+func (conn *Connection) WalkShare(ctx context.Context, share string, lim ListLimits, recurse bool,
+	emit func(dir smb.SharedFile, depth int, entries []smb.SharedFile),
+	onErr func(dir string, err error)) (walkStats, error) {
+
+	if err := conn.session.TreeConnect(share); err != nil {
+		return walkStats{}, err
 	}
 	defer func() {
 		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
 	}()
-
-	files, err := conn.session.ListDirectory(share, "", "")
-	if err != nil {
-		return nil, err
-	}
-	return files, nil
-}
-
-func (conn *Connection) ListDirectoryRecursively(share string, dir smb.SharedFile) ([]Directory, error) {
-	err := conn.session.TreeConnect(share)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
-	}()
-
-	return conn.listDirectoryRecursivelyInternal(share, dir)
-}
-
-func (conn *Connection) listDirectoryRecursivelyInternal(share string, dir smb.SharedFile) ([]Directory, error) {
-	var result []Directory
-	var currentFiles []File
-
-	lastWriteTime := utils.ConvertToUnixTimestamp(dir.LastWriteTime)
-	currentDir := NewDirectory(
-		dir.FullPath,
-		dir.Size,
-		lastWriteTime,
-		currentFiles,
-	)
-
-	// process current directory
-	files, err := conn.session.ListDirectory(share, dir.FullPath, "*")
-	if err != nil {
-		return nil, err
-	}
-
-	// loop over all files 2 times to process directories at first
-	// it is done like that to make directories in the top of the output
-	for _, file := range files {
-		if file.IsDir {
-			lastWriteTime = utils.ConvertToUnixTimestamp(file.LastWriteTime)
-
-			fileType := "dir"
-			singleFile := NewFile(fileType, file.Name, utils.GetFilePath(file.FullPath), file.Size, lastWriteTime)
-			currentDir.Files = append(currentDir.Files, *singleFile)
-		} else {
-			continue
-		}
-	}
-	// process files
-	for _, file := range files {
-		if !file.IsDir {
-			lastWriteTime = utils.ConvertToUnixTimestamp(file.LastWriteTime)
-			fileType := "file"
-			if file.IsJunction {
-				fileType = "link"
-			}
-			singleFile := NewFile(fileType, file.Name, utils.GetFilePath(file.FullPath), file.Size, lastWriteTime)
-			currentDir.Files = append(currentDir.Files, *singleFile)
-		} else {
-			continue
-		}
-	}
-
-	result = append(result, *currentDir)
-
-	// loop over all files to list all nested directories recursively
-	for _, file := range files {
-		if file.IsDir {
-			recurseDirectory, err := conn.listDirectoryRecursivelyInternal(share, file)
-			if err != nil {
-				logger.Error(fmt.Errorf("failed to list directory %s\\%s\\%s: %w", conn.host, share, file.Name, err))
-			}
-			result = append(result, recurseDirectory...)
-		} else {
-			continue
-		}
-	}
-
-	return result, nil
+	return walkShare(ctx, conn.session, share, lim, recurse, emit, onErr)
 }

@@ -26,4 +26,7 @@ type Config struct {
 	ExcludeHosts string // --exclude-hosts
 	List         bool   // --list
 	Recurse      bool   // --recurse
+	Depth        int    // --depth
+	FollowLinks  bool   // --follow-links
+	MaxFiles     int    // --max-files
 }

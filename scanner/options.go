@@ -13,17 +13,20 @@ type Options struct {
 	DCHostname         string
 	Dialer             *Dialer // --proxy, --timeout, --io-timeout
 	Domain             string  // part of --username
+	Depth              int     // --depth
 	DomainController   net.IP
 	Exclude            []string   // --exclude
 	ExcludeHosts       *TargetSet // --exclude-hosts
 	FileTXT            *os.File
 	FileXML            *os.File
+	FollowLinks        bool          // --follow-links
 	Forest             bool          // --forest (hunt only)
 	Hash               string        // --hashes
 	HashBytes          []byte        // --hashes
 	IOTimeout          time.Duration // --io-timeout
 	Kerberos           bool
 	List               bool // --list
+	MaxFiles           int  // --max-files
 	LocalAuth          bool // --local-auth
 	Mode               AuthMode
 	NullSession        bool

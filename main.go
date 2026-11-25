@@ -43,6 +43,9 @@ var (
 	excludeHostsFlag = app.Flag("exclude-hosts", "Skip these targets: IPs, CIDRs, ranges, hostnames (comma-separated) or a file").Default("").String()
 	listFlag         = app.Flag("list", "List readable shares").Default("false").Bool()
 	recurseFlag      = app.Flag("recurse", "List readable shares recursively").Default("false").Bool()
+	depthFlag        = app.Flag("depth", "Maximum directory depth below the share root for --recurse (0 lists the root only)").Default("5").Int()
+	followLinksFlag  = app.Flag("follow-links", "Descend into directory symlinks and junctions during --recurse").Bool()
+	maxFilesFlag     = app.Flag("max-files", "Stop listing a share after this many entries (0 = no limit)").Default("0").Int()
 	writeCheckFlag   = app.Flag("write-check", "How to test write access: mask (open the share root with write rights, creates nothing), file (create and delete a temporary file) or off").Default("file").Enum("mask", "file", "off")
 
 	// null command
@@ -122,6 +125,9 @@ func main() {
 		ExcludeHosts:    *excludeHostsFlag,
 		List:            *listFlag,
 		Recurse:         *recurseFlag,
+		Depth:           *depthFlag,
+		FollowLinks:     *followLinksFlag,
+		MaxFiles:        *maxFilesFlag,
 	})
 	if err != nil {
 		logger.Fatal(err)
