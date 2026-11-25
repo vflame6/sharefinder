@@ -1,11 +1,10 @@
 # Build
-FROM golang:1.24-alpine AS build-env
-RUN apk add build-base
+FROM golang:1.27-alpine AS build-env
 WORKDIR /app
-COPY go.mod ./
+COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN go build -o sharefinder .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o sharefinder .
 
 # Release
 FROM alpine:latest

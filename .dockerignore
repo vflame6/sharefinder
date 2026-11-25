@@ -1,0 +1,13 @@
+.git
+.github
+.claude
+.superpowers
+dist
+docs
+sharefinder
+*.txt
+*.xml
+*.html
+!scanner/*.html
+*.jsonl
+*.csv
