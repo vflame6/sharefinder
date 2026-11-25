@@ -31,6 +31,7 @@ type Host struct {
 	Hostname string    `xml:"hostname,attr"`
 	Domain   string    `xml:"domain,attr"`
 	Signing  bool      `xml:"signing,attr"`
+	Session  string    `xml:"session,attr,omitempty"`
 	Admin    *bool     `xml:"admin,attr,omitempty"`
 	Shares   []Share   `xml:"share"`
 }

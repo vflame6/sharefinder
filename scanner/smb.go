@@ -2,7 +2,6 @@ package scanner
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/jfjallid/go-smb/dcerpc"
 	"github.com/jfjallid/go-smb/dcerpc/msrrp"
@@ -21,6 +20,8 @@ import (
 type Connection struct {
 	host    string
 	session *smb.Connection
+	// SessionType is "user", "guest" or "null": what the server granted.
+	SessionType string
 }
 
 func logCloseError(action string, err error) {
@@ -47,29 +48,16 @@ func NewSMBConnection(ctx context.Context, host DNHost, o *Options) (*Connection
 		return nil, &StageError{Stage: StageConnect, Host: host.Address(), Err: err}
 	}
 
-	logon := func() error {
-		if err := session.SessionSetup(); err != nil {
-			return &StageError{Stage: StageAuth, Host: host.Address(), Err: err}
-		}
-		return nil
-	}
-	if o.Mode == AuthUser && o.AuthGuard != nil {
-		err = o.AuthGuard.Do(ctx, logon)
-	} else {
-		err = logon()
-	}
+	sessionType, err := establishSession(ctx, session, o.Mode, o.AuthGuard, host.Address())
 	if err != nil {
 		session.Close()
-		var stageErr *StageError
-		if !errors.As(err, &stageErr) {
-			err = &StageError{Stage: StageAuth, Host: host.Address(), Err: err}
-		}
 		return nil, err
 	}
 
 	conn := &Connection{
-		host:    host.Address(),
-		session: session,
+		host:        host.Address(),
+		session:     session,
+		SessionType: sessionType,
 	}
 	return conn, nil
 }

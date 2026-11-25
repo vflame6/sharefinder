@@ -14,14 +14,15 @@ var (
 	dateTimeSecondsFormat = "02/01/2006 15:04:05"
 )
 
-func SPrintHostInfo(host, version, hostname, domain string, signing bool) string {
-	return SPrintHostInfoWithAdmin(host, version, hostname, domain, signing, nil)
-}
-
-func SPrintHostInfoWithAdmin(host, version, hostname, domain string, signing bool, admin *bool) string {
-	result := fmt.Sprintf("[+] %s: %s (name:%s) (domain:%s) (signing:%v)", host, version, hostname, domain, signing)
-	if admin != nil {
-		result += fmt.Sprintf(" (admin:%v)", *admin)
+// SprintHostLine formats the one-line summary of a scanned host. The session
+// type and admin status are left out when unknown.
+func SprintHostLine(h Host) string {
+	result := fmt.Sprintf("[+] %s: %s (name:%s) (domain:%s) (signing:%v)", h.IP, h.Version, h.Hostname, h.Domain, h.Signing)
+	if h.Session != "" {
+		result += fmt.Sprintf(" (session:%s)", h.Session)
+	}
+	if h.Admin != nil {
+		result += fmt.Sprintf(" (admin:%v)", *h.Admin)
 	}
 	return result
 }

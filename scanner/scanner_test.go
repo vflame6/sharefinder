@@ -93,29 +93,38 @@ func TestParseSharefinderRun_Malformed(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// SPrintHostInfo
+// SprintHostLine
 // ---------------------------------------------------------------------------
 
-func TestSPrintHostInfo(t *testing.T) {
-	adminTrue := true
-	got := SPrintHostInfoWithAdmin("10.0.0.1", "SMB2", "DC01", "test.local", true, &adminTrue)
-	expected := "[+] 10.0.0.1: SMB2 (name:DC01) (domain:test.local) (signing:true) (admin:true)"
-	if got != expected {
-		t.Errorf("expected %q, got %q", expected, got)
+func TestSprintHostLine(t *testing.T) {
+	adminTrue, adminFalse := true, false
+	tests := []struct {
+		name string
+		host Host
+		want string
+	}{
+		{
+			name: "all facts",
+			host: Host{IP: "10.0.0.1", Version: "SMB2", Hostname: "DC01", Domain: "test.local", Signing: true, Session: "user", Admin: &adminTrue},
+			want: "[+] 10.0.0.1: SMB2 (name:DC01) (domain:test.local) (signing:true) (session:user) (admin:true)",
+		},
+		{
+			name: "guest session, not admin",
+			host: Host{IP: "192.168.1.5", Version: "SMB3", Hostname: "SRV01", Domain: "corp.local", Session: "guest", Admin: &adminFalse},
+			want: "[+] 192.168.1.5: SMB3 (name:SRV01) (domain:corp.local) (signing:false) (session:guest) (admin:false)",
+		},
+		{
+			name: "unknown session and admin status omitted",
+			host: Host{IP: "192.168.1.6", Version: "SMB3", Hostname: "SRV02", Domain: "corp.local"},
+			want: "[+] 192.168.1.6: SMB3 (name:SRV02) (domain:corp.local) (signing:false)",
+		},
 	}
-
-	adminFalse := false
-	got2 := SPrintHostInfoWithAdmin("192.168.1.5", "SMB3", "SRV01", "corp.local", false, &adminFalse)
-	if !strings.Contains(got2, "(signing:false)") {
-		t.Errorf("expected signing:false in output, got %q", got2)
-	}
-	if !strings.Contains(got2, "(admin:false)") {
-		t.Errorf("expected admin:false in output, got %q", got2)
-	}
-
-	got3 := SPrintHostInfoWithAdmin("192.168.1.6", "SMB3", "SRV02", "corp.local", false, nil)
-	if strings.Contains(got3, "admin:") {
-		t.Errorf("did not expect admin marker when status is unknown, got %q", got3)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SprintHostLine(tt.host); got != tt.want {
+				t.Fatalf("SprintHostLine() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

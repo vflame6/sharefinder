@@ -185,6 +185,7 @@
                 <th>Domain</th>
                 <th>Version</th>
                 <th>Signing</th>
+                <th>Session</th>
                 <th>Admin</th>
                 <th>Shares</th>
             </tr>
@@ -200,6 +201,7 @@
                         {{ if $host.Signing }}<span class="badge text-bg-success">Required</span>
                         {{ else }}<span class="badge text-bg-warning">Not required</span>{{ end }}
                     </td>
+                    <td>{{ $host.Session }}</td>
                     <td>
                         {{ if eq $host.AdminStatus "true" }}<span class="badge text-bg-danger">Yes</span>
                         {{ else if eq $host.AdminStatus "false" }}<span class="badge text-bg-secondary">No</span>
@@ -238,6 +240,7 @@
                         <th>Domain</th>
                         <th>Version</th>
                         <th>Signing</th>
+                        <th>Session</th>
                         <th>Admin</th>
                         <th>Shares</th>
                     </tr>
@@ -252,6 +255,7 @@
                             {{ if $host.Signing }}<span class="badge text-bg-success">Required</span>
                             {{ else }}<span class="badge text-bg-warning">Not required</span>{{ end }}
                         </td>
+                        <td>{{ $host.Session }}</td>
                         <td>
                             {{ if eq $host.AdminStatus "true" }}<span class="badge text-bg-danger">Yes</span>
                             {{ else if eq $host.AdminStatus "false" }}<span class="badge text-bg-secondary">No</span>

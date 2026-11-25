@@ -45,6 +45,7 @@ func enumerateHost(ctx context.Context, host DNHost, options *Options) (Host, er
 		hostResult.Domain = options.Domain
 	}
 	hostResult.Signing = isSigningRequired
+	hostResult.Session = conn.SessionType
 	if !options.NullSession {
 		isAdmin, adminErr := conn.CheckLocalAdmin()
 		if adminErr != nil {
@@ -191,7 +192,7 @@ func (s *Scanner) scanHost(ctx context.Context, host DNHost) {
 	}
 
 	// format and print results on enumerated host
-	printResult := SPrintHostInfoWithAdmin(hostResult.IP, hostResult.Version, hostResult.Hostname, hostResult.Domain, hostResult.Signing, hostResult.Admin)
+	printResult := SprintHostLine(hostResult)
 	if len(hostResult.Shares) > 0 {
 		printResult += SprintHost(hostResult, options.Exclude)
 
