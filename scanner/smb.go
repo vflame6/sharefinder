@@ -3,6 +3,9 @@ package scanner
 import (
 	"context"
 	"fmt"
+	"net"
+	"strings"
+
 	"github.com/jfjallid/go-smb/dcerpc"
 	"github.com/jfjallid/go-smb/dcerpc/msrrp"
 	"github.com/jfjallid/go-smb/dcerpc/msscmr"
@@ -12,9 +15,6 @@ import (
 	"github.com/jfjallid/go-smb/spnego"
 	"github.com/vflame6/sharefinder/logger"
 	"github.com/vflame6/sharefinder/utils"
-	"io"
-	"net"
-	"strings"
 )
 
 type Connection struct {
@@ -315,40 +315,6 @@ func (conn *Connection) CheckReadAccess(share string) error {
 
 	_, err = conn.session.ListShare(share, "", false)
 	return err
-}
-
-func (conn *Connection) CheckWriteAccess(share string) bool {
-	if err := conn.session.TreeConnect(share); err != nil {
-		return false
-	}
-	defer func() {
-		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
-	}()
-
-	tempFile := utils.RandSeq(16) + ".txt"
-	tempData := utils.RandSeq(32)
-	dataSent := false
-	err := conn.session.PutFile(share, tempFile, 0, func(buffer []byte) (int, error) {
-		if dataSent {
-			return 0, io.EOF
-		}
-		copy(buffer, tempData)
-		dataSent = true
-		return len(tempData), nil
-	})
-	if err == nil {
-		if delErr := conn.session.DeleteFile(share, tempFile); delErr != nil {
-			logger.Error(fmt.Errorf("failed to delete created file %s on share %s\\%s: %w", tempFile, conn.host, share, delErr))
-		}
-		return true
-	}
-	if isExpectedSMBWriteDeniedError(err) {
-		logger.Debugf("write probe denied on share %s\\%s: %v", conn.host, share, err)
-	} else {
-		logger.Debugf("write probe failed on share %s\\%s: %v", conn.host, share, err)
-	}
-
-	return false
 }
 
 func isExpectedSMBWriteDeniedError(err error) bool {

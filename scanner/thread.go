@@ -3,10 +3,12 @@ package scanner
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
+	"time"
+
 	"github.com/vflame6/sharefinder/logger"
 	"github.com/vflame6/sharefinder/utils"
-	"slices"
-	"time"
 )
 
 func enumerateHost(ctx context.Context, host DNHost, options *Options) (Host, error) {
@@ -85,14 +87,18 @@ func enumerateHost(ctx context.Context, host DNHost, options *Options) (Host, er
 		var singleShare Share
 		singleShare.ShareName = share.Name
 		singleShare.Description = share.Comment
+		singleShare.TypeID = share.TypeId
 
 		// check read and write access
 		err := conn.CheckReadAccess(share.Name)
 		if err == nil {
 			singleShare.ReadPermission = true
 		}
-		if conn.CheckWriteAccess(share.Name) {
-			singleShare.WritePermission = true
+		// only disk shares hold files; a test file on a print queue is a print job
+		if isDiskShare(share.TypeId) {
+			labels := conn.CheckWriteAccess(share.Name, options.WriteCheck)
+			singleShare.WritePermission = len(labels) > 0
+			singleShare.WriteAccess = strings.Join(labels, ",")
 		}
 
 		shareResult = append(shareResult, singleShare)

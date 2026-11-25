@@ -99,6 +99,8 @@ type Share struct {
 	Description     string      `xml:"description,attr"`
 	ReadPermission  bool        `xml:"read_permission,attr"`
 	WritePermission bool        `xml:"write_permission,attr"`
+	WriteAccess     string      `xml:"write_access,attr,omitempty"`
+	TypeID          uint32      `xml:"-"`
 	Directories     []Directory `xml:"directory"`
 	Files           []File      `xml:"file"`
 }

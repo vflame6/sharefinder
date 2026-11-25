@@ -3,6 +3,7 @@ package scanner
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -62,26 +63,41 @@ func SprintDirectories(ip, share string, dirs []Directory) string {
 	return shareListResult
 }
 
+// sharePermissions renders a share's access as READ plus its write labels.
+func sharePermissions(share Share) string {
+	var permissions []string
+	if share.ReadPermission {
+		permissions = append(permissions, "READ")
+	}
+	switch {
+	case share.WriteAccess != "":
+		permissions = append(permissions, share.WriteAccess)
+	case share.WritePermission:
+		permissions = append(permissions, WriteLabel)
+	}
+	return strings.Join(permissions, ",")
+}
+
 func SprintHost(h Host, exclude []string) string {
 	var result string
 
-	result += fmt.Sprintf("\n%-16s %-16s %-16s\n", "Share", "Permissions", "Description")
-	result += fmt.Sprintf("%-16s %-16s %-16s\n", strings.Repeat("-", 5), strings.Repeat("-", 11), strings.Repeat("-", 10))
+	// widen the permissions column for labels such as WRITE (SUBDIR)
+	width := 16
+	for _, share := range h.Shares {
+		if n := len(sharePermissions(share)); n > width {
+			width = n
+		}
+	}
+	row := "%-16s %-" + strconv.Itoa(width) + "s %-16s\n"
+
+	result += fmt.Sprintf("\n"+row, "Share", "Permissions", "Description")
+	result += fmt.Sprintf(row, strings.Repeat("-", 5), strings.Repeat("-", 11), strings.Repeat("-", 10))
 
 	for _, share := range h.Shares {
 		if slices.Contains(exclude, share.ShareName) {
 			continue
 		}
-
-		var permissions []string
-		if share.ReadPermission {
-			permissions = append(permissions, "READ")
-		}
-		if share.WritePermission {
-			permissions = append(permissions, "WRITE")
-		}
-
-		result += fmt.Sprintf("%-16s %-16s %-16s\n", share.ShareName, strings.Join(permissions, ","), share.Description)
+		result += fmt.Sprintf(row, share.ShareName, sharePermissions(share), share.Description)
 	}
 	result += "\n"
 

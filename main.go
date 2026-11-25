@@ -43,6 +43,7 @@ var (
 	excludeHostsFlag = app.Flag("exclude-hosts", "Skip these targets: IPs, CIDRs, ranges, hostnames (comma-separated) or a file").Default("").String()
 	listFlag         = app.Flag("list", "List readable shares").Default("false").Bool()
 	recurseFlag      = app.Flag("recurse", "List readable shares recursively").Default("false").Bool()
+	writeCheckFlag   = app.Flag("write-check", "How to test write access: mask (open the share root with write rights, creates nothing), file (create and delete a temporary file) or off").Default("file").Enum("mask", "file", "off")
 
 	// null command
 	// find null sessions shares and permissions
@@ -116,6 +117,7 @@ func main() {
 		SmbPort:         *smbPortFlag,
 		Proxy:           *proxyFlag,
 		MaxAuthFailures: *maxAuthFailuresFlag,
+		WriteCheck:      *writeCheckFlag,
 		Exclude:         *excludeFlag,
 		ExcludeHosts:    *excludeHostsFlag,
 		List:            *listFlag,

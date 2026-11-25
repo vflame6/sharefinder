@@ -47,6 +47,11 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		return nil, errors.New("--max-auth-failures must be 0 (no limit) or more")
 	}
 
+	writeCheck, err := scanner.ParseWriteCheckMode(cfg.WriteCheck)
+	if err != nil {
+		return nil, err
+	}
+
 	// every SMB, LDAP and proxied DNS connection goes through this dialer: it
 	// applies the connect and I/O timeouts and can close everything on Ctrl+C
 	dialer, err := scanner.NewDialer(cfg.Proxy, cfg.Timeout, cfg.IOTimeout)
@@ -135,6 +140,7 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		Exclude:            excludeList,
 		ExcludeHosts:       excludeHosts,
 		AuthGuard:          scanner.NewAuthGuard(cfg.MaxAuthFailures),
+		WriteCheck:         writeCheck,
 		FileTXT:            file,
 		FileXML:            fileXML,
 		Hash:               "",
