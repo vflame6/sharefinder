@@ -106,7 +106,9 @@ excluded block.
   stops after `--max-auth-failures` rejected logons (default 1). A server that
   maps a failed logon to its Guest account counts as a rejection, and every
   host line shows the session type it was scanned with (`user`, `guest`,
-  `null`).
+  `null`). Once the credentials have worked, hosts outside the account's
+  domain (and every host with `--local-auth`) that refuse them are reported
+  per host instead of stopping the scan.
 - **Write check:** `--write-check file` (default) creates and deletes a random
   file in each disk share root. `--write-check mask` only opens the share root
   with write access rights and leaves nothing behind; `--write-check off` skips
@@ -117,9 +119,10 @@ excluded block.
 - **Hung hosts and Ctrl+C:** every read and write is bounded by `--io-timeout`.
   Ctrl+C stops the scan within seconds and still writes the partial results;
   a second Ctrl+C exits at once.
-- **LDAP:** `hunt` never sends a password over plain LDAP unless
-  `--allow-plaintext-ldap` is given, and a failed Kerberos bind does not fall
-  back to a password bind.
+- **LDAP:** `hunt` never sends a password in clear text: without LDAPS or
+  StartTLS it binds with NTLM, and a simple bind over plain LDAP needs
+  `--allow-plaintext-ldap`. A failed Kerberos bind does not fall back to a
+  password bind.
 
 ## Installation
 

@@ -76,12 +76,14 @@ type bindMethod int
 const (
 	bindGSSAPI bindMethod = iota + 1
 	bindNTLMHash
+	bindNTLMPassword
 	bindSimple
 )
 
 // chooseBind picks the bind for the credentials and transport. Kerberos never
-// falls back to another method; a simple bind, which sends the password, is
-// refused over plain LDAP unless AllowPlaintext is set.
+// falls back to another method. Over plain LDAP a password goes into an NTLM
+// bind, which does not send it; a simple bind, which sends it in clear text,
+// is used there only when AllowPlaintext is set.
 func chooseBind(o LDAPOptions, t ldapTransport) (bindMethod, error) {
 	switch {
 	case o.Kerberos:
@@ -89,7 +91,7 @@ func chooseBind(o LDAPOptions, t ldapTransport) (bindMethod, error) {
 	case o.Hash != "":
 		return bindNTLMHash, nil
 	case t == transportPlain && !o.AllowPlaintext:
-		return 0, fmt.Errorf("LDAPS and StartTLS failed on %s; refusing to send the password over plain LDAP (use --allow-plaintext-ldap to override)", o.Host)
+		return bindNTLMPassword, nil
 	default:
 		return bindSimple, nil
 	}
@@ -99,6 +101,7 @@ func chooseBind(o LDAPOptions, t ldapTransport) (bindMethod, error) {
 type ldapBinder interface {
 	GSSAPIBind(client ldap.GSSAPIClient, servicePrincipal, authzid string) error
 	NTLMBindWithHash(domain, username, hash string) error
+	NTLMBind(domain, username, password string) error
 	Bind(username, password string) error
 }
 
@@ -117,6 +120,10 @@ func bindLDAP(b ldapBinder, o LDAPOptions, t ldapTransport, gss ldap.GSSAPIClien
 		}
 	case bindNTLMHash:
 		if err := b.NTLMBindWithHash(o.Domain, o.Username, o.Hash); err != nil {
+			return fmt.Errorf("NTLM bind failed: %w", err)
+		}
+	case bindNTLMPassword:
+		if err := b.NTLMBind(o.Domain, o.Username, o.Password); err != nil {
 			return fmt.Errorf("NTLM bind failed: %w", err)
 		}
 	default:
@@ -209,11 +216,13 @@ func dialLDAP(ctx context.Context, o LDAPOptions) (*ldap.Conn, ldapTransport, er
 	}
 	_ = l.Close()
 
-	// plain LDAP, only for a bind that does not expose the password
-	if _, err := chooseBind(o, transportPlain); err != nil {
-		return nil, 0, err
+	// plain LDAP: a password goes into an NTLM bind unless a simple bind was
+	// explicitly allowed
+	if method, _ := chooseBind(o, transportPlain); method == bindSimple {
+		logger.Warnf("Failed to set up STARTTLS on %s; trying plain LDAP with a simple bind, which sends the password in clear text (--allow-plaintext-ldap)", ldapAddr)
+	} else {
+		logger.Warnf("Failed to set up STARTTLS on %s, trying plain LDAP without sending the password", ldapAddr)
 	}
-	logger.Warnf("Failed to set up STARTTLS on %s, trying plain LDAP", ldapAddr)
 	raw, err = o.Dialer.DialTracked(ctx, "tcp", ldapAddr)
 	if err != nil {
 		return nil, 0, err

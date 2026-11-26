@@ -32,6 +32,11 @@ func (f *fakeBinder) Bind(user, password string) error {
 	return f.bindErr
 }
 
+func (f *fakeBinder) NTLMBind(domain, user, password string) error {
+	f.calls = append(f.calls, "ntlm-password:"+domain+`\`+user)
+	return f.ntlmErr
+}
+
 func TestChooseBind(t *testing.T) {
 	kerberos := LDAPOptions{Kerberos: true, Username: "u", Password: "p"}
 	hash := LDAPOptions{Username: "u", Hash: "31d6cfe0d16ae931b73c59d7e0c089c0"}
@@ -50,8 +55,8 @@ func TestChooseBind(t *testing.T) {
 		{"hash over plain", hash, transportPlain, bindNTLMHash, false},
 		{"password over LDAPS", password, transportLDAPS, bindSimple, false},
 		{"password over StartTLS", password, transportStartTLS, bindSimple, false},
-		{"password over plain refused", password, transportPlain, 0, true},
-		{"password over plain allowed", allowed, transportPlain, bindSimple, false},
+		{"password over plain uses NTLM", password, transportPlain, bindNTLMPassword, false},
+		{"password over plain, simple bind allowed", allowed, transportPlain, bindSimple, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -82,15 +87,26 @@ func TestBindLDAP_KerberosFailureNoFallback(t *testing.T) {
 	}
 }
 
-func TestBindLDAP_PlainRefused(t *testing.T) {
+func TestBindLDAP_PasswordOverPlainUsesNTLM(t *testing.T) {
 	b := &fakeBinder{}
 	o := LDAPOptions{Host: net.ParseIP("10.0.0.1"), Username: "u", Password: "p", Domain: "corp.local"}
-	err := bindLDAP(b, o, transportPlain, nil)
-	if err == nil || !strings.Contains(err.Error(), "--allow-plaintext-ldap") {
-		t.Fatalf("expected a refusal naming --allow-plaintext-ldap, got %v", err)
+	if err := bindLDAP(b, o, transportPlain, nil); err != nil {
+		t.Fatal(err)
 	}
-	if len(b.calls) != 0 {
-		t.Fatalf("no bind may be sent over plain LDAP, calls: %v", b.calls)
+	// no simple bind: the password never crosses plain LDAP in clear text
+	if !reflect.DeepEqual(b.calls, []string{`ntlm-password:corp.local\u`}) {
+		t.Fatalf("calls: %v", b.calls)
+	}
+}
+
+func TestBindLDAP_SimpleOverPlainOnlyWhenAllowed(t *testing.T) {
+	b := &fakeBinder{}
+	o := LDAPOptions{Host: net.ParseIP("10.0.0.1"), Username: "u", Password: "p", Domain: "corp.local", AllowPlaintext: true}
+	if err := bindLDAP(b, o, transportPlain, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(b.calls, []string{"simple:u@corp.local"}) {
+		t.Fatalf("calls: %v", b.calls)
 	}
 }
 
