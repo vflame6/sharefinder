@@ -30,7 +30,7 @@ type Scanner struct {
 	closeOnce sync.Once
 	scanned   sync.Map   // addresses already scanned, for deduplication
 	slots     slots      // SMB connections in use, at most Threads; made by Run
-	tempJSON  string     // JSONL file created only to render --html, removed at the end
+	tempJSON  string     // JSONL file created only to render --output-html, removed at the end
 	matrixMu  sync.Mutex // one host's matrix printed at a time
 }
 
@@ -86,11 +86,12 @@ func (s *Scanner) StartOutputs() {
 		sinks = append(sinks, ResumeJSONLSink(o.FileJSON, o.Resume, o.Identity()))
 	} else if o.FileJSON != nil {
 		sinks = append(sinks, NewJSONLSink(o.FileJSON, ScanRecord{
-			ScanID:   NewScanID(),
-			Time:     s.TimeStart,
-			Version:  s.Version,
-			Command:  strings.Join(MaskCredentials(s.CommandLine), " "),
-			Identity: o.Identity(),
+			ScanID:      NewScanID(),
+			Time:        s.TimeStart,
+			Version:     s.Version,
+			Command:     strings.Join(MaskCredentials(s.CommandLine), " "),
+			Identity:    o.Identity(),
+			FollowLinks: o.FollowLinks,
 		}))
 	}
 	if o.FileCSV != nil {

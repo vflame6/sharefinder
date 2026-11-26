@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"os"
@@ -42,7 +43,7 @@ var (
 	outputUNCFlag   = app.Flag("output-unc", "Filename to write the readable shares as //host/share lines, for content scanners").Default("").String()
 	outputRelayFlag = app.Flag("output-relay-list", "Filename to write the hosts that do not require SMB signing, one address per line, for NTLM relay tools").Default("").String()
 	outputAllFlag   = app.Flag("output-all", "Filename to write output in all formats").Default("").String()
-	outputHTMLFlag  = app.Flag("html", "Write an HTML report named after --output-json or --output-xml").Default("false").Bool()
+	outputHTMLFlag  = app.Flag("output-html", "Filename to write the HTML report, rendered from the JSONL output").Default("").String()
 	forceFlag       = app.Flag("force", "Overwrite existing output files").Bool()
 	resumeFlag      = app.Flag("resume", "Continue the interrupted scan in this --output-json file: finished hosts and shares are skipped").PlaceHolder("SCAN.jsonl").String()
 
@@ -58,15 +59,15 @@ var (
 	maxAuthFailuresFlag  = app.Flag("max-auth-failures", "Stop the scan after this many rejected logons; 0 disables the guard").Default("1").Int()
 
 	// SMB interaction flags
-	excludeFlag         = app.Flag("exclude", "Exclude list").Short('e').Default("IPC$,NETLOGON,ADMIN$,print$,C$").String()
-	excludeHostsFlag    = app.Flag("exclude-hosts", "Skip these targets: IPs, CIDRs, ranges, hostnames (comma-separated) or a file").Default("").String()
-	listFlag            = app.Flag("list", "List readable shares").Default("false").Bool()
-	recurseFlag         = app.Flag("recurse", "List readable shares recursively").Default("false").Bool()
-	depthFlag           = app.Flag("depth", "Maximum directory depth below the share root for --recurse (0 lists the root only)").Default("5").Int()
-	followLinksFlag     = app.Flag("follow-links", "Descend into directory symlinks and junctions during --recurse").Bool()
-	maxFilesFlag        = app.Flag("max-files", "Stop listing a share after this many entries (0 = no limit)").Default("0").Int()
-	maxConnsPerHostFlag = app.Flag("max-conns-per-host", "Connections that list the shares of one host in parallel, while --threads allows").Default("2").Int()
-	writeCheckFlag      = app.Flag("write-check", "How to test write access: mask (open the share root with write rights, creates nothing), file (create and delete a temporary file) or off").Default("file").Enum("mask", "file", "off")
+	excludeFlag            = app.Flag("exclude", "Exclude list").Short('e').Default("IPC$,NETLOGON,ADMIN$,print$,C$").String()
+	excludeHostsFlag       = app.Flag("exclude-hosts", "Skip these targets: IPs, CIDRs, ranges, hostnames (comma-separated) or a file").Default("").String()
+	listFlag               = app.Flag("list", "List readable shares").Default("false").Bool()
+	recurseFlag            = app.Flag("recurse", "List readable shares recursively").Default("false").Bool()
+	depthFlag              = app.Flag("depth", "Maximum directory depth below the share root for --recurse (0 lists the root only)").Default("5").Int()
+	disableFollowLinksFlag = app.Flag("disable-follow-links", "Do not descend into directory symlinks and junctions during --recurse").Bool()
+	maxFilesFlag           = app.Flag("max-files", "Stop listing a share after this many entries (0 = no limit)").Default("0").Int()
+	maxConnsPerHostFlag    = app.Flag("max-conns-per-host", "Connections that list the shares of one host in parallel, while --threads allows").Default("2").Int()
+	writeCheckFlag         = app.Flag("write-check", "How to test write access: mask (open the share root with write rights, creates nothing), file (create and delete a temporary file) or off").Default("file").Enum("mask", "file", "off")
 
 	// null command
 	// find null sessions shares and permissions
@@ -127,7 +128,7 @@ var (
 
 	// report command
 	// render the HTML report of a JSONL file
-	reportCommand  = app.Command("report", "Write the HTML report of an --output-json file, named after it or after -o")
+	reportCommand  = app.Command("report", "Write the HTML report of an --output-json file, named after it or after --output-html (or -o)")
 	reportInputArg = reportCommand.Arg("jsonl", "JSONL file written by --output-json").Required().ExistingFile()
 
 	// diff command
@@ -160,16 +161,19 @@ func main() {
 
 	// report and diff read finished scan files: no scanner is set up
 	if command == reportCommand.FullCommand() {
-		if *outputXMLFlag != "" || *outputJSONFlag != "" || *outputCSVFlag != "" || *outputUNCFlag != "" || *outputRelayFlag != "" || *outputAllFlag != "" || *outputHTMLFlag {
-			logger.Fatal(errors.New("report writes only the HTML report: name it with -o"))
+		if *outputXMLFlag != "" || *outputJSONFlag != "" || *outputCSVFlag != "" || *outputUNCFlag != "" || *outputRelayFlag != "" || *outputAllFlag != "" {
+			logger.Fatal(errors.New("report writes only the HTML report: name it with --output-html"))
 		}
-		if err := cmd.ExecuteReport(*reportInputArg, *outputRawFlag, *forceFlag); err != nil {
+		if *outputHTMLFlag != "" && *outputRawFlag != "" {
+			logger.Fatal(errors.New("report: name the HTML report with --output-html or -o, not both"))
+		}
+		if err := cmd.ExecuteReport(*reportInputArg, cmp.Or(*outputHTMLFlag, *outputRawFlag), *forceFlag); err != nil {
 			logger.Fatal(err)
 		}
 		return
 	}
 	if command == diffCommand.FullCommand() {
-		if *outputRawFlag != "" || *outputXMLFlag != "" || *outputJSONFlag != "" || *outputCSVFlag != "" || *outputUNCFlag != "" || *outputRelayFlag != "" || *outputAllFlag != "" || *outputHTMLFlag {
+		if *outputRawFlag != "" || *outputXMLFlag != "" || *outputJSONFlag != "" || *outputCSVFlag != "" || *outputUNCFlag != "" || *outputRelayFlag != "" || *outputAllFlag != "" || *outputHTMLFlag != "" {
 			logger.Fatal(errors.New("diff prints to stdout: output flags do not apply"))
 		}
 		if err := cmd.ExecuteDiff(*diffOldArg, *diffNewArg); err != nil {
@@ -230,7 +234,7 @@ func main() {
 		List:                *listFlag,
 		Recurse:             *recurseFlag,
 		Depth:               *depthFlag,
-		FollowLinks:         *followLinksFlag,
+		DisableFollowLinks:  *disableFollowLinksFlag,
 		MaxFiles:            *maxFilesFlag,
 		MaxConnsPerHost:     *maxConnsPerHostFlag,
 	})

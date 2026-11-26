@@ -55,6 +55,31 @@
             white-space: pre-wrap;
             word-break: break-all;
         }
+        details.sf-host {
+            background: #fff;
+            border: 1px solid #e6e8eb;
+            border-radius: .5rem;
+            padding: .75rem 1rem;
+            margin-bottom: 1rem;
+        }
+        details.sf-host > summary {
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        details.sf-listing > summary {
+            font-weight: 500;
+            cursor: pointer;
+        }
+        .sf-listing td {
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .sf-dir {
+            font-weight: 500;
+            word-break: break-all;
+            margin-top: .75rem;
+        }
     </style>
 
     <title>Sharefinder Scan Report</title>
@@ -73,6 +98,7 @@
             <ul class="navbar-nav gap-2">
                 <li class="nav-item"><a class="nav-link text-white" href="#hosts">Hosts</a></li>
                 <li class="nav-item"><a class="nav-link text-white" href="#shares">Shares</a></li>
+                <li class="nav-item"><a class="nav-link text-white" href="#by-host">By host</a></li>
                 <li class="nav-item"><a class="nav-link text-white" href="#files">Files</a></li>
             </ul>
         </div>
@@ -111,6 +137,10 @@
         <tr><th>Host</th><th>Hostname</th><th>Share</th><th>Remark</th><th>Type</th><th>Read</th><th>Write</th><th>Write access</th><th>Files</th><th>Notes</th><th>Identity</th></tr>
         </thead>
     </table>
+
+    <h2 id="by-host">By host</h2>
+    <p class="text-muted">Each host with its details, its shares and the listing of each share, directory by directory.</p>
+    <div id="sf-details"></div>
 
     <h2 id="files">Files</h2>
     <table id="table-files" class="table table-hover table-sm w-100">

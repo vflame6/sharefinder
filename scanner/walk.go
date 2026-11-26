@@ -11,8 +11,9 @@ type ListLimits struct {
 	// MaxDepth is the deepest directory level listed below the share root,
 	// which is level 0. --depth, default 5.
 	MaxDepth int
-	// FollowLinks descends into directory symlinks and junctions. Off by
-	// default: they can point back up the tree and loop.
+	// FollowLinks descends into directory symlinks and junctions, such as
+	// the domain folder in SYSVOL; on unless --disable-follow-links. One that
+	// points back up the tree loops only down to MaxDepth.
 	FollowLinks bool
 	// MaxFiles stops the listing of a share after this many entries. 0 means
 	// no limit.

@@ -68,8 +68,8 @@ Flags:
                                SMB signing, one address per line, for NTLM relay
                                tools
       --output-all=""          Filename to write output in all formats
-      --[no-]html              Write an HTML report named after --output-json or
-                               --output-xml
+      --output-html=""         Filename to write the HTML report, rendered from
+                               the JSONL output
       --[no-]force             Overwrite existing output files
       --resume=SCAN.jsonl      Continue the interrupted scan in this
                                --output-json file: finished hosts and shares are
@@ -97,8 +97,9 @@ Flags:
       --[no-]recurse           List readable shares recursively
       --depth=5                Maximum directory depth below the share root for
                                --recurse (0 lists the root only)
-      --[no-]follow-links      Descend into directory symlinks and junctions
-                               during --recurse
+      --[no-]disable-follow-links
+                               Do not descend into directory symlinks and
+                               junctions during --recurse
       --max-files=0            Stop listing a share after this many entries (0 =
                                no limit)
       --max-conns-per-host=2   Connections that list the shares of one host in
@@ -145,7 +146,7 @@ are listed only with `--debug`; the summary counts them:
 | `--output-unc NAME` | `//host/share` for each readable disk share, `NAME.unc.txt`, for content scanners |
 | `--output-relay-list NAME` | the hosts that do not require SMB signing, `NAME.relay.txt`, for NTLM relay tools; taken from the negotiation, so also from null and guest scans whose logon is refused |
 | `--output-xml NAME` | the XML format of earlier versions, `NAME.xml` |
-| `--html` | an HTML report named after `--output-json` or `--output-xml` |
+| `--output-html NAME` | the HTML report, `NAME.html`: each host with its shares and the listing of each share, and tables of all hosts, shares and files to search and sort |
 | `--output-all NAME` | all of the above |
 
 A known extension in `NAME` is replaced, not doubled, and existing files are
@@ -156,7 +157,7 @@ scanned by, else by its IP address.
 # writable shares, ready for the next tool
 jq -r 'select(.type=="share" and .write) | .unc' scan.jsonl
 # the HTML report of a scan, also of one that was cut short
-sharefinder report scan.jsonl -o client
+sharefinder report scan.jsonl --output-html client
 # what changed since the last scan
 sharefinder diff q3.jsonl q4.jsonl
 ```
@@ -175,7 +176,7 @@ sharefinder diff q3.jsonl q4.jsonl
   killed: hosts it finished are not contacted again, shares it finished are
   neither checked nor listed again, and the new results are appended to the
   same file. Records of shares that were not finished are removed first. Only
-  the JSONL file is continued: add `--html`, or run `sharefinder report`
+  the JSONL file is continued: add `--output-html`, or run `sharefinder report`
   afterwards, for the report of the whole scan.
 - **Diff:** `sharefinder diff` lists new, removed and changed shares; shares
   the newer scan did not check (it was stopped, or a host was not reached)
@@ -243,8 +244,10 @@ without their operating system, and `--active-within` does not filter them.
   with write access rights and leaves nothing behind; `--write-check off` skips
   the check.
 - **Recursion:** `--recurse` stops 5 levels below the share root (`--depth`),
-  does not follow directory symlinks or junctions (`--follow-links`) and can be
-  capped per share with `--max-files`.
+  which also bounds a junction that points back up the tree, and can be capped
+  per share with `--max-files`. It descends into directory symlinks and
+  junctions, such as the domain folder in SYSVOL; `--disable-follow-links`
+  skips them.
 - **Hung hosts and Ctrl+C:** every read and write is bounded by `--io-timeout`.
   Ctrl+C stops the scan within seconds and still writes the partial results;
   a second Ctrl+C exits at once.

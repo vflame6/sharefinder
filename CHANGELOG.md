@@ -7,6 +7,28 @@ from the section of the released version.
 
 ## [Unreleased]
 
+### Changed
+
+- `--output-html NAME` replaces `--html`: the report is named like every
+  other output and needs no `--output-json` or `--output-xml`. `--html` is
+  removed. `sharefinder report` takes `--output-html` too.
+- `--recurse` descends into directory symlinks and junctions again, so the
+  domain folder in SYSVOL, a junction, is listed with its policies and
+  scripts; `--depth` bounds one that points back up the tree.
+  `--disable-follow-links` skips them; `--follow-links` is removed. The JSONL
+  scan record says whether links were followed (`follow_links`).
+
+### Fixed
+
+- The HTML report of 1.5.0 lost what earlier reports showed for each host:
+  its details, its shares and the listing of each share, directory by
+  directory. It is back, under "By host". A listing is drawn when it is
+  opened (at once in a small scan) and shows at most 5,000 entries, so large
+  scans stay fast; the Files table has every file. A listing says when it
+  holds links and junctions that were not followed.
+- `--resume` warned of a different command when the scan used
+  `--output-relay-list`.
+
 ## [1.5.0] - 2026-11-26
 
 ### Added

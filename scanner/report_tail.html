@@ -126,11 +126,16 @@
 
     // Millions of rows: rows are drawn only when shown, columns have fixed
     // types so nothing is detected, and a large table searches on Enter.
+    // Entry rows are [host, share, path, size, modified, tags, kind]; the
+    // table lists the files, the listings below also the directories.
+    var fileRows = files.filter(function (r) {
+        return r[6] !== 'dir';
+    });
     new DataTable('#table-files', {
-        data: files,
+        data: fileRows,
         deferRender: true,
         order: [],
-        search: {return: files.length > 100000},
+        search: {return: fileRows.length > 100000},
         lengthMenu: [20, 100, 1000],
         columns: [
             {type: 'string', render: text},
@@ -140,6 +145,214 @@
             {type: 'date', render: date},
             {type: 'string', render: text}
         ]
+    });
+
+    // By host: each host with its details, its shares and the listing of
+    // each share, directory by directory, as the reports before 1.5.0 showed
+    // them. A host and a listing are drawn when opened, at once in a small
+    // scan, and a listing shows at most listingLimit entries, so the page
+    // stays fast with millions of files.
+    var listingLimit = 5000;
+    var smallScan = files.length <= 2000;
+    var hostsOpen = hosts.length <= 50;
+    // --recurse descends into symlinks and junctions (type link), such as
+    // SYSVOL's domain folder, unless --disable-follow-links; the scan record
+    // says so, and scans before it did only with --follow-links
+    var linksFollowed = summary.follow_links === true || /(^|\s)--follow-links(\s|=|$)/.test(summary.command || '');
+
+    function el(tag, className, value) {
+        var node = document.createElement(tag);
+        if (className) {
+            node.className = className;
+        }
+        if (value !== undefined && value !== null) {
+            node.textContent = String(value);
+        }
+        return node;
+    }
+
+    // badgeNode is a boolean as a badge with a fixed label
+    function badgeNode(value, yes, no, yesClass, noClass) {
+        var label = value === true ? yes : value === false ? no : 'Unknown';
+        var cls = value === true ? yesClass : value === false ? noClass : 'text-bg-light text-muted border';
+        return el('span', 'badge ' + cls, label);
+    }
+
+    // smallTable has the given headers; add appends a row of texts or nodes
+    function smallTable(headers) {
+        var node = el('table', 'table table-sm table-hover mb-2');
+        var head = el('tr');
+        headers.forEach(function (h) {
+            head.appendChild(el('th', '', h));
+        });
+        node.appendChild(el('thead')).appendChild(head);
+        var body = node.appendChild(el('tbody'));
+        return {
+            node: node,
+            add: function (cells, className) {
+                var row = el('tr', className);
+                cells.forEach(function (cell) {
+                    var td = el('td');
+                    if (cell instanceof Node) {
+                        td.appendChild(cell);
+                    } else if (cell !== undefined && cell !== null) {
+                        td.textContent = String(cell);
+                    }
+                    row.appendChild(td);
+                });
+                body.appendChild(row);
+            }
+        };
+    }
+
+    function key(a, b) {
+        return a + '\u0000' + b;
+    }
+
+    var sharesOf = new Map(); // host and identity -> share rows
+    shares.forEach(function (s) {
+        var k = key(s[0], s[10]);
+        if (!sharesOf.has(k)) {
+            sharesOf.set(k, []);
+        }
+        sharesOf.get(k).push(s);
+    });
+
+    var entries = null; // host and share -> entry rows, made when first needed
+    function entriesOf(host, share) {
+        if (entries === null) {
+            entries = new Map();
+            files.forEach(function (r) {
+                var k = key(r[0], r[1]);
+                if (!entries.has(k)) {
+                    entries.set(k, []);
+                }
+                entries.get(k).push(r);
+            });
+        }
+        return entries.get(key(host, share)) || [];
+    }
+
+    function name(path) {
+        return path.slice(path.lastIndexOf('/') + 1);
+    }
+
+    // drawListing draws a share's entries: the share root first, then each
+    // directory in path order, directories before files
+    function drawListing(container, rows) {
+        var shown = rows.length > listingLimit ? rows.slice(0, listingLimit) : rows;
+        var byDir = new Map();
+        shown.forEach(function (r) {
+            var cut = r[2].lastIndexOf('/');
+            var dir = cut < 0 ? '' : r[2].slice(0, cut);
+            if (!byDir.has(dir)) {
+                byDir.set(dir, []);
+            }
+            byDir.get(dir).push(r);
+        });
+        Array.from(byDir.keys()).sort().forEach(function (dir) {
+            if (dir !== '') {
+                container.appendChild(el('div', 'sf-dir', dir.split('/').join('\\')));
+            }
+            var t = smallTable(['Type', 'Name', 'Size', 'Last modified (UTC)', 'Tags']);
+            byDir.get(dir).sort(function (a, b) {
+                var aDir = a[6] === 'dir', bDir = b[6] === 'dir';
+                if (aDir !== bDir) {
+                    return aDir ? -1 : 1;
+                }
+                return a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0;
+            }).forEach(function (r) {
+                var sized = r[6] !== 'dir' && r[6] !== 'link';
+                t.add([r[6], name(r[2]), sized ? humanSize(r[3]) : '', shortTime(r[4]), r[5]]);
+            });
+            container.appendChild(t.node);
+        });
+        if (shown.length < rows.length) {
+            container.appendChild(el('p', 'text-muted small', 'Showing ' + shown.length.toLocaleString('en-US') + ' of ' +
+                rows.length.toLocaleString('en-US') + ' entries: search the Files table for the rest.'));
+        }
+        if (!linksFollowed && rows.some(function (r) {
+            return r[6] === 'link';
+        })) {
+            container.appendChild(el('p', 'text-muted small', 'Links and junctions (type link) were not followed: ' +
+                'scan without --disable-follow-links to list what they point to.'));
+        }
+    }
+
+    // opened calls draw the first time details is open
+    function opened(details, draw) {
+        var drawn = false;
+        function once() {
+            if (!drawn) {
+                drawn = true;
+                draw();
+            }
+        }
+        details.addEventListener('toggle', function () {
+            if (details.open) {
+                once();
+            }
+        });
+        return once;
+    }
+
+    function drawHost(card, h) {
+        // h: ip, hostname, domain, os, signing, dialect, session, admin, shares, identity
+        card.appendChild(el('h6', 'pt-2', 'Host details'));
+        var info = smallTable(['Hostname', 'Domain', 'OS', 'Signing', 'Dialect', 'Session', 'Admin', 'Identity']);
+        info.add([h[1], h[2], h[3], badgeNode(h[4], 'Required', 'Not required', 'text-bg-success', 'text-bg-warning'),
+            h[5], h[6], badgeNode(h[7], 'Yes', 'No', 'text-bg-danger', 'text-bg-secondary'), h[9]]);
+        card.appendChild(info.node);
+
+        var own = sharesOf.get(key(h[0], h[9])) || [];
+        card.appendChild(el('h6', 'pt-2', 'Shares'));
+        if (own.length === 0) {
+            card.appendChild(el('p', 'text-muted', 'No shares.'));
+            return;
+        }
+        var list = smallTable(['Share', 'Remark', 'Type', 'Read', 'Write', 'Write access', 'Files', 'Notes']);
+        own.forEach(function (s) {
+            list.add([s[2], s[3], s[4], badgeNode(s[5], 'Yes', 'No', 'text-bg-warning', 'text-bg-light border'),
+                badgeNode(s[6], 'Yes', 'No', 'text-bg-danger', 'text-bg-light border'), s[7], s[8], s[9]],
+            s[6] === true ? 'table-danger' : s[5] === true ? 'table-warning' : '');
+        });
+        card.appendChild(list.node);
+
+        own.forEach(function (s) {
+            var rows = entriesOf(s[0], s[2]);
+            if (rows.length === 0) {
+                return;
+            }
+            var listing = el('details', 'sf-listing mt-2');
+            listing.appendChild(el('summary', '', 'Listing share: ' + s[2] + ' (' +
+                rows.length.toLocaleString('en-US') + (rows.length === 1 ? ' entry)' : ' entries)')));
+            var body = listing.appendChild(el('div', 'ms-2'));
+            var draw = opened(listing, function () {
+                drawListing(body, rows);
+            });
+            if (smallScan) {
+                draw();
+                listing.open = true;
+            }
+            card.appendChild(listing);
+        });
+    }
+
+    var byHost = document.getElementById('sf-details');
+    if (hosts.length === 0) {
+        byHost.appendChild(el('p', 'text-muted', 'No hosts.'));
+    }
+    hosts.forEach(function (h) {
+        var card = el('details', 'sf-host');
+        card.appendChild(el('summary', '', h[1] ? h[0] + ' (' + h[1] + ')' : h[0]));
+        var draw = opened(card, function () {
+            drawHost(card, h);
+        });
+        if (hostsOpen) {
+            draw();
+            card.open = true;
+        }
+        byHost.appendChild(card);
     });
 })();
 </script>
