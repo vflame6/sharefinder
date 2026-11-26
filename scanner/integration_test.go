@@ -3,6 +3,7 @@ package scanner
 import (
 	"bytes"
 	"context"
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"net"
@@ -319,6 +320,28 @@ func TestIntegration_JSONL(t *testing.T) {
 	}
 }
 
+// A host scanned by address is named by that address in UNC paths: the DNS
+// name a server reports for itself may resolve to another host (a cloned VM,
+// a lying server), which a content scanner fed the UNC list would then hit.
+func TestIntegration_UNCNamesTheScannedAddress(t *testing.T) {
+	srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares(), DNSName: "fs01.corp.local"})
+	o := asUser(integrationOptions(srv.Port(), 5*time.Second), testPassword)
+	var buf bytes.Buffer
+	o.Sink = NewUNCSink(&buf)
+
+	s := NewScanner(o, nil, time.Now(), 2)
+	if err := s.Run(context.Background(), TargetsFromList([]DNHost{{IP: net.ParseIP("127.0.0.1")}})); err != nil {
+		t.Fatal(err)
+	}
+	s.CloseOutputter()
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	slices.Sort(lines)
+	if got, want := strings.Join(lines, ","), "//127.0.0.1/DATA,//127.0.0.1/PUBLIC"; got != want {
+		t.Fatalf("UNC list = %q, want %q", got, want)
+	}
+}
+
 func TestIntegration_OutputFormats(t *testing.T) {
 	srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares()})
 	dir := t.TempDir()
@@ -331,6 +354,13 @@ func TestIntegration_OutputFormats(t *testing.T) {
 	}
 	o.FileTXT, o.OutputRawFileName = txt, txtPath
 	o.OutputHTML, o.OutputHTMLFileName = true, filepath.Join(dir, "out.html")
+	csvPath, uncPath := filepath.Join(dir, "out.csv"), filepath.Join(dir, "out.unc.txt")
+	if o.FileCSV, err = o.Writer.CreateFile(csvPath, false); err != nil {
+		t.Fatal(err)
+	}
+	if o.FileUNC, err = o.Writer.CreateFile(uncPath, false); err != nil {
+		t.Fatal(err)
+	}
 
 	run, err := scanXML(t, context.Background(), o)
 	if err != nil {
@@ -346,5 +376,26 @@ func TestIntegration_OutputFormats(t *testing.T) {
 	html, err := os.ReadFile(o.OutputHTMLFileName)
 	if err != nil || !strings.Contains(string(html), "Sharefinder Scan Report") || !strings.Contains(string(html), "readme.txt") {
 		t.Fatalf("HTML report missing or incomplete: %v", err)
+	}
+	csvData, err := os.ReadFile(csvPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := csv.NewReader(bytes.NewReader(csvData)).ReadAll()
+	if err != nil || len(rows) != 3 {
+		t.Fatalf("CSV: want a header and a row per share, got %q (%v)", rows, err)
+	}
+	wantRow := []string{testUser, "127.0.0.1", "SMBTEST", "DATA", "//127.0.0.1/DATA", "true", "true", "WRITE", "Department data"}
+	if !slices.ContainsFunc(rows, func(row []string) bool { return slices.Equal(row, wantRow) }) {
+		t.Errorf("CSV lacks the DATA row: %q", rows)
+	}
+	unc, err := os.ReadFile(uncPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(unc)), "\n")
+	slices.Sort(lines)
+	if got := strings.Join(lines, ","); got != "//127.0.0.1/DATA,//127.0.0.1/PUBLIC" {
+		t.Errorf("UNC list = %q", unc)
 	}
 }

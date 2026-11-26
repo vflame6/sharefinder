@@ -86,6 +86,45 @@ func TestCreateScanner_RefusesBeforeCreatingAnything(t *testing.T) {
 	}
 }
 
+func TestCreateScanner_CSVAndUNCOutputs(t *testing.T) {
+	dir := t.TempDir()
+	cfg := validConfig()
+	cfg.OutputCSV = filepath.Join(dir, "shares.csv")
+	cfg.OutputUNC = filepath.Join(dir, "shares.unc.txt")
+	s, err := CreateScanner(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.CloseOutputter()
+	for _, name := range []string{"shares.csv", "shares.unc.txt"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Errorf("%s not written: %v", name, err)
+		}
+	}
+	if csv, _ := os.ReadFile(filepath.Join(dir, "shares.csv")); !strings.HasPrefix(string(csv), "identity,host,") {
+		t.Errorf("CSV lacks its header: %q", csv)
+	}
+
+	all := validConfig()
+	all.OutputAll = filepath.Join(dir, "scan")
+	s, err = CreateScanner(all)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.CloseOutputter()
+	for _, name := range []string{"scan.txt", "scan.xml", "scan.jsonl", "scan.csv", "scan.unc.txt", "scan.html"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Errorf("--output-all must write %s: %v", name, err)
+		}
+	}
+
+	both := validConfig()
+	both.OutputAll, both.OutputCSV = filepath.Join(dir, "other"), filepath.Join(dir, "x.csv")
+	if _, err := CreateScanner(both); err == nil || !strings.Contains(err.Error(), "--output-csv") {
+		t.Fatalf("--output-all with --output-csv must be refused, got %v", err)
+	}
+}
+
 func TestCreateScanner_AcceptsDisabledIOTimeout(t *testing.T) {
 	cfg := validConfig()
 	cfg.IOTimeout = 0

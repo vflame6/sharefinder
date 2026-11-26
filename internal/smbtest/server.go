@@ -45,6 +45,8 @@ type Config struct {
 	SigningRequired            bool
 	// Latency delays every request, to keep long operations in flight.
 	Latency time.Duration
+	// DNSName is the DNS computer name the server reports in NTLM target info.
+	DNSName string
 }
 
 // Server is a running in-process SMB server.
@@ -64,8 +66,9 @@ func Start(t testing.TB, cfg Config) *Server {
 		accounts[cfg.User] = &server.Account{NTHash: ntlmssp.Ntowfv1(cfg.Password)}
 	}
 	srv := &server.Server{Config: &server.ServerConfig{
-		NetBIOSName:   "SMBTEST",
-		NetBIOSDomain: "WORKGROUP",
+		NetBIOSName:     "SMBTEST",
+		NetBIOSDomain:   "WORKGROUP",
+		DnsComputerName: cfg.DNSName,
 		// no Domain: accept the account whatever domain the client names,
 		// as a standalone server does for local accounts
 		Authenticator:   &server.MapAuthenticator{Accounts: accounts},

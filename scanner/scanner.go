@@ -52,8 +52,8 @@ func (s *Scanner) CloseOutputter() {
 }
 
 // StartOutputs builds the sinks for the opened output files: the console
-// (and -o text file), XML and JSONL. Call it once the identity is known; it
-// does nothing when Options.Sink is already set.
+// (and -o text file), XML, JSONL, CSV and the UNC list. Call it once the
+// identity is known; it does nothing when Options.Sink is already set.
 func (s *Scanner) StartOutputs() {
 	o := s.Options
 	if o.Sink != nil {
@@ -71,6 +71,12 @@ func (s *Scanner) StartOutputs() {
 			Command:  strings.Join(MaskCredentials(s.CommandLine), " "),
 			Identity: o.Identity(),
 		}))
+	}
+	if o.FileCSV != nil {
+		sinks = append(sinks, NewCSVSink(o.FileCSV, o.Identity()))
+	}
+	if o.FileUNC != nil {
+		sinks = append(sinks, NewUNCSink(o.FileUNC))
 	}
 	o.Sink = sinks
 }
@@ -93,7 +99,7 @@ func (s *Scanner) closeOutputs() {
 	if err := s.Options.Sink.Close(s.endRecord()); err != nil {
 		logger.Error(err)
 	}
-	for _, f := range []*os.File{s.Options.FileTXT, s.Options.FileXML, s.Options.FileJSON} {
+	for _, f := range []*os.File{s.Options.FileTXT, s.Options.FileXML, s.Options.FileJSON, s.Options.FileCSV, s.Options.FileUNC} {
 		if f != nil {
 			_ = f.Close()
 		}

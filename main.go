@@ -28,6 +28,8 @@ var (
 	outputRawFlag  = app.Flag("output", "Filename to write output in raw format").Short('o').Default("").String()
 	outputXMLFlag  = app.Flag("output-xml", "Filename to write XML formatted output").Default("").String()
 	outputJSONFlag = app.Flag("output-json", "Filename to write JSONL output: one record per line, written as results arrive").Default("").String()
+	outputCSVFlag  = app.Flag("output-csv", "Filename to write CSV output: one row per share").Default("").String()
+	outputUNCFlag  = app.Flag("output-unc", "Filename to write the readable shares as //host/share lines, for content scanners").Default("").String()
 	outputAllFlag  = app.Flag("output-all", "Filename to write output in all formats").Default("").String()
 	outputHTMLFlag = app.Flag("html", "Generate HTML report (requires XML output)").Default("false").Bool()
 	forceFlag      = app.Flag("force", "Overwrite existing output files").Bool()
@@ -116,6 +118,8 @@ func main() {
 		OutputRaw:       *outputRawFlag,
 		OutputXML:       *outputXMLFlag,
 		OutputJSON:      *outputJSONFlag,
+		OutputCSV:       *outputCSVFlag,
+		OutputUNC:       *outputUNCFlag,
 		OutputAll:       *outputAllFlag,
 		OutputHTML:      *outputHTMLFlag,
 		Force:           *forceFlag,

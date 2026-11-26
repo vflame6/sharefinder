@@ -19,7 +19,9 @@ type Options struct {
 	Exclude            []string   // --exclude
 	ExcludeHosts       *TargetSet // --exclude-hosts
 	FileTXT            *os.File
+	FileCSV            *os.File // --output-csv
 	FileJSON           *os.File // --output-json
+	FileUNC            *os.File // --output-unc
 	FileXML            *os.File
 	FollowLinks        bool          // --follow-links
 	Forest             bool          // --forest (hunt only)

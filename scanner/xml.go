@@ -33,8 +33,9 @@ type Host struct {
 	Signing  bool      `xml:"signing,attr"`
 	Session  string    `xml:"session,attr,omitempty"`
 	Admin    *bool     `xml:"admin,attr,omitempty"`
-	// FQDN is the host's DNS name when known: the target name, or the NTLM
-	// DNS computer name. UNC paths use it.
+	// FQDN is the DNS name the host was scanned by, when the target was a
+	// name (given by the user or found by hunt). UNC paths use it, else the
+	// IP: the name a server reports for itself may point to another host.
 	FQDN   string  `xml:"fqdn,attr,omitempty"`
 	Shares []Share `xml:"share"`
 }

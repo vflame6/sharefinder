@@ -11,6 +11,8 @@ type Config struct {
 	OutputRaw  string // -o/--output
 	OutputXML  string // --output-xml
 	OutputJSON string // --output-json
+	OutputCSV  string // --output-csv
+	OutputUNC  string // --output-unc
 	OutputAll  string // --output-all
 	OutputHTML bool   // --html
 	Force      bool   // --force: overwrite existing output files

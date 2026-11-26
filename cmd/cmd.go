@@ -22,7 +22,11 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 	var outputXMLFileName string
 	var outputHTMLFileName string
 	var outputJSONFileName string
+	var outputCSVFileName string
+	var outputUNCFileName string
 	var fileJSON *os.File
+	var fileCSV *os.File
+	var fileUNC *os.File
 	var file *os.File
 	var fileXML *os.File
 	var err error
@@ -35,8 +39,8 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		return nil, errors.New("cannot use --html without --output-xml")
 	}
 
-	if (cfg.OutputXML != "" || cfg.OutputRaw != "" || cfg.OutputJSON != "" || outputHTML) && cfg.OutputAll != "" {
-		return nil, errors.New("cannot use --output-all with -o, --output-xml, --output-json or --html")
+	if (cfg.OutputXML != "" || cfg.OutputRaw != "" || cfg.OutputJSON != "" || cfg.OutputCSV != "" || cfg.OutputUNC != "" || outputHTML) && cfg.OutputAll != "" {
+		return nil, errors.New("cannot use --output-all with -o, --output-xml, --output-json, --output-csv, --output-unc or --html")
 	}
 
 	// recursive output is available only if the list option is specified
@@ -92,6 +96,8 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		outputRawFileName = scanner.OutputPath(cfg.OutputAll, ".txt")
 		outputXMLFileName = scanner.OutputPath(cfg.OutputAll, ".xml")
 		outputJSONFileName = scanner.OutputPath(cfg.OutputAll, ".jsonl")
+		outputCSVFileName = scanner.OutputPath(cfg.OutputAll, ".csv")
+		outputUNCFileName = scanner.OutputPath(cfg.OutputAll, ".unc.txt")
 		outputHTMLFileName = scanner.OutputPath(cfg.OutputAll, ".html")
 	default:
 		if cfg.OutputRaw != "" {
@@ -103,12 +109,18 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		if cfg.OutputJSON != "" {
 			outputJSONFileName = scanner.OutputPath(cfg.OutputJSON, ".jsonl")
 		}
+		if cfg.OutputCSV != "" {
+			outputCSVFileName = scanner.OutputPath(cfg.OutputCSV, ".csv")
+		}
+		if cfg.OutputUNC != "" {
+			outputUNCFileName = scanner.OutputPath(cfg.OutputUNC, ".unc.txt")
+		}
 		if outputHTML {
 			outputHTMLFileName = scanner.OutputPath(cfg.OutputXML, ".html")
 		}
 	}
 	var outputs []string
-	for _, name := range []string{outputRawFileName, outputXMLFileName, outputJSONFileName, outputHTMLFileName} {
+	for _, name := range []string{outputRawFileName, outputXMLFileName, outputJSONFileName, outputCSVFileName, outputUNCFileName, outputHTMLFileName} {
 		if name != "" {
 			outputs = append(outputs, name)
 		}
@@ -128,6 +140,20 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 	if outputJSONFileName != "" {
 		logger.Debugf("Writing JSONL output to %s", outputJSONFileName)
 		fileJSON, err = outputWriter.CreateFile(outputJSONFileName, false)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if outputCSVFileName != "" {
+		logger.Debugf("Writing CSV output to %s", outputCSVFileName)
+		fileCSV, err = outputWriter.CreateFile(outputCSVFileName, false)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if outputUNCFileName != "" {
+		logger.Debugf("Writing the UNC list to %s", outputUNCFileName)
+		fileUNC, err = outputWriter.CreateFile(outputUNCFileName, false)
 		if err != nil {
 			return nil, err
 		}
@@ -177,6 +203,8 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		OutputXMLFileName:  outputXMLFileName,
 		FileJSON:           fileJSON,
 		OutputJSONFileName: outputJSONFileName,
+		FileCSV:            fileCSV,
+		FileUNC:            fileUNC,
 		Password:           "",
 		Recurse:            cfg.Recurse,
 		SmbPort:            cfg.SmbPort,

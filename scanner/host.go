@@ -104,9 +104,6 @@ func describeHost(conn *Connection, host DNHost, o *Options) *Host {
 		}
 		h.Hostname = info.NBComputerName
 		h.Domain = info.DnsDomainName
-		if h.FQDN == "" && strings.Contains(info.DnsComputerName, ".") {
-			h.FQDN = strings.ToLower(info.DnsComputerName)
-		}
 	} else {
 		// Kerberos auth doesn't provide NTLM target info
 		h.Hostname = host.Hostname
