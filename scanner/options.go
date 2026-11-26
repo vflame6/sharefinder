@@ -34,10 +34,11 @@ type Options struct {
 	HashBytes          []byte        // --hashes
 	IOTimeout          time.Duration // --io-timeout
 	Kerberos           bool
-	List               bool // --list
-	MaxFiles           int  // --max-files
-	MaxConnsPerHost    int  // --max-conns-per-host: connections that list one host's shares
-	LocalAuth          bool // --local-auth
+	List               bool       // --list
+	MaxFiles           int        // --max-files
+	MaxConnsPerHost    int        // --max-conns-per-host: connections that list one host's shares
+	Matrix             []Identity // matrix: the identities tested on every host
+	LocalAuth          bool       // --local-auth
 	Mode               AuthMode
 	NullSession        bool
 	OutputRawFileName  string

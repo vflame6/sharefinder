@@ -22,8 +22,16 @@ func (s *Scanner) Run(ctx context.Context, produce Producer) error {
 	stop := context.AfterFunc(ctx, s.Options.Dialer.CloseAll)
 	defer stop()
 
-	// Too many rejected logons stop the whole run, not only the host.
-	if guard := s.Options.AuthGuard; guard != nil {
+	// Too many rejected logons stop the whole run, not only the host; in a
+	// matrix each user has a guard of its own.
+	guards := []*AuthGuard{s.Options.AuthGuard}
+	for _, id := range s.Options.Matrix {
+		guards = append(guards, id.Guard)
+	}
+	for _, guard := range guards {
+		if guard == nil {
+			continue
+		}
 		go func() {
 			select {
 			case <-guard.Done():

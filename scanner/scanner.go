@@ -28,9 +28,10 @@ type Scanner struct {
 	Stats       Stats  // counts for the summary line and the end record
 
 	closeOnce sync.Once
-	scanned   sync.Map // addresses already scanned, for deduplication
-	slots     slots    // SMB connections in use, at most Threads; made by Run
-	tempJSON  string   // JSONL file created only to render --html, removed at the end
+	scanned   sync.Map   // addresses already scanned, for deduplication
+	slots     slots      // SMB connections in use, at most Threads; made by Run
+	tempJSON  string     // JSONL file created only to render --html, removed at the end
+	matrixMu  sync.Mutex // one host's matrix printed at a time
 }
 
 type DNHost struct {
@@ -73,7 +74,11 @@ func (s *Scanner) StartOutputs() {
 			o.FileJSON, o.OutputJSONFileName, s.tempJSON = f, f.Name(), f.Name()
 		}
 	}
-	sinks := MultiSink{NewTextSink(fileOrNil(o.FileTXT))}
+	var sinks MultiSink
+	// a matrix prints its own table on the console and in the text file
+	if len(o.Matrix) == 0 {
+		sinks = append(sinks, NewTextSink(fileOrNil(o.FileTXT)))
+	}
 	if o.FileXML != nil {
 		sinks = append(sinks, NewXMLSink(o.FileXML, ""))
 	}

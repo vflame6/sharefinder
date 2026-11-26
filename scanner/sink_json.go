@@ -60,8 +60,17 @@ func (s *jsonlSink) flush() {
 	}
 }
 
+// identityOf is who h was scanned as: the scan's identity, or in a matrix
+// the identity of this view of the host.
+func (s *jsonlSink) identityOf(h *Host) string {
+	if h.Identity != "" {
+		return h.Identity
+	}
+	return s.identity
+}
+
 func (s *jsonlSink) HostEnumerated(h *Host) {
-	if s.seen != nil && s.seen(s.identity, h.IP) {
+	if s.seen != nil && s.seen(s.identityOf(h), h.IP) {
 		return
 	}
 	// the declared shares, so a host cut short by Ctrl+C lists the shares it
@@ -75,7 +84,7 @@ func (s *jsonlSink) HostEnumerated(h *Host) {
 		}
 	}
 	record := HostRecord{
-		Type: RecordHost, ScanID: s.scanID, Time: h.Time, Identity: s.identity,
+		Type: RecordHost, ScanID: s.scanID, Time: h.Time, Identity: s.identityOf(h),
 		Host: h.IP, Hostname: h.Hostname, Domain: h.Domain, UNC: UNC(uncHost(h)),
 		OS: h.Version, Signing: h.Signing, Dialect: h.Dialect, Session: h.Session, Admin: h.Admin, Shares: shares, Error: h.Error,
 	}
@@ -94,7 +103,7 @@ func (s *jsonlSink) DirListed(h *Host, share *Share, dir Directory, depth int) {
 	host := uncHost(h)
 	for _, f := range dir.Files {
 		s.write(FileRecord{
-			Type: RecordFile, ScanID: s.scanID, Identity: s.identity, Host: h.IP, Share: share.ShareName,
+			Type: RecordFile, ScanID: s.scanID, Identity: s.identityOf(h), Host: h.IP, Share: share.ShareName,
 			UNC: UNC(host, share.ShareName, dir.Name, f.Name), Kind: f.Type, Size: f.Size, Modified: f.LastModified,
 			Tags: FileTags(f.Name),
 		})
@@ -108,7 +117,7 @@ func (s *jsonlSink) ShareFinished(h *Host, share *Share) {
 		writeAccess = strings.Split(share.WriteAccess, ",")
 	}
 	record := ShareRecord{
-		Type: RecordShare, ScanID: s.scanID, Time: s.now(), Identity: s.identity,
+		Type: RecordShare, ScanID: s.scanID, Time: s.now(), Identity: s.identityOf(h),
 		Host: h.IP, Hostname: h.Hostname, Share: share.ShareName, UNC: UNC(uncHost(h), share.ShareName),
 		Read: share.ReadPermission, Write: share.WritePermission, WriteAccess: writeAccess,
 		Remark: share.Description, ShareType: share.ShareType, Listed: share.Listed,

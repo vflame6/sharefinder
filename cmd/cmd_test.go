@@ -477,6 +477,43 @@ func TestExecuteHunt_ChecksActiveWithinFirst(t *testing.T) {
 	}
 }
 
+func TestExecuteMatrix(t *testing.T) {
+	ids, err := scanner.BuildIdentities([]string{`CORP\a`, `CORP\b`}, []string{"x", "y"}, nil, nil, false, true, true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	listing := validConfig()
+	listing.List = true
+	s, err := CreateScanner(listing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ExecuteMatrix(context.Background(), s, "192.0.2.1", ids, MatrixConfig{}); err == nil || !strings.Contains(err.Error(), "--list") {
+		t.Fatalf("matrix with --list: %v", err)
+	}
+
+	cfg := validConfig()
+	cfg.MaxAuthFailures = 1
+	if s, err = CreateScanner(cfg); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // the identities' set-up is of interest, not the scan
+	_ = ExecuteMatrix(ctx, s, "192.0.2.1", ids, MatrixConfig{})
+	guards := map[*scanner.AuthGuard]bool{}
+	for _, id := range s.Options.Matrix {
+		if id.Mode == scanner.AuthUser {
+			if id.Guard == nil || id.Guard.Max() != 1 {
+				t.Fatalf("user %s has no guard of its own: %+v", id.Label, id.Guard)
+			}
+			guards[id.Guard] = true
+		}
+	}
+	if len(guards) != 2 {
+		t.Fatalf("each user has a guard of its own, got %d guards", len(guards))
+	}
+}
+
 func TestCreateScanner_AcceptsDisabledIOTimeout(t *testing.T) {
 	cfg := validConfig()
 	cfg.IOTimeout = 0

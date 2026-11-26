@@ -101,6 +101,9 @@ func (g *AuthGuard) record(probe bool, err error) {
 }
 
 // Done is closed when the guard trips.
+// Max is the number of rejected logons that trips the guard; 0 for none.
+func (g *AuthGuard) Max() int { return g.max }
+
 func (g *AuthGuard) Done() <-chan struct{} { return g.done }
 
 // Err returns the error the guard tripped with, or nil.

@@ -53,8 +53,12 @@ func (s *csvSink) DirListed(*Host, *Share, Directory, int) {}
 func (s *csvSink) HostFinished(*Host)                      {}
 
 func (s *csvSink) ShareFinished(h *Host, share *Share) {
+	identity := s.identity
+	if h.Identity != "" {
+		identity = h.Identity // a matrix reports each identity
+	}
 	row := []string{
-		s.identity, h.IP, h.Hostname, share.ShareName, UNC(uncHost(h), share.ShareName),
+		identity, h.IP, h.Hostname, share.ShareName, UNC(uncHost(h), share.ShareName),
 		strconv.FormatBool(share.ReadPermission), strconv.FormatBool(share.WritePermission),
 		strings.ReplaceAll(share.WriteAccess, ",", ";"), share.Description,
 	}

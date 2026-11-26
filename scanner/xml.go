@@ -43,6 +43,9 @@ type Host struct {
 	// checked or not; Error says why the shares could not be listed.
 	Declared []string `xml:"-"`
 	Error    string   `xml:"-"`
+	// Identity is who the host was scanned as, when it differs from the
+	// scan's (matrix)
+	Identity string `xml:"-"`
 }
 
 type Share struct {

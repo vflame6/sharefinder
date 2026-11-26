@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -522,6 +523,49 @@ func TestIntegration_LDAPOperatingSystem(t *testing.T) {
 		if rec["type"] == "host" && rec["os"] != target.OS {
 			t.Fatalf("host os = %v, want %s", rec["os"], target.OS)
 		}
+	}
+}
+
+// The roadmap's done-when: one run prints DATA  null:R  guest:R  tester:RW,
+// what three separate runs gave.
+func TestIntegration_Matrix(t *testing.T) {
+	srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares(), AllowGuest: true, AllowAnonymous: true})
+	o := integrationOptions(srv.Port(), 5*time.Second)
+	ids, err := BuildIdentities([]string{testUser}, []string{testPassword}, nil, nil, true, true, true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	o.Matrix = ids
+	var jsonl bytes.Buffer
+	o.Sink = NewJSONLSink(&jsonl, ScanRecord{ScanID: "01J"})
+
+	s := NewScanner(o, nil, time.Now(), 1)
+	out := captureLog(t, func() {
+		if err := s.Run(context.Background(), TargetsFromList([]DNHost{{IP: net.ParseIP("127.0.0.1")}})); err != nil {
+			t.Error(err)
+		}
+	})
+	s.CloseOutputter()
+
+	for _, want := range []string{`(?m)^DATA\s+null:R\s+guest:R\s+tester:RW$`, `(?m)^PUBLIC\s+null:R\s+guest:R\s+tester:R$`} {
+		if !regexp.MustCompile(want).MatchString(out) {
+			t.Errorf("matrix lacks %s:\n%s", want, out)
+		}
+	}
+	// the JSONL output records each identity's view
+	shares := map[string]string{}
+	for _, rec := range jsonLines(t, jsonl.String()) {
+		if rec["type"] == "share" && rec["share"] == "DATA" {
+			shares[rec["identity"].(string)] = fmt.Sprint(rec["read"], rec["write"])
+		}
+	}
+	if shares["null"] != "true false" || shares["guest"] != "true false" || shares[testUser] != "true true" {
+		t.Errorf("DATA share records by identity: %v", shares)
+	}
+	// one logon per identity: the null session (empty NTLM credentials), the
+	// made-up guest user and tester
+	if srv.LogonAttempts() != 3 {
+		t.Errorf("logons = %d, want 3", srv.LogonAttempts())
 	}
 }
 

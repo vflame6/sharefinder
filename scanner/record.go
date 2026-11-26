@@ -166,6 +166,13 @@ func shareTypeName(typeID uint32) string {
 
 // Identity names who the scan logs on as: null, guest, DOMAIN\user or user.
 func (o *Options) Identity() string {
+	if len(o.Matrix) > 0 {
+		names := make([]string, 0, len(o.Matrix))
+		for _, id := range o.Matrix {
+			names = append(names, id.Name())
+		}
+		return strings.Join(names, ", ")
+	}
 	switch o.Mode {
 	case AuthNull:
 		return "null"

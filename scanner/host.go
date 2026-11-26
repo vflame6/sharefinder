@@ -62,6 +62,11 @@ func (s *Scanner) enumerateHost(ctx context.Context, host DNHost) {
 	sink := s.sink()
 	defer s.Stats.Done.Add(1)
 
+	if len(o.Matrix) > 0 {
+		s.matrixHost(ctx, host)
+		return
+	}
+
 	logger.Debugf("Trying to establish SMB connection to %s (%s)", host.Address(), host.Hostname)
 	conn, err := NewSMBConnection(ctx, host, o)
 	if err != nil {

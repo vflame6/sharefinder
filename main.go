@@ -108,6 +108,22 @@ var (
 	huntActiveWithin    = huntCommand.Flag("active-within", "Scan only computers that logged on within this time, such as 90d, 12w or 36h (lastLogonTimestamp, which lags up to 14 days)").PlaceHolder("90d").String()
 	huntLDAPOnly        = huntCommand.Flag("ldap-only", "Print the computers (name, address, operating system) and stop: no SMB, no port sweep").Bool()
 
+	// matrix command
+	// test null, guest and every given account per host in one pass
+	matrixCommand        = app.Command("matrix", "Test a null session, a guest session and every -u on each host, and print who can read and write each share")
+	matrixTargetArg      = matrixCommand.Arg("target", "Target, IP range or filename").Required().String()
+	matrixUsersFlag      = matrixCommand.Flag("username", "Account to test, as DOMAIN\\username (repeatable)").Short('u').Strings()
+	matrixPasswordsFlag  = matrixCommand.Flag("password", "Password of the -u in the same position (repeatable); with one -u, also SHAREFINDER_PASSWORD or a prompt").Short('p').Strings()
+	matrixHashesFlag     = matrixCommand.Flag("hashes", "NTLM hash of the -u in the same position (repeatable)").Short('H').Strings()
+	matrixAESKeysFlag    = matrixCommand.Flag("aes-key", "Kerberos AES key of the -u in the same position, in hex (repeatable, with -k)").Strings()
+	matrixLocalAuthFlag  = matrixCommand.Flag("local-auth", "The -u are local accounts, given without a domain").Bool()
+	matrixKerberosFlag   = matrixCommand.Flag("kerberos", "Use Kerberos authentication for the -u").Short('k').Bool()
+	matrixDcHostnameFlag = matrixCommand.Flag("dc-hostname", "Hostname of domain controller for Kerberos authentication").String()
+	matrixDcIPFlag       = matrixCommand.Flag("dc-ip", "IP of KDC when using Kerberos authentication").IP()
+	matrixNullFlag       = matrixCommand.Flag("null", "Test a null session").Default("true").Bool()
+	matrixGuestFlag      = matrixCommand.Flag("guest", "Test a guest session").Default("true").Bool()
+	matrixGuestUserFlag  = matrixCommand.Flag("guest-username", "User name for the guest session (default: a made-up one)").String()
+
 	// report command
 	// render the HTML report of a JSONL file
 	reportCommand  = app.Command("report", "Write the HTML report of an --output-json file, named after it or after -o")
@@ -242,6 +258,16 @@ func main() {
 		err = cmd.ExecuteHunt(ctx, scanner, *huntUsernameFlag, password, *huntHashFlag, *huntAESKeyFlag, *huntKerberosFlag, *huntDcHostnameFlag, cmd.HuntConfig{
 			DC: *huntDcArg, Resolver: *huntResolverFlag, Forest: *huntForestFlag, AllowPlaintextLDAP: *huntAllowPlainFlag,
 			IncludeDisabled: *huntIncludeDisabled, ActiveWithin: *huntActiveWithin, LDAPOnly: *huntLDAPOnly,
+		})
+	}
+	if command == matrixCommand.FullCommand() {
+		ids, ierr := cmd.MatrixIdentities(*matrixUsersFlag, *matrixPasswordsFlag, *matrixHashesFlag, *matrixAESKeysFlag,
+			*matrixLocalAuthFlag, *matrixKerberosFlag, *matrixNullFlag, *matrixGuestFlag, *matrixGuestUserFlag)
+		if ierr != nil {
+			logger.Fatal(ierr)
+		}
+		err = cmd.ExecuteMatrix(ctx, scanner, *matrixTargetArg, ids, cmd.MatrixConfig{
+			Kerberos: *matrixKerberosFlag, DCHostname: *matrixDcHostnameFlag, DCIP: *matrixDcIPFlag,
 		})
 	}
 	interrupted := ctx.Err() != nil
