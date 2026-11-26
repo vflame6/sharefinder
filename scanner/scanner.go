@@ -22,7 +22,8 @@ type Scanner struct {
 	TimeEnd     time.Time
 	Threads     int
 	Version     string // sharefinder version, for the outputs
-	Interrupted bool   // the scan was stopped by Ctrl+C
+	Interrupted bool   // the scan stopped early: Ctrl+C, or an error such as the lockout guard
+	StopReason  string // why it stopped early, for the end record
 	Stats       Stats  // counts for the summary line and the end record
 
 	closeOnce sync.Once

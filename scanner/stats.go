@@ -36,6 +36,7 @@ func (s *Scanner) endRecord() EndRecord {
 		Authenticated: int(s.Stats.Authenticated.Load()),
 		Failed:        int(s.Stats.Failed.Load()),
 		Interrupted:   s.Interrupted,
+		Error:         s.StopReason,
 	}
 }
 

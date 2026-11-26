@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -402,6 +404,30 @@ func TestCreateScanner_ResumeRefusesOutputsItCannotContinue(t *testing.T) {
 	s.CloseOutputter()
 	if _, err := os.Stat(filepath.Join(dir, "scan.html")); err != nil {
 		t.Fatalf("--resume scan.jsonl --html writes scan.html: %v", err)
+	}
+}
+
+// A run the lockout guard stops is as unfinished as one stopped by Ctrl+C:
+// report and diff must not take it for complete.
+func TestRunScan_StoppedRunIsInterrupted(t *testing.T) {
+	dir := t.TempDir()
+	cfg := validConfig()
+	cfg.OutputJSON = filepath.Join(dir, "scan")
+	s, err := CreateScanner(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stop := errors.New("stopping: credentials rejected by 10.0.0.9 (Logon failed)")
+	err = runScan(context.Background(), s, "auth", func(context.Context, chan<- scanner.DNHost) error { return stop })
+	if !errors.Is(err, stop) {
+		t.Fatalf("runScan = %v, want %v", err, stop)
+	}
+	s.CloseOutputter()
+	data, _ := os.ReadFile(filepath.Join(dir, "scan.jsonl"))
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	end := lines[len(lines)-1]
+	if !strings.Contains(end, `"type":"end"`) || !strings.Contains(end, `"interrupted":true`) || !strings.Contains(end, `"error":"stopping: credentials rejected`) {
+		t.Fatalf("end record of a stopped run: %s", end)
 	}
 }
 

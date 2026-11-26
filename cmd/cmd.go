@@ -327,7 +327,14 @@ func resumeCommand(args []string) string {
 func runScan(ctx context.Context, s *scanner.Scanner, module string, produce scanner.Producer) error {
 	s.StartOutputs()
 	err := s.Run(ctx, produce)
-	s.Interrupted = ctx.Err() != nil
+	// stopped early by Ctrl+C or by an error such as the lockout guard: the
+	// outputs say so, and resume and diff do not take the scan for complete
+	switch {
+	case ctx.Err() != nil:
+		s.Interrupted, s.StopReason = true, "interrupted"
+	case err != nil:
+		s.Interrupted, s.StopReason = true, err.Error()
+	}
 	s.TimeEnd = time.Now()
 	if n := s.Stats.Resumed.Load(); n > 0 {
 		logger.Warnf("Skipped %d host(s) finished in %s", n, s.Options.OutputJSONFileName)

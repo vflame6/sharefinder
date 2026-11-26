@@ -99,6 +99,7 @@ type EndRecord struct {
 	Authenticated int       `json:"authenticated"`
 	Failed        int       `json:"failed"`
 	Interrupted   bool      `json:"interrupted,omitempty"`
+	Error         string    `json:"error,omitempty"` // why the scan stopped early
 }
 
 const crockford = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
