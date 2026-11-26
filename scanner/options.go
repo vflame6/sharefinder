@@ -16,7 +16,7 @@ type Options struct {
 	Dialer             *Dialer     // --proxy, --timeout, --io-timeout
 	Domain             string      // part of --username
 	Depth              int         // --depth
-	Discovery          SweepConfig // --discovery, --discovery-threads, --connect-timeout
+	Discovery          SweepConfig // --disable-discovery, --discovery-threads, --connect-timeout
 	DomainController   net.IP
 	Exclude            []string   // --exclude
 	ExcludeHosts       *TargetSet // --exclude-hosts

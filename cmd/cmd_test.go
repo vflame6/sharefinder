@@ -26,7 +26,7 @@ func validConfig() Config {
 		WriteCheck: "file",
 		Depth:      0,
 
-		DiscoveryThreads: 50,
+		DiscoveryThreads: 64,
 		ConnectTimeout:   2 * time.Second,
 		MaxConnsPerHost:  2,
 	}
@@ -315,7 +315,7 @@ func TestCreateScanner_DiscoveryDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := s.Options.Discovery, (scanner.SweepConfig{Enabled: true, Threads: 50, Timeout: 2 * time.Second}); got != want {
+	if got, want := s.Options.Discovery, (scanner.SweepConfig{Enabled: true, Threads: 64, Timeout: 2 * time.Second}); got != want {
 		t.Fatalf("discovery = %+v, want %+v", got, want)
 	}
 
@@ -324,7 +324,7 @@ func TestCreateScanner_DiscoveryDefaults(t *testing.T) {
 	if s, err = CreateScanner(proxied); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := s.Options.Discovery, (scanner.SweepConfig{Enabled: true, Threads: 50, Timeout: 2 * time.Second}); got != want {
+	if got, want := s.Options.Discovery, (scanner.SweepConfig{Enabled: true, Threads: 64, Timeout: 2 * time.Second}); got != want {
 		t.Fatalf("proxied discovery = %+v, want %+v", got, want)
 	}
 

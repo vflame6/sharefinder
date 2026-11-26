@@ -51,9 +51,9 @@ var (
 	smbPortFlag          = app.Flag("smb-port", "Target port of SMB service").Default("445").Int()
 	proxyFlag            = app.Flag("proxy", "SOCKS-proxy address to use for connection in format IP:PORT").Default("").String()
 	disableDiscoveryFlag = app.Flag("disable-discovery", "Do not probe the SMB port of every target first: enumerate every target").Bool()
-	discoveryThreadsFlag = app.Flag("discovery-threads", "Number of concurrent port probes").Default("50").Int()
+	discoveryThreadsFlag = app.Flag("discovery-threads", "Number of concurrent port probes").Default("64").Int()
 	connectTimeoutFlag   = app.Flag("connect-timeout", "Time to wait for the SMB port to answer a probe").Default("2s").Duration()
-	maxAuthFailuresFlag  = app.Flag("max-auth-failures", "Stop the scan after this many rejected logons; 0 disables the guard").Default("1").Int()
+	maxAuthFailuresFlag  = app.Flag("max-auth-failures", "Stop the scan after this many rejected logons, sending logons one at a time until one succeeds (0 = no limit)").Default("0").Int()
 
 	// SMB interaction flags
 	excludeFlag            = app.Flag("exclude", "Exclude list").Short('e').Default("IPC$,NETLOGON,ADMIN$,print$,C$").String()
