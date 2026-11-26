@@ -44,6 +44,7 @@ type Options struct {
 	Password           string         // --password
 	Progress           bool           // draw a progress line: stderr is a terminal, no --quiet or --debug
 	Recurse            bool           // --recurse
+	Resume             *ResumeState   // --resume: what the interrupted scan finished
 	SmbPort            int            // --smb-port
 	Timeout            time.Duration  // --timeout
 	Username           string         // part of --username

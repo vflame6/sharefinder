@@ -310,6 +310,61 @@ func TestCreateScanner_DiscoveryDefaults(t *testing.T) {
 	}
 }
 
+func TestCreateScanner_Resume(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "scan.jsonl")
+	previous := `{"type":"scan","scan_id":"01JPREV","time":"2026-11-26T10:00:00Z","command":"--quiet --output-json scan auth 10.0.0.0/30 -u tester -p ***","identity":"tester"}` + "\n" +
+		`{"type":"host","scan_id":"01JPREV","time":"2026-11-26T10:00:00Z","identity":"tester","host":"10.0.0.1","unc":"//10.0.0.1","signing":false,"shares":[]}` + "\n"
+	if err := os.WriteFile(path, []byte(previous), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stderr bytes.Buffer
+	logger.SetWriters(&bytes.Buffer{}, &stderr)
+	t.Cleanup(func() { logger.SetWriters(os.Stdout, os.Stderr) })
+
+	cfg := validConfig()
+	cfg.Resume = path
+	cfg.CommandLine = []string{"--resume", path, "--threads=50", "--no-discovery", "-o", "notes", "--output-json", "scan", "auth", "10.0.0.0/30", "-u", "tester", "-p", "secret"}
+	s, err := CreateScanner(cfg)
+	if err != nil {
+		t.Fatalf("--resume continues an existing file without --force: %v", err)
+	}
+	if s.Options.Resume == nil || s.Options.Resume.ScanID != "01JPREV" || s.Options.OutputJSONFileName != path {
+		t.Fatalf("resume state %+v, JSONL output %q", s.Options.Resume, s.Options.OutputJSONFileName)
+	}
+	if strings.Contains(stderr.String(), "different command") {
+		t.Errorf("output, verbosity and speed flags do not make a different command: %q", stderr.String())
+	}
+	s.CloseOutputter()
+	data, _ := os.ReadFile(path)
+	if !strings.HasPrefix(string(data), previous) || strings.Count(string(data), `"type":"scan"`) != 1 || !strings.Contains(string(data), `"type":"end"`) {
+		t.Fatalf("the resumed scan appends to the file, without a second scan record:\n%s", data)
+	}
+
+	other := validConfig()
+	other.Resume, other.OutputJSON = path, filepath.Join(dir, "other")
+	if _, err := CreateScanner(other); err == nil || !strings.Contains(err.Error(), "--resume") {
+		t.Fatalf("--output-json naming another file must be refused, got %v", err)
+	}
+
+	changed := validConfig()
+	changed.Resume = path
+	changed.CommandLine = []string{"--resume=" + path, "auth", "10.0.0.0/24", "-u", "tester", "-p", "secret"}
+	if s, err = CreateScanner(changed); err != nil {
+		t.Fatal(err)
+	}
+	s.CloseOutputter()
+	if !strings.Contains(stderr.String(), "different command") {
+		t.Errorf("a different command must be called out: %q", stderr.String())
+	}
+
+	missing := validConfig()
+	missing.Resume = filepath.Join(dir, "nope.jsonl")
+	if _, err := CreateScanner(missing); err == nil {
+		t.Fatal("nothing to resume must be an error")
+	}
+}
+
 func TestCreateScanner_AcceptsDisabledIOTimeout(t *testing.T) {
 	cfg := validConfig()
 	cfg.IOTimeout = 0

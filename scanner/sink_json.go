@@ -20,6 +20,16 @@ type jsonlSink struct {
 	scanID   string
 	identity string
 	now      func() time.Time
+	// seen reports a host whose record a resumed scan wrote already; nil
+	// for a new scan
+	seen func(identity, host string) bool
+}
+
+// ResumeJSONLSink continues the JSONL output of an interrupted scan on w: it
+// writes no scan record, keeps the scan's id and does not record a host
+// again.
+func ResumeJSONLSink(w io.Writer, r *ResumeState, identity string) Sink {
+	return &jsonlSink{w: bufio.NewWriterSize(w, 64<<10), scanID: r.ScanID, identity: identity, now: time.Now, seen: r.HostSeen}
 }
 
 // NewJSONLSink starts a JSONL output on w with the scan record.
@@ -51,6 +61,9 @@ func (s *jsonlSink) flush() {
 }
 
 func (s *jsonlSink) HostEnumerated(h *Host) {
+	if s.seen != nil && s.seen(s.identity, h.IP) {
+		return
+	}
 	shares := make([]string, 0, len(h.Shares))
 	for _, share := range h.Shares {
 		shares = append(shares, share.ShareName)

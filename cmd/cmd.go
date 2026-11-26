@@ -1,12 +1,14 @@
 package cmd
 
 import (
+	"cmp"
 	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -34,8 +36,8 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 	outputHTML := cfg.OutputHTML
 
 	// the HTML report is named after the JSONL or XML output
-	if outputHTML && cfg.OutputJSON == "" && cfg.OutputXML == "" {
-		return nil, errors.New("cannot use --html without --output-json or --output-xml: the report is named after them")
+	if outputHTML && cfg.OutputJSON == "" && cfg.OutputXML == "" && cfg.Resume == "" {
+		return nil, errors.New("cannot use --html without --output-json, --resume or --output-xml: the report is named after them")
 	}
 
 	if (cfg.OutputXML != "" || cfg.OutputRaw != "" || cfg.OutputJSON != "" || cfg.OutputCSV != "" || cfg.OutputUNC != "" || outputHTML) && cfg.OutputAll != "" {
@@ -123,21 +125,38 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 			outputUNCFileName = scanner.OutputPath(cfg.OutputUNC, ".unc.txt")
 		}
 		if outputHTML {
-			base := cfg.OutputJSON
-			if base == "" {
-				base = cfg.OutputXML
-			}
+			base := cmp.Or(cfg.OutputJSON, cfg.Resume, cfg.OutputXML)
 			outputHTMLFileName = scanner.OutputPath(base, ".html")
 		}
 	}
+	// --resume continues the JSONL file of an interrupted scan: it is the
+	// JSONL output, appended to, so it is not an existing file to refuse
+	if cfg.Resume != "" {
+		if outputJSONFileName != "" && filepath.Clean(outputJSONFileName) != filepath.Clean(cfg.Resume) {
+			return nil, fmt.Errorf("--resume continues %s, so JSONL output cannot also go to %s", cfg.Resume, outputJSONFileName)
+		}
+		if info, err := os.Stat(cfg.Resume); err != nil || !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("--resume: there is no scan file %s to resume", cfg.Resume)
+		}
+		outputJSONFileName = cfg.Resume
+	}
 	var outputs []string
 	for _, name := range []string{outputRawFileName, outputXMLFileName, outputJSONFileName, outputCSVFileName, outputUNCFileName, outputHTMLFileName} {
-		if name != "" {
+		if name != "" && (cfg.Resume == "" || name != outputJSONFileName) {
 			outputs = append(outputs, name)
 		}
 	}
 	if err := scanner.CheckOverwrite(outputs, cfg.Force); err != nil {
 		return nil, err
+	}
+	var resume *scanner.ResumeState
+	if cfg.Resume != "" {
+		if resume, err = scanner.LoadResume(cfg.Resume); err != nil {
+			return nil, err
+		}
+		if now := resumeCommand(cfg.CommandLine); now != resumeCommand(strings.Fields(resume.Command)) {
+			logger.Warnf("--resume: %s was written by a different command: sharefinder %s", cfg.Resume, resume.Command)
+		}
 	}
 
 	outputWriter := scanner.NewOutputWriter()
@@ -150,7 +169,7 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 	}
 	if outputJSONFileName != "" {
 		logger.Debugf("Writing JSONL output to %s", outputJSONFileName)
-		fileJSON, err = outputWriter.CreateFile(outputJSONFileName, false)
+		fileJSON, err = outputWriter.CreateFile(outputJSONFileName, resume != nil)
 		if err != nil {
 			return nil, err
 		}
@@ -220,6 +239,7 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		FileUNC:            fileUNC,
 		Password:           "",
 		Recurse:            cfg.Recurse,
+		Resume:             resume,
 		SmbPort:            cfg.SmbPort,
 		Timeout:            cfg.Timeout,
 		Username:           "",
@@ -258,12 +278,41 @@ func discoveryConfig(cfg Config) (scanner.SweepConfig, error) {
 	return sweep, nil
 }
 
+// resumeIgnored lists the flags that change how a scan is shown, saved or
+// paced, not what it finds; the value says whether the flag takes one.
+var resumeIgnored = map[string]bool{
+	"--resume": true, "-o": true, "--output": true, "--output-xml": true, "--output-json": true,
+	"--output-csv": true, "--output-unc": true, "--output-all": true, "--threads": true,
+	"--discovery-threads": true, "--connect-timeout": true, "--max-conns-per-host": true,
+	"--quiet": false, "--debug": false, "--force": false, "--html": false, "--discovery": false,
+}
+
+// resumeCommand is a command line as --resume compares it: credentials
+// masked, without the flags in resumeIgnored.
+func resumeCommand(args []string) string {
+	var kept []string
+	for i := 0; i < len(args); i++ {
+		name, _, inline := strings.Cut(args[i], "=")
+		takesValue, ignored := resumeIgnored[strings.Replace(name, "--no-", "--", 1)]
+		switch {
+		case !ignored:
+			kept = append(kept, args[i])
+		case takesValue && !inline:
+			i++ // skip the value too
+		}
+	}
+	return strings.Join(scanner.MaskCredentials(kept), " ")
+}
+
 // runScan enumerates the hosts produce sends and logs how the module ended.
 func runScan(ctx context.Context, s *scanner.Scanner, module string, produce scanner.Producer) error {
 	s.StartOutputs()
 	err := s.Run(ctx, produce)
 	s.Interrupted = ctx.Err() != nil
 	s.TimeEnd = time.Now()
+	if n := s.Stats.Resumed.Load(); n > 0 {
+		logger.Warnf("Skipped %d host(s) finished in %s", n, s.Options.OutputJSONFileName)
+	}
 	if ctx.Err() != nil || err != nil {
 		logger.Warnf("Stopped %s module at %s", module, s.TimeEnd.Format("02/01/2006 15:04:05"))
 		return err

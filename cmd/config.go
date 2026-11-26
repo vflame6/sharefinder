@@ -16,6 +16,7 @@ type Config struct {
 	OutputAll  string // --output-all
 	OutputHTML bool   // --html
 	Force      bool   // --force: overwrite existing output files
+	Resume     string // --resume: the JSONL file of an interrupted scan
 
 	Threads   int           // --threads
 	Timeout   time.Duration // --timeout: connect timeout

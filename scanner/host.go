@@ -2,10 +2,12 @@ package scanner
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/jfjallid/go-smb/dcerpc/mssrvs"
 	"github.com/jfjallid/go-smb/smb"
 	"github.com/vflame6/sharefinder/logger"
 )
@@ -40,6 +42,12 @@ func (s *Scanner) admit(ctx context.Context, target DNHost) (DNHost, bool) {
 	if !ok {
 		s.Stats.Done.Add(1)
 		logger.Debugf("Skipping %s: excluded or already scanned", host.Address())
+		return host, false
+	}
+	if s.Options.Resume.HostDone(s.Options.Identity(), host.Address()) {
+		s.Stats.Done.Add(1)
+		s.Stats.Resumed.Add(1)
+		logger.Debugf("Skipping %s: done in the resumed scan", host.Address())
 		return host, false
 	}
 	s.Stats.Targets.Add(1)
@@ -83,6 +91,13 @@ func (s *Scanner) enumerateHost(ctx context.Context, host DNHost) {
 			reportHostError(host.Address(), &StageError{Stage: StageEnumerate, Host: host.Address(), Err: err})
 		}
 		return
+	}
+	// shares the resumed scan finished are neither checked nor listed again
+	if o.Resume != nil {
+		identity := o.Identity()
+		shares = slices.DeleteFunc(shares, func(share mssrvs.NetShare) bool {
+			return o.Resume.ShareDone(identity, h.IP, share.Name)
+		})
 	}
 	h.Shares = checkShares(ctx, conn, shares, o)
 	sink.HostEnumerated(h)

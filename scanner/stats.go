@@ -12,6 +12,7 @@ import (
 type Stats struct {
 	Total         atomic.Int64 // targets expected; 0 while unknown
 	Done          atomic.Int64 // targets processed, skipped ones included
+	Resumed       atomic.Int64 // hosts skipped: done in the resumed scan
 	Targets       atomic.Int64 // targets taken up, after exclusions
 	Reachable     atomic.Int64 // answered SMB negotiation
 	Authenticated atomic.Int64 // accepted the identity

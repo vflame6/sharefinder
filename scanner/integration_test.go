@@ -320,6 +320,82 @@ func TestIntegration_JSONL(t *testing.T) {
 	}
 }
 
+// resumeFile writes a JSONL scan in which 127.0.0.1 declared DATA and PUBLIC
+// and finished the given shares.
+func resumeFile(t *testing.T, done ...string) string {
+	t.Helper()
+	var b strings.Builder
+	b.WriteString(jsonLine(t, ScanRecord{Type: RecordScan, ScanID: "01JPREVIOUS", Time: sinkTime, Identity: testUser}))
+	b.WriteString(jsonLine(t, HostRecord{Type: RecordHost, ScanID: "01JPREVIOUS", Identity: testUser, Host: "127.0.0.1", Shares: []string{"DATA", "PUBLIC"}}))
+	for _, share := range done {
+		b.WriteString(jsonLine(t, ShareRecord{Type: RecordShare, ScanID: "01JPREVIOUS", Identity: testUser, Host: "127.0.0.1", Share: share, Read: true}))
+	}
+	path := filepath.Join(t.TempDir(), "scan.jsonl")
+	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// resumeRun continues the scan in path against srv and returns the file.
+func resumeRun(t *testing.T, srv *smbtest.Server, path string) string {
+	t.Helper()
+	o := asUser(integrationOptions(srv.Port(), 5*time.Second), testPassword)
+	o.List = true
+	r, err := LoadResume(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := o.Writer.CreateFile(path, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o.Resume, o.FileJSON, o.OutputJSONFileName = r, f, path
+
+	s := NewScanner(o, nil, time.Now(), 2)
+	s.StartOutputs()
+	if err := s.Run(context.Background(), TargetsFromList([]DNHost{{IP: net.ParseIP("127.0.0.1")}})); err != nil {
+		t.Fatal(err)
+	}
+	s.CloseOutputter()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+func TestIntegration_ResumeSkipsDoneHosts(t *testing.T) {
+	srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares()})
+	resumeRun(t, srv, resumeFile(t, "DATA", "PUBLIC"))
+	if got := srv.LogonAttempts(); got != 0 {
+		t.Fatalf("a host done in the resumed scan must not be contacted, %d logons", got)
+	}
+}
+
+func TestIntegration_ResumeFinishesOpenShares(t *testing.T) {
+	srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares()})
+	data := resumeRun(t, srv, resumeFile(t, "DATA"))
+
+	counts := map[string]int{}
+	var shares []string
+	for _, rec := range jsonLines(t, data) {
+		counts[rec["type"].(string)]++
+		if rec["type"] == "share" {
+			shares = append(shares, rec["share"].(string))
+		}
+		if rec["type"] != "scan" && rec["scan_id"] != "01JPREVIOUS" {
+			t.Errorf("appended records keep the scan id: %v", rec)
+		}
+	}
+	if counts["scan"] != 1 || counts["host"] != 1 || counts["end"] != 1 {
+		t.Errorf("one scan, one host and one end record, got %v", counts)
+	}
+	if strings.Join(shares, ",") != "DATA,PUBLIC" {
+		t.Errorf("only PUBLIC is scanned again, share records: %v", shares)
+	}
+}
+
 func TestIntegration_TwoSharesTwoConns(t *testing.T) {
 	for _, tc := range []struct{ conns, logons int }{{2, 2}, {1, 1}} {
 		srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares()})

@@ -74,7 +74,9 @@ func (s *Scanner) StartOutputs() {
 	if o.FileXML != nil {
 		sinks = append(sinks, NewXMLSink(o.FileXML, ""))
 	}
-	if o.FileJSON != nil {
+	if o.FileJSON != nil && o.Resume != nil {
+		sinks = append(sinks, ResumeJSONLSink(o.FileJSON, o.Resume, o.Identity()))
+	} else if o.FileJSON != nil {
 		sinks = append(sinks, NewJSONLSink(o.FileJSON, ScanRecord{
 			ScanID:   NewScanID(),
 			Time:     s.TimeStart,
