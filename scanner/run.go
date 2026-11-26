@@ -46,8 +46,8 @@ func (s *Scanner) Run(ctx context.Context, produce Producer) error {
 		defer stopProgress()
 	}
 
-	// producer -> discovery sweep (its own large pool) -> SMB workers; with
-	// --no-discovery every target goes straight to an SMB worker
+	// producer -> discovery sweep (its own pool) -> SMB workers; with
+	// --disable-discovery every target goes straight to an SMB worker
 	targets := make(chan DNHost, 256)
 	queue, enumerate := (<-chan DNHost)(targets), s.processHost
 	sweepDone := make(chan struct{})
