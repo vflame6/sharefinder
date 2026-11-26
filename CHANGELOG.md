@@ -7,6 +7,17 @@ from the section of the released version.
 
 ## [Unreleased]
 
+### Changed
+
+- The HTML report's By host section shows each listed share as a tree:
+  folders nest under the share and under each other, with a guide line per
+  level, and files sit in their folder. Each folder shows how many files are
+  below it, their size and their tags, so a tagged file is found without
+  opening every folder; a followed link opens like a folder. A scan of up to
+  2,000 entries opens expanded; a larger one draws a folder when it is
+  opened, 1,000 entries at a time, so a share's listing is no longer cut at
+  5,000 entries. Expand all and Collapse all work per share.
+
 ## [1.5.1] - 2026-11-26
 
 ### Changed

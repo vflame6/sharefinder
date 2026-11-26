@@ -147,18 +147,24 @@
         ]
     });
 
-    // By host: each host with its details, its shares and the listing of
-    // each share, directory by directory, as the reports before 1.5.0 showed
-    // them. A host and a listing are drawn when opened, at once in a small
-    // scan, and a listing shows at most listingLimit entries, so the page
-    // stays fast with millions of files.
-    var listingLimit = 5000;
+    // By host: each host with its details, its shares, and each listed share
+    // as a tree of its folders and files. A folder is drawn the first time it
+    // is opened and shows childLimit entries at a time; a small scan opens
+    // every folder at once, and Expand all opens a share of up to expandLimit
+    // entries, so the page stays fast with millions of files.
+    var childLimit = 1000;
+    var expandLimit = 5000;
     var smallScan = files.length <= 2000;
     var hostsOpen = hosts.length <= 50;
     // --recurse descends into symlinks and junctions (type link), such as
     // SYSVOL's domain folder, unless --disable-follow-links; the scan record
     // says so, and scans before it did only with --follow-links
     var linksFollowed = summary.follow_links === true || /(^|\s)--follow-links(\s|=|$)/.test(summary.command || '');
+    // names sort as Explorer sorts them: file2 before file10, any case
+    var collator = new Intl.Collator('en', {numeric: true, sensitivity: 'base'});
+    // the class of each tag the scan writes; any other tag gets none
+    var tagClass = new Map([['secret', 'sf-tag-secret'], ['script', 'sf-tag-script'], ['config', 'sf-tag-config'],
+        ['database', 'sf-tag-database'], ['backup', 'sf-tag-backup']]);
 
     function el(tag, className, value) {
         var node = document.createElement(tag);
@@ -233,50 +239,125 @@
         return entries.get(key(host, share)) || [];
     }
 
-    function name(path) {
-        return path.slice(path.lastIndexOf('/') + 1);
+    function tagsOf(r) {
+        return r[5] ? r[5].split(', ') : [];
     }
 
-    // drawListing draws a share's entries: the share root first, then each
-    // directory in path order, directories before files
-    function drawListing(container, rows) {
-        var shown = rows.length > listingLimit ? rows.slice(0, listingLimit) : rows;
-        var byDir = new Map();
-        shown.forEach(function (r) {
-            var cut = r[2].lastIndexOf('/');
-            var dir = cut < 0 ? '' : r[2].slice(0, cut);
-            if (!byDir.has(dir)) {
-                byDir.set(dir, []);
-            }
-            byDir.get(dir).push(r);
+    // isFile says whether an entry is a file. The scan types any reparse
+    // point a link, a deduplicated or cloud-tiered file too: a link with a
+    // size is a file, as a directory has none.
+    function isFile(r) {
+        return r[6] === 'file' || (r[6] === 'link' && r[3] > 0);
+    }
+
+    function byName(a, b) {
+        return collator.compare(a, b) || (a < b ? -1 : a > b ? 1 : 0);
+    }
+
+    // folder is a node of a share's tree. row is its entry: null for the
+    // share root and for a folder known only from the paths below it. count,
+    // bytes and tags add up the files below it, at any depth.
+    function folder(name, row) {
+        return {name: name, row: row, dirs: new Map(), files: new Map(), count: 0, bytes: 0, tags: new Set()};
+    }
+
+    function addFile(f, size, tags) {
+        f.count++;
+        f.bytes += size;
+        tags.forEach(function (t) {
+            f.tags.add(t);
         });
-        Array.from(byDir.keys()).sort().forEach(function (dir) {
-            if (dir !== '') {
-                container.appendChild(el('div', 'sf-dir', dir.split('/').join('\\')));
-            }
-            var t = smallTable(['Type', 'Name', 'Size', 'Last modified (UTC)', 'Tags']);
-            byDir.get(dir).sort(function (a, b) {
-                var aDir = a[6] === 'dir', bDir = b[6] === 'dir';
-                if (aDir !== bDir) {
-                    return aDir ? -1 : 1;
+    }
+
+    // buildTree makes the tree of a share's entries. A link that is no file
+    // goes with the folders, so one whose target was listed opens like one,
+    // and a path written twice, as a scan with several identities writes it,
+    // counts once.
+    function buildTree(rows) {
+        var root = folder('', null);
+        rows.forEach(function (r) {
+            var parts = r[2].split('/');
+            var name = parts.pop();
+            var chain = [root];
+            var at = root;
+            parts.forEach(function (part) {
+                var next = at.dirs.get(part);
+                if (next === undefined) {
+                    next = folder(part, null);
+                    at.dirs.set(part, next);
                 }
-                return a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0;
-            }).forEach(function (r) {
-                var sized = r[6] !== 'dir' && r[6] !== 'link';
-                t.add([r[6], name(r[2]), sized ? humanSize(r[3]) : '', shortTime(r[4]), r[5]]);
+                chain.push(next);
+                at = next;
             });
-            container.appendChild(t.node);
+            if (isFile(r)) {
+                if (!at.files.has(name)) {
+                    at.files.set(name, r);
+                    var tags = tagsOf(r);
+                    chain.forEach(function (f) {
+                        addFile(f, r[3], tags);
+                    });
+                }
+            } else if (r[6] === 'dir' || r[6] === 'link') {
+                var node = at.dirs.get(name);
+                if (node === undefined) {
+                    at.dirs.set(name, folder(name, r));
+                } else if (node.row === null) {
+                    node.row = r;
+                }
+            } else if (!at.files.has(name)) {
+                at.files.set(name, r); // a kind this report does not know: shown, not counted
+            }
         });
-        if (shown.length < rows.length) {
-            container.appendChild(el('p', 'text-muted small', 'Showing ' + shown.length.toLocaleString('en-US') + ' of ' +
-                rows.length.toLocaleString('en-US') + ' entries: search the Files table for the rest.'));
+        return root;
+    }
+
+    // shareStats adds up a share's files as buildTree does, without the tree
+    function shareStats(rows) {
+        var stats = folder('', null);
+        var seen = new Set();
+        rows.forEach(function (r) {
+            if (isFile(r) && !seen.has(r[2])) {
+                seen.add(r[2]);
+                addFile(stats, r[3], tagsOf(r));
+            }
+        });
+        return stats;
+    }
+
+    function filesText(f) {
+        if (f.count === 0) {
+            return 'no files';
         }
-        if (!linksFollowed && rows.some(function (r) {
-            return r[6] === 'link';
-        })) {
-            container.appendChild(el('p', 'text-muted small', 'Links and junctions (type link) were not followed: ' +
-                'scan without --disable-follow-links to list what they point to.'));
+        return f.count.toLocaleString('en-US') + (f.count === 1 ? ' file · ' : ' files · ') + humanSize(f.bytes);
+    }
+
+    // tagsNode shows a file's own tags, or "contains" and the tags of the
+    // files below a folder
+    function tagsNode(tags, below) {
+        var node = el('span', 'sf-tags');
+        if (below && tags.length > 0) {
+            node.appendChild(el('span', 'sf-contains', 'contains'));
         }
+        tags.forEach(function (t) {
+            node.appendChild(el('span', 'sf-tag ' + (tagClass.get(t) || '') + (below ? '' : ' sf-own'), t));
+        });
+        return node;
+    }
+
+    // fillRow fills a tree row: a caret when it opens, the icon, the name,
+    // then the tags, size and time columns, which line up at every depth
+    function fillRow(row, opens, icon, name, kind, tags, size, time) {
+        row.appendChild(el('i', opens ? 'bi bi-chevron-right sf-caret' : 'sf-caret'));
+        row.appendChild(el('i', 'bi ' + icon + ' sf-icon'));
+        var label = row.appendChild(el('span', 'sf-label'));
+        label.appendChild(el('span', 'sf-name', name));
+        if (kind) {
+            label.appendChild(el('span', 'sf-kind', kind));
+        }
+        row.appendChild(tags);
+        row.appendChild(el('span', 'sf-size', size));
+        row.appendChild(el('span', 'sf-time', time));
+        return row;
     }
 
     // opened calls draw the first time details is open
@@ -294,6 +375,126 @@
             }
         });
         return once;
+    }
+
+    var drawers = new WeakMap(); // folder or share element -> draws its entries once
+
+    // drawFolder returns a folder that opens when entries were listed in it,
+    // and a plain row when none were
+    function drawFolder(f) {
+        var link = f.row !== null && f.row[6] === 'link';
+        var icon = link ? 'bi-link-45deg' : 'bi-folder';
+        var kind = link ? 'link' : '';
+        var time = f.row !== null ? shortTime(f.row[4]) : '';
+        if (f.dirs.size + f.files.size === 0) {
+            return fillRow(el('div', 'sf-row sf-leaf'), false, icon, f.name, kind,
+                tagsNode(f.row !== null ? tagsOf(f.row) : [], false), '', time);
+        }
+        var details = el('details', 'sf-node');
+        fillRow(details.appendChild(el('summary', 'sf-row')), true, icon, f.name, kind,
+            tagsNode(Array.from(f.tags).sort(), true), filesText(f), time);
+        var box = details.appendChild(el('div', 'sf-children'));
+        drawers.set(details, opened(details, function () {
+            drawChildren(box, f);
+        }));
+        return details;
+    }
+
+    function drawFile(name, r) {
+        var link = r[6] === 'link';
+        return fillRow(el('div', 'sf-row sf-leaf'), false, link ? 'bi-link-45deg' : 'bi-file-earmark', name,
+            link ? 'link' : '', tagsNode(tagsOf(r), false), humanSize(r[3]), shortTime(r[4]));
+    }
+
+    // drawChildren draws a folder's entries, folders first, childLimit at a
+    // time: a button at the end draws the next ones
+    function drawChildren(box, f) {
+        var dirs = Array.from(f.dirs.keys()).sort(byName);
+        var names = Array.from(f.files.keys()).sort(byName);
+        var total = dirs.length + names.length;
+        var shown = 0;
+        function more() {
+            var part = document.createDocumentFragment();
+            for (var end = Math.min(total, shown + childLimit); shown < end; shown++) {
+                part.appendChild(shown < dirs.length ? drawFolder(f.dirs.get(dirs[shown])) :
+                    drawFile(names[shown - dirs.length], f.files.get(names[shown - dirs.length])));
+            }
+            box.appendChild(part);
+            if (shown < total) {
+                var button = box.appendChild(el('button', 'btn btn-link btn-sm sf-more',
+                    'Show more: ' + (total - shown).toLocaleString('en-US') + ' left'));
+                button.type = 'button';
+                button.addEventListener('click', function () {
+                    button.remove();
+                    more();
+                });
+            }
+        }
+        more();
+    }
+
+    // expandAll draws and opens every folder in details
+    function expandAll(details) {
+        var todo = [details];
+        while (todo.length > 0) {
+            var d = todo.pop();
+            drawers.get(d)();
+            d.open = true;
+            Array.prototype.forEach.call(d.querySelector(':scope > .sf-children').children, function (c) {
+                if (c.matches('details.sf-node')) {
+                    todo.push(c);
+                }
+            });
+        }
+    }
+
+    function collapseAll(details) {
+        details.querySelectorAll('details.sf-node').forEach(function (d) {
+            d.open = false;
+        });
+    }
+
+    // drawShare returns a listed share: the root of its tree, with its access
+    // and the files below it, and buttons that open and close every folder
+    function drawShare(s, rows) {
+        var details = el('details', 'sf-share');
+        var stats = shareStats(rows);
+        var row = fillRow(details.appendChild(el('summary', 'sf-row sf-share-row')), true, 'bi-hdd-network', s[2], '',
+            tagsNode(Array.from(stats.tags).sort(), true), filesText(stats), '');
+        var label = row.querySelector('.sf-label');
+        if (s[5] === true) {
+            label.appendChild(el('span', 'badge text-bg-warning ms-2', 'Read'));
+        }
+        if (s[6] === true) {
+            label.appendChild(el('span', 'badge text-bg-danger ms-1', 'Write'));
+        }
+        var tools = details.appendChild(el('div', 'sf-tools'));
+        var expand = tools.appendChild(el('button', 'btn btn-outline-secondary btn-sm sf-expand', 'Expand all'));
+        var collapse = tools.appendChild(el('button', 'btn btn-outline-secondary btn-sm sf-collapse', 'Collapse all'));
+        expand.type = 'button';
+        collapse.type = 'button';
+        if (rows.length > expandLimit) {
+            expand.disabled = true;
+            tools.appendChild(el('span', 'text-muted small', 'Over ' + expandLimit.toLocaleString('en-US') +
+                ' entries: open folders one by one, or search the Files table.'));
+        }
+        if (!linksFollowed && rows.some(function (r) {
+            return r[6] === 'link';
+        })) {
+            details.appendChild(el('p', 'text-muted small', 'Links were not followed: scan without ' +
+                '--disable-follow-links to list what they point to.'));
+        }
+        var box = details.appendChild(el('div', 'sf-children'));
+        drawers.set(details, opened(details, function () {
+            drawChildren(box, buildTree(rows));
+        }));
+        expand.addEventListener('click', function () {
+            expandAll(details);
+        });
+        collapse.addEventListener('click', function () {
+            collapseAll(details);
+        });
+        return details;
     }
 
     function drawHost(card, h) {
@@ -318,23 +519,19 @@
         });
         card.appendChild(list.node);
 
-        own.forEach(function (s) {
-            var rows = entriesOf(s[0], s[2]);
-            if (rows.length === 0) {
-                return;
-            }
-            var listing = el('details', 'sf-listing mt-2');
-            listing.appendChild(el('summary', '', 'Listing share: ' + s[2] + ' (' +
-                rows.length.toLocaleString('en-US') + (rows.length === 1 ? ' entry)' : ' entries)')));
-            var body = listing.appendChild(el('div', 'ms-2'));
-            var draw = opened(listing, function () {
-                drawListing(body, rows);
-            });
+        var listed = own.filter(function (s) {
+            return entriesOf(s[0], s[2]).length > 0;
+        });
+        if (listed.length === 0) {
+            return;
+        }
+        card.appendChild(el('h6', 'pt-2', 'Listing'));
+        var tree = card.appendChild(el('div', 'sf-tree'));
+        listed.forEach(function (s) {
+            var share = tree.appendChild(drawShare(s, entriesOf(s[0], s[2])));
             if (smallScan) {
-                draw();
-                listing.open = true;
+                expandAll(share);
             }
-            card.appendChild(listing);
         });
     }
 

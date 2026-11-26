@@ -145,7 +145,7 @@ are listed only with `--debug`; the summary counts them:
 | `--output-unc NAME` | `//host/share` for each readable disk share, `NAME.unc.txt`, for content scanners |
 | `--output-relay-list NAME` | the hosts that do not require SMB signing, `NAME.relay.txt`, for NTLM relay tools; taken from the negotiation, so also from null and guest scans whose logon is refused |
 | `--output-xml NAME` | the XML format of earlier versions, `NAME.xml` |
-| `--output-html NAME` | the HTML report, `NAME.html`: each host with its shares and the listing of each share, and tables of all hosts, shares and files to search and sort |
+| `--output-html NAME` | the HTML report, `NAME.html`: each host with its shares and each share's folders and files as a tree, and tables of all hosts, shares and files to search and sort |
 | `--output-all NAME` | all of the above |
 
 A known extension in `NAME` is replaced, not doubled, and existing files are

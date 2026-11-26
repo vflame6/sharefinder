@@ -67,18 +67,155 @@
             font-weight: 600;
             cursor: pointer;
         }
-        details.sf-listing > summary {
-            font-weight: 500;
+        /* By host: each listed share as a tree. A level is indented under the
+           caret that opens it, with a guide line; the tags, size and time
+           columns keep their width and sit at the right, so they line up at
+           every depth. */
+        .sf-tree {
+            font-size: .9rem;
+        }
+        details.sf-share {
+            border: 1px solid #e6e8eb;
+            border-radius: .375rem;
+            margin-bottom: .5rem;
+        }
+        details.sf-share > summary {
+            background: #eef1f4;
+            border-radius: .3rem;
+            font-weight: 600;
+            padding: .4rem .5rem;
+        }
+        details.sf-share[open] > summary {
+            border-bottom: 1px solid #e6e8eb;
+            border-radius: .3rem .3rem 0 0;
+        }
+        details.sf-share > summary:hover {
+            background: #e3e7eb;
+        }
+        .sf-share-row .sf-tags,
+        .sf-share-row .sf-size {
+            font-weight: 400;
+        }
+        .sf-tools {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: .5rem;
+            padding: .5rem .5rem 0;
+        }
+        details.sf-share > p {
+            margin: .5rem .5rem 0;
+        }
+        .sf-children {
+            margin-left: .7rem;
+            padding-left: .55rem;
+            border-left: 1px solid #dee2e6;
+        }
+        details.sf-share > .sf-children {
+            margin: .35rem .25rem .5rem;
+            padding-left: 0;
+            border-left: 0;
+        }
+        .sf-row {
+            display: flex;
+            align-items: baseline;
+            gap: .4rem;
+            padding: .1rem .3rem;
+            border-radius: .25rem;
+        }
+        .sf-row:hover {
+            background: #f1f3f5;
+        }
+        summary.sf-row {
             cursor: pointer;
+            list-style: none;
         }
-        .sf-listing td {
-            white-space: pre-wrap;
-            word-break: break-all;
+        summary.sf-row::-webkit-details-marker {
+            display: none;
         }
-        .sf-dir {
+        .sf-caret {
+            flex: 0 0 .8rem;
+            font-size: .7rem;
+            color: #6c757d;
+            transition: transform .1s;
+        }
+        details[open] > summary > .sf-caret {
+            transform: rotate(90deg);
+        }
+        .sf-icon {
+            flex: 0 0 auto;
+            color: #6c757d;
+        }
+        .sf-icon.bi-folder {
+            color: #c08b00;
+        }
+        .sf-icon.bi-link-45deg {
+            color: #0a58ca;
+        }
+        .sf-label {
+            flex: 1 1 auto;
+            min-width: 0;
+            overflow-wrap: anywhere;
+        }
+        .sf-name {
+            white-space: pre-wrap; /* names keep every space */
+        }
+        .sf-kind,
+        .sf-contains {
+            font-size: .75rem;
+            color: #6c757d;
+        }
+        .sf-kind {
+            margin-left: .4rem;
+        }
+        .sf-tags {
+            flex: 0 1 auto;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            align-items: baseline;
+            gap: .25rem;
+        }
+        .sf-tag {
+            --sf-tag: #6c757d;
+            font-size: .7rem;
             font-weight: 500;
-            word-break: break-all;
-            margin-top: .75rem;
+            line-height: 1.4;
+            padding: 0 .35rem;
+            border: 1px solid var(--sf-tag);
+            border-radius: .25rem;
+            color: var(--sf-tag);
+        }
+        .sf-tag-secret { --sf-tag: #b02a37; }
+        .sf-tag-script { --sf-tag: #0a58ca; }
+        .sf-tag-config { --sf-tag: #146c43; }
+        .sf-tag-database { --sf-tag: #6f42c1; }
+        .sf-tag-backup { --sf-tag: #b35900; }
+        .sf-tag.sf-own {
+            background: var(--sf-tag);
+            color: #fff;
+        }
+        .sf-size,
+        .sf-time {
+            text-align: right;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+        .sf-size {
+            flex: 0 0 10rem;
+            color: #495057;
+        }
+        .sf-time {
+            flex: 0 0 10.5rem;
+            color: #6c757d;
+        }
+        @media (max-width: 767.98px) {
+            .sf-time {
+                display: none;
+            }
+            .sf-size {
+                flex-basis: 7.5rem;
+            }
         }
     </style>
 
@@ -139,7 +276,7 @@
     </table>
 
     <h2 id="by-host">By host</h2>
-    <p class="text-muted">Each host with its details, its shares and the listing of each share, directory by directory.</p>
+    <p class="text-muted">Each host with its details, its shares, and each listed share as a tree of its folders and files.</p>
     <div id="sf-details"></div>
 
     <h2 id="files">Files</h2>
