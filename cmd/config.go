@@ -12,6 +12,7 @@ type Config struct {
 	OutputXML  string // --output-xml
 	OutputAll  string // --output-all
 	OutputHTML bool   // --html
+	Force      bool   // --force: overwrite existing output files
 
 	Threads   int           // --threads
 	Timeout   time.Duration // --timeout: connect timeout

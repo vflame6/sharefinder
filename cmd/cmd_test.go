@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -37,6 +39,50 @@ func TestCreateScanner_RejectsBadTimeouts(t *testing.T) {
 				t.Fatalf("CreateScanner error = %v, want one naming %s", err, tt.flag)
 			}
 		})
+	}
+}
+
+func TestCreateScanner_OutputNamesAndOverwrite(t *testing.T) {
+	dir := t.TempDir()
+	cfg := validConfig()
+	cfg.OutputRaw = filepath.Join(dir, "plain.txt")
+	s, err := CreateScanner(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.CloseOutputter()
+	if _, err := os.Stat(filepath.Join(dir, "plain.txt")); err != nil {
+		t.Fatalf("-o plain.txt must write plain.txt: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "plain.txt.txt")); err == nil {
+		t.Fatal("-o plain.txt must not write plain.txt.txt")
+	}
+
+	// a second run must not silently overwrite the first one's results
+	if _, err := CreateScanner(cfg); err == nil || !strings.Contains(err.Error(), "--force") {
+		t.Fatalf("existing output must be refused without --force, got %v", err)
+	}
+	cfg.Force = true
+	if _, err := CreateScanner(cfg); err != nil {
+		t.Fatalf("--force must allow overwriting: %v", err)
+	}
+}
+
+func TestCreateScanner_RefusesBeforeCreatingAnything(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "scan.xml"), []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := validConfig()
+	cfg.OutputAll = filepath.Join(dir, "scan")
+	if _, err := CreateScanner(cfg); err == nil {
+		t.Fatal("--output-all over an existing scan.xml must be refused")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "scan.txt")); err == nil {
+		t.Fatal("no output file may be created when the overwrite check fails")
+	}
+	if old, _ := os.ReadFile(filepath.Join(dir, "scan.xml")); string(old) != "old" {
+		t.Fatal("the existing file must be left alone")
 	}
 }
 

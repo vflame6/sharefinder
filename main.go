@@ -29,6 +29,7 @@ var (
 	outputXMLFlag  = app.Flag("output-xml", "Filename to write XML formatted output").Default("").String()
 	outputAllFlag  = app.Flag("output-all", "Filename to write output in all formats").Default("").String()
 	outputHTMLFlag = app.Flag("html", "Generate HTML report (requires XML output)").Default("false").Bool()
+	forceFlag      = app.Flag("force", "Overwrite existing output files").Bool()
 
 	// connection flags
 	threadsFlag         = app.Flag("threads", "Number of threads").Default("10").Int()
@@ -115,6 +116,7 @@ func main() {
 		OutputXML:       *outputXMLFlag,
 		OutputAll:       *outputAllFlag,
 		OutputHTML:      *outputHTMLFlag,
+		Force:           *forceFlag,
 		Threads:         *threadsFlag,
 		Timeout:         *timeoutFlag,
 		IOTimeout:       *ioTimeoutFlag,

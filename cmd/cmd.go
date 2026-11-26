@@ -82,53 +82,45 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		excludeHostsSummary(excludeHosts, dialer, cfg.Timeout)
 	}
 
-	outputWriter := scanner.NewOutputWriter()
-	if cfg.OutputRaw != "" {
-		outputRawFileName = cfg.OutputRaw + ".txt"
-		logger.Debugf("Output in Raw format option is specified. Output file name: %s", outputRawFileName)
-
-		// create raw text output file
-		file, err = outputWriter.CreateFile(outputRawFileName, false)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if cfg.OutputXML != "" {
-		outputXMLFileName = cfg.OutputXML + ".xml"
-		logger.Debugf("Output in XML format option is specified. Output file name: %s", outputXMLFileName)
-
-		// create XML output file and write an XML header line to it
-		fileXML, err = outputWriter.CreateFile(outputXMLFileName, false)
-		if err != nil {
-			return nil, err
-		}
-		err = outputWriter.WriteXMLHeader(cfg.Version, cfg.CommandLine, cfg.TimeStart, fileXML)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if outputHTML {
-		outputHTMLFileName = cfg.OutputXML + ".html"
-	}
-
-	if cfg.OutputAll != "" {
-		logger.Debugf("Output all formats option is specified. Output file name: %s", cfg.OutputAll)
-
-		// set HTML output variable to true in case of --output-all
+	// resolve every output file name first: a known extension is replaced,
+	// not doubled, and nothing is created when any of them already exists
+	switch {
+	case cfg.OutputAll != "":
 		outputHTML = true
-		outputHTMLFileName = cfg.OutputAll + ".html"
+		outputRawFileName = scanner.OutputPath(cfg.OutputAll, ".txt")
+		outputXMLFileName = scanner.OutputPath(cfg.OutputAll, ".xml")
+		outputHTMLFileName = scanner.OutputPath(cfg.OutputAll, ".html")
+	default:
+		if cfg.OutputRaw != "" {
+			outputRawFileName = scanner.OutputPath(cfg.OutputRaw, ".txt")
+		}
+		if cfg.OutputXML != "" {
+			outputXMLFileName = scanner.OutputPath(cfg.OutputXML, ".xml")
+		}
+		if outputHTML {
+			outputHTMLFileName = scanner.OutputPath(cfg.OutputXML, ".html")
+		}
+	}
+	var outputs []string
+	for _, name := range []string{outputRawFileName, outputXMLFileName, outputHTMLFileName} {
+		if name != "" {
+			outputs = append(outputs, name)
+		}
+	}
+	if err := scanner.CheckOverwrite(outputs, cfg.Force); err != nil {
+		return nil, err
+	}
 
-		outputRawFileName = cfg.OutputAll + ".txt"
-
-		// create raw text output file
+	outputWriter := scanner.NewOutputWriter()
+	if outputRawFileName != "" {
+		logger.Debugf("Writing raw output to %s", outputRawFileName)
 		file, err = outputWriter.CreateFile(outputRawFileName, false)
 		if err != nil {
 			return nil, err
 		}
-
-		outputXMLFileName = cfg.OutputAll + ".xml"
+	}
+	if outputXMLFileName != "" {
+		logger.Debugf("Writing XML output to %s", outputXMLFileName)
 		// create XML output file and write an XML header line to it
 		fileXML, err = outputWriter.CreateFile(outputXMLFileName, false)
 		if err != nil {
