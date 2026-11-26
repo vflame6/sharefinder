@@ -177,6 +177,23 @@ func main() {
 		return
 	}
 
+	// credentials are asked for before any output file is created and before
+	// the scan's Ctrl+C handling starts: an interrupted prompt leaves nothing
+	var password string
+	var matrixIDs cmd.Identities
+	switch command {
+	case authCommand.FullCommand():
+		password, err = cmd.Password(*authUsernameFlag, *authPasswordFlag, authPasswordSet, *authHashFlag, *authAESKeyFlag, *authKerberosFlag)
+	case huntCommand.FullCommand():
+		password, err = cmd.Password(*huntUsernameFlag, *huntPasswordFlag, huntPasswordSet, *huntHashFlag, *huntAESKeyFlag, *huntKerberosFlag)
+	case matrixCommand.FullCommand():
+		matrixIDs, err = cmd.MatrixIdentities(*matrixUsersFlag, *matrixPasswordsFlag, *matrixHashesFlag, *matrixAESKeysFlag,
+			*matrixLocalAuthFlag, *matrixKerberosFlag, *matrixNullFlag, *matrixGuestFlag, *matrixGuestUserFlag)
+	}
+	if err != nil {
+		logger.Fatal(err)
+	}
+
 	// set up a scanner
 	scanner, err := cmd.CreateScanner(cmd.Config{
 		Version:             cmd.VERSION,
@@ -244,29 +261,16 @@ func main() {
 		err = cmd.ExecuteGuest(ctx, scanner, *guestTargetArg, *guestUsernameFlag)
 	}
 	if command == authCommand.FullCommand() {
-		password, perr := cmd.Password(*authUsernameFlag, *authPasswordFlag, authPasswordSet, *authHashFlag, *authAESKeyFlag, *authKerberosFlag)
-		if perr != nil {
-			logger.Fatal(perr)
-		}
 		err = cmd.ExecuteAuth(ctx, scanner, *authTargetArg, *authUsernameFlag, password, *authHashFlag, *authAESKeyFlag, *authLocalAuthFlag, *authKerberosFlag, *authDcHostnameFlag, *authDcIPFlag)
 	}
 	if command == huntCommand.FullCommand() {
-		password, perr := cmd.Password(*huntUsernameFlag, *huntPasswordFlag, huntPasswordSet, *huntHashFlag, *huntAESKeyFlag, *huntKerberosFlag)
-		if perr != nil {
-			logger.Fatal(perr)
-		}
 		err = cmd.ExecuteHunt(ctx, scanner, *huntUsernameFlag, password, *huntHashFlag, *huntAESKeyFlag, *huntKerberosFlag, *huntDcHostnameFlag, cmd.HuntConfig{
 			DC: *huntDcArg, Resolver: *huntResolverFlag, Forest: *huntForestFlag, AllowPlaintextLDAP: *huntAllowPlainFlag,
 			IncludeDisabled: *huntIncludeDisabled, ActiveWithin: *huntActiveWithin, LDAPOnly: *huntLDAPOnly,
 		})
 	}
 	if command == matrixCommand.FullCommand() {
-		ids, ierr := cmd.MatrixIdentities(*matrixUsersFlag, *matrixPasswordsFlag, *matrixHashesFlag, *matrixAESKeysFlag,
-			*matrixLocalAuthFlag, *matrixKerberosFlag, *matrixNullFlag, *matrixGuestFlag, *matrixGuestUserFlag)
-		if ierr != nil {
-			logger.Fatal(ierr)
-		}
-		err = cmd.ExecuteMatrix(ctx, scanner, *matrixTargetArg, ids, cmd.MatrixConfig{
+		err = cmd.ExecuteMatrix(ctx, scanner, *matrixTargetArg, matrixIDs, cmd.MatrixConfig{
 			Kerberos: *matrixKerberosFlag, DCHostname: *matrixDcHostnameFlag, DCIP: *matrixDcIPFlag,
 		})
 	}

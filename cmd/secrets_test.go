@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseAESKey(t *testing.T) {
@@ -124,9 +126,45 @@ func TestExecuteAuth_AESKey(t *testing.T) {
 	}
 }
 
+// Ctrl+C at the password prompt restores the terminal's echo and ends the
+// program at once; it is neither swallowed nor leaves the echo off.
+func TestInterruptibleRead(t *testing.T) {
+	interrupt := make(chan os.Signal, 1)
+	blocked := make(chan struct{})
+	restored, exited := make(chan struct{}), make(chan int, 1)
+	go func() {
+		_, _ = interruptibleRead(
+			func() ([]byte, error) { <-blocked; return nil, errors.New("closed") },
+			func() { close(restored) },
+			interrupt,
+			func(code int) { exited <- code; close(blocked) },
+		)
+	}()
+	interrupt <- os.Interrupt
+	select {
+	case code := <-exited:
+		if code != 130 {
+			t.Fatalf("exit code %d, want 130", code)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Ctrl+C at the prompt must end the program")
+	}
+	select {
+	case <-restored:
+	default:
+		t.Fatal("the terminal must be restored before exiting")
+	}
+
+	// an answered prompt leaves the signal alone
+	got, err := interruptibleRead(func() ([]byte, error) { return []byte("typed"), nil }, func() { t.Error("restore without Ctrl+C") }, make(chan os.Signal), func(int) { t.Error("exit without Ctrl+C") })
+	if err != nil || string(got) != "typed" {
+		t.Fatalf("read = %q, %v", got, err)
+	}
+}
+
 func TestPromptLabel(t *testing.T) {
 	var buf bytes.Buffer
-	src := terminalSecrets(&buf, func() ([]byte, error) { return []byte("typed"), nil })
+	src := terminalSecrets(&buf, func() bool { return true }, func() ([]byte, error) { return []byte("typed"), nil })
 	got, err := src.prompt(`Password for CORP\jdoe: `)
 	if err != nil || got != "typed" {
 		t.Fatalf("prompt = %q, %v", got, err)

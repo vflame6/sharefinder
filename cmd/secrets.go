@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"golang.org/x/term"
 )
@@ -41,22 +43,39 @@ func kerberosKey(aesKey string, kerberos bool) ([]byte, error) {
 // secretSource is where a password can come from besides -p.
 type secretSource struct {
 	getenv func(string) string
-	isTTY  func() bool                        // stdin is a terminal
+	isTTY  func() bool                        // there is a terminal to ask
 	prompt func(label string) (string, error) // reads a password without echo
 }
 
-// terminalSecrets prompts on w and reads the password with readPassword.
-func terminalSecrets(w io.Writer, readPassword func() ([]byte, error)) secretSource {
+// terminalSecrets prompts on w and reads the password with read.
+func terminalSecrets(w io.Writer, isTTY func() bool, read func() ([]byte, error)) secretSource {
 	return secretSource{
 		getenv: os.Getenv,
-		isTTY:  func() bool { return term.IsTerminal(int(os.Stdin.Fd())) },
+		isTTY:  isTTY,
 		prompt: func(label string) (string, error) {
 			fmt.Fprint(w, label)
-			password, err := readPassword()
+			password, err := read()
 			fmt.Fprintln(w) // the Enter key is not echoed
 			return string(password), err
 		},
 	}
+}
+
+// interruptibleRead runs read, a password read with the echo off, so that
+// Ctrl+C restores the terminal and ends the program (130) instead of being
+// swallowed or leaving the echo off. Nothing has been created yet.
+func interruptibleRead(read func() ([]byte, error), restore func(), interrupt <-chan os.Signal, exit func(int)) ([]byte, error) {
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		select {
+		case <-interrupt:
+			restore()
+			exit(130)
+		case <-done:
+		}
+	}()
+	return read()
 }
 
 // resolvePassword picks the password: -p when given, even empty; none when a
@@ -86,9 +105,30 @@ func resolvePassword(flagValue string, flagSet bool, hash, aesKey string, kerber
 }
 
 // Password resolves the password of username for auth, hunt and matrix; see
-// resolvePassword. The prompt goes to stderr.
+// resolvePassword. The prompt uses the controlling terminal (/dev/tty), so
+// redirected stdin or stderr do not hide it, else stdin and stderr.
 func Password(username, flagValue string, flagSet bool, hash, aesKey string, kerberos bool) (string, error) {
-	src := terminalSecrets(os.Stderr, func() ([]byte, error) { return term.ReadPassword(int(os.Stdin.Fd())) })
+	in, out := os.Stdin, io.Writer(os.Stderr)
+	if tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
+		defer tty.Close()
+		in, out = tty, tty
+	}
+	fd := int(in.Fd())
+	read := func() ([]byte, error) {
+		state, err := term.GetState(fd)
+		if err != nil {
+			return nil, err
+		}
+		interrupt := make(chan os.Signal, 1)
+		signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
+		defer signal.Stop(interrupt)
+		restore := func() {
+			_ = term.Restore(fd, state)
+			fmt.Fprintln(out)
+		}
+		return interruptibleRead(func() ([]byte, error) { return term.ReadPassword(fd) }, restore, interrupt, os.Exit)
+	}
+	src := terminalSecrets(out, func() bool { return term.IsTerminal(fd) }, read)
 	label := src.prompt
 	src.prompt = func(string) (string, error) { return label(fmt.Sprintf("Password for %s: ", username)) }
 	return resolvePassword(flagValue, flagSet, hash, aesKey, kerberos, src)

@@ -18,6 +18,9 @@ type MatrixConfig struct {
 	DCIP       net.IP
 }
 
+// Identities are what the matrix command tests.
+type Identities = []scanner.Identity
+
 // MatrixIdentities builds the identities of the matrix command from its
 // flags. One account given without a secret gets SHAREFINDER_PASSWORD or a
 // prompt, as in auth.
