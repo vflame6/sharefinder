@@ -1,8 +1,10 @@
 package scanner
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/jfjallid/go-smb/dcerpc/mssrvs"
 	"github.com/jfjallid/go-smb/smb"
@@ -140,29 +142,65 @@ func (conn *Connection) checkWriteFile(share string) bool {
 		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
 	}()
 
-	tempFile := utils.RandSeq(16) + ".txt"
-	tempData := utils.RandSeq(32)
-	dataSent := false
-	err := conn.session.PutFile(share, tempFile, 0, func(buffer []byte) (int, error) {
-		if dataSent {
+	return probeWriteFile(conn.session, conn.host, share, utils.RandSeq(16)+".txt")
+}
+
+// fileProber is the part of a connected share the file write probe uses.
+type fileProber interface {
+	PutFile(share, path string, offset uint64, callback func([]byte) (int, error)) error
+	DeleteFile(share, path string) error
+}
+
+// probeWriteFile creates name in the share root and deletes it. It reports
+// whether the file could be created; a file that may have been left behind is
+// always reported at Error level with its full path, even after Ctrl+C.
+func probeWriteFile(p fileProber, host, share, name string) bool {
+	data := utils.RandSeq(32)
+	sent := false
+	err := p.PutFile(share, name, 0, func(buffer []byte) (int, error) {
+		if sent {
 			return 0, io.EOF
 		}
-		copy(buffer, tempData)
-		dataSent = true
-		return len(tempData), nil
+		copy(buffer, data)
+		sent = true
+		return len(data), nil
 	})
+	leftover := func(why error) {
+		logger.Error(fmt.Errorf("write probe file \\\\%s\\%s\\%s may remain: %w", host, share, name, why))
+	}
+
 	if err == nil {
-		if delErr := conn.session.DeleteFile(share, tempFile); delErr != nil {
-			logger.Error(fmt.Errorf("failed to delete created file %s on share %s\\%s: %w", tempFile, conn.host, share, delErr))
+		if delErr := p.DeleteFile(share, name); delErr != nil {
+			leftover(fmt.Errorf("delete failed: %w", delErr))
 		}
 		return true
 	}
 	if isExpectedSMBWriteDeniedError(err) {
-		logger.Debugf("write probe denied on share %s\\%s: %v", conn.host, share, err)
-	} else {
-		logger.Debugf("write probe failed on share %s\\%s: %v", conn.host, share, err)
+		// the create itself was refused: nothing exists
+		logger.Debugf("write probe denied on share %s\\%s: %v", host, share, err)
+		return false
 	}
-	return false
+
+	// The create may have succeeded before writing failed (quota, full disk,
+	// connection cut): remove whatever may be there.
+	delErr := p.DeleteFile(share, name)
+	switch {
+	case delErr == nil:
+		logger.Debugf("write probe on %s\\%s failed after creating its file (%v); file removed", host, share, err)
+		return true
+	case isNotFoundError(delErr):
+		logger.Debugf("write probe failed on share %s\\%s: %v", host, share, err)
+		return false
+	default:
+		leftover(fmt.Errorf("write failed (%v), delete failed: %w", err, delErr))
+		return false
+	}
+}
+
+// isNotFoundError reports STATUS_OBJECT_NAME_NOT_FOUND.
+func isNotFoundError(err error) bool {
+	return errors.Is(err, smb.StatusMap[smb.StatusObjectNameNotFound]) ||
+		strings.Contains(strings.ToLower(err.Error()), "0xc0000034")
 }
 
 func contains(list []string, s string) bool {

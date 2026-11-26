@@ -1,11 +1,15 @@
 package scanner
 
 import (
+	"errors"
+	"fmt"
+	"io"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/jfjallid/go-smb/dcerpc/mssrvs"
+	"github.com/jfjallid/go-smb/smb"
 )
 
 func TestWriteLabels(t *testing.T) {
@@ -62,6 +66,56 @@ func TestParseWriteCheckMode(t *testing.T) {
 	}
 	if _, err := ParseWriteCheckMode("delete"); err == nil {
 		t.Fatal("unknown modes must be rejected")
+	}
+}
+
+// fakeProber stands in for a connected share in file write probes.
+type fakeProber struct {
+	putErr, delErr error
+	deleted        []string
+}
+
+func (f *fakeProber) PutFile(share, path string, offset uint64, cb func([]byte) (int, error)) error {
+	return f.putErr
+}
+
+func (f *fakeProber) DeleteFile(share, path string) error {
+	f.deleted = append(f.deleted, path)
+	return f.delErr
+}
+
+func TestProbeWriteFile(t *testing.T) {
+	notFound := fmt.Errorf("delete: %w", smb.StatusMap[smb.StatusObjectNameNotFound])
+	denied := fmt.Errorf("create: %w", smb.StatusMap[smb.StatusAccessDenied])
+	tests := []struct {
+		name        string
+		prober      *fakeProber
+		wantWrite   bool
+		wantDeletes int
+		wantError   bool // an Error line naming the file that may remain
+	}{
+		{name: "created and deleted", prober: &fakeProber{}, wantWrite: true, wantDeletes: 1},
+		{name: "created, delete denied", prober: &fakeProber{delErr: denied}, wantWrite: true, wantDeletes: 1, wantError: true},
+		{name: "create denied", prober: &fakeProber{putErr: denied}, wantWrite: false, wantDeletes: 0},
+		{name: "write failed after create, cleaned up", prober: &fakeProber{putErr: errors.New("disk full")}, wantWrite: true, wantDeletes: 1},
+		{name: "write failed, nothing created", prober: &fakeProber{putErr: errors.New("disk full"), delErr: notFound}, wantWrite: false, wantDeletes: 1},
+		{name: "connection cut mid-probe", prober: &fakeProber{putErr: io.ErrUnexpectedEOF, delErr: errors.New("connection closed")}, wantWrite: false, wantDeletes: 1, wantError: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got bool
+			out := captureStdout(t, func() { got = probeWriteFile(tt.prober, "10.0.0.5", "Data", "probe.txt") })
+			if got != tt.wantWrite {
+				t.Errorf("writable = %v, want %v", got, tt.wantWrite)
+			}
+			if len(tt.prober.deleted) != tt.wantDeletes {
+				t.Errorf("delete attempts = %d, want %d", len(tt.prober.deleted), tt.wantDeletes)
+			}
+			reported := strings.Contains(out, "may remain") && strings.Contains(out, `\\10.0.0.5\Data\probe.txt`)
+			if reported != tt.wantError {
+				t.Errorf("leftover reported = %v, want %v; output %q", reported, tt.wantError, out)
+			}
+		})
 	}
 }
 
