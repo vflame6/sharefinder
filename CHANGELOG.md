@@ -7,6 +7,49 @@ from the section of the released version.
 
 ## [Unreleased]
 
+### Added
+
+- `--output-json` writes JSONL: one `scan`, `host`, `share`, `file` or `end`
+  record per line, flushed as results arrive, so a killed scan keeps what it
+  found. Every record carries the scan id, the identity and a `//host/share`
+  UNC path, and file records carry tags (`config`, `script`, `secret`,
+  `database`, `backup`).
+- `--output-csv` writes one row per share for client deliverables; cells a
+  spreadsheet would run as a formula are prefixed with `'`.
+- `--output-unc` writes `//host/share` for each readable disk share, for
+  content scanners. `--output-all` now also writes JSONL, CSV and the UNC list.
+- `sharefinder report scan.jsonl` writes the HTML report of a JSONL scan, also
+  of one that was cut short. The report keeps the scan as JSON and renders it
+  with DataTables, so a million-file listing opens in a few seconds; every
+  name is shown as text.
+- `sharefinder diff old.jsonl new.jsonl` lists new shares, removed shares and
+  permission changes.
+- A progress line on stderr when it is a terminal: elapsed time, targets done
+  and total, reachable hosts, shares and files.
+- A closing summary: `Summary: 254 targets, 12 reachable, 10 authenticated,
+  2 failed`.
+- `--force` to overwrite existing output files.
+
+### Changed
+
+- Results go to stdout; the banner, warnings, errors, progress and summary go
+  to stderr.
+- Failures are labelled by stage: connection, authentication or enumeration.
+  Unreachable hosts are shown only with `--debug`.
+- Results are streamed to the outputs as they are found instead of being held
+  in memory until a host is done; memory stays flat on huge listings.
+- `--html` renders from JSONL and no longer needs `--output-xml`; the report is
+  named after `--output-json` or `--output-xml`. HTML is no longer rendered
+  from XML.
+- `-o plain.txt` writes `plain.txt` (not `plain.txt.txt`), and existing output
+  files are not overwritten without `--force`.
+- UNC paths name a host by the name it was scanned by, else by its IP address,
+  never by the DNS name the server reports for itself.
+- Host and share names, remarks and file names with control characters are
+  escaped in the console output.
+- go-smb v0.12.0; Go 1.26 is required to build. Dependabot opens one grouped
+  pull request a week.
+
 ## [1.4.1] - 2026-11-26
 
 Safety and correctness release: every fix below could hurt a client network or
