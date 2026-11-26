@@ -126,7 +126,7 @@ excluded block.
 
 ## Installation
 
-`sharefinder` requires **go1.25** or newer to install successfully.
+`sharefinder` requires **go1.26** or newer to install successfully.
 
 ```shell
 go install -v github.com/vflame6/sharefinder@latest
