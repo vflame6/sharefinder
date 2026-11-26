@@ -77,7 +77,7 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		return nil, errors.New("--max-auth-failures must be 0 (no limit) or more")
 	}
 	if cfg.Depth < 0 {
-		return nil, errors.New("--depth must be 0 (share root only) or more")
+		return nil, errors.New("--depth must be 0 (no limit) or more")
 	}
 	if cfg.MaxFiles < 0 {
 		return nil, errors.New("--max-files must be 0 (no limit) or more")

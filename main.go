@@ -63,7 +63,7 @@ var (
 	excludeHostsFlag       = app.Flag("exclude-hosts", "Skip these targets: IPs, CIDRs, ranges, hostnames (comma-separated) or a file").Default("").String()
 	listFlag               = app.Flag("list", "List readable shares").Default("false").Bool()
 	recurseFlag            = app.Flag("recurse", "List readable shares recursively").Default("false").Bool()
-	depthFlag              = app.Flag("depth", "Maximum directory depth below the share root for --recurse (0 lists the root only)").Default("5").Int()
+	depthFlag              = app.Flag("depth", "Directory levels to list with --recurse, the share root being 1 (0 = no limit)").Default("0").Int()
 	disableFollowLinksFlag = app.Flag("disable-follow-links", "Do not descend into directory symlinks and junctions during --recurse").Bool()
 	maxFilesFlag           = app.Flag("max-files", "Stop listing a share after this many entries (0 = no limit)").Default("0").Int()
 	maxConnsPerHostFlag    = app.Flag("max-conns-per-host", "Connections that list the shares of one host in parallel, while --threads allows").Default("2").Int()

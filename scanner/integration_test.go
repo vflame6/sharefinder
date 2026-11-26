@@ -45,7 +45,7 @@ func integrationOptions(port int, ioTimeout time.Duration) *Options {
 		Writer:     NewOutputWriter(),
 		Exclude:    []string{"IPC$"},
 		WriteCheck: WriteCheckFile,
-		Depth:      5,
+		Depth:      0,
 	}
 }
 
@@ -213,7 +213,7 @@ func TestIntegration_DepthLimit(t *testing.T) {
 	srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword,
 		Shares: []smbtest.Share{{Name: "DEEP", Files: files}}})
 	o := asUser(integrationOptions(srv.Port(), 5*time.Second), testPassword)
-	o.List, o.Recurse, o.Depth = true, true, 3
+	o.List, o.Recurse, o.Depth = true, true, 4 // the root and 3 levels below
 	run, err := scanXML(t, context.Background(), o)
 	if err != nil {
 		t.Fatal(err)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/jfjallid/go-smb/smb"
@@ -54,6 +55,8 @@ func walkDirs(t *testing.T, l dirLister, lim ListLimits) ([]string, walkStats) {
 	return dirs, stats
 }
 
+// --depth counts the share root as level 1: 4 lists the root and 3 levels
+// below it.
 func TestWalkShare_DepthLimit(t *testing.T) {
 	tree := map[string][]smb.SharedFile{}
 	parent := ""
@@ -61,7 +64,7 @@ func TestWalkShare_DepthLimit(t *testing.T) {
 		tree[parent] = []smb.SharedFile{dirEntry(parent, name)}
 		parent = join(parent, name)
 	}
-	dirs, stats := walkDirs(t, treeLister(tree), ListLimits{MaxDepth: 3})
+	dirs, stats := walkDirs(t, treeLister(tree), ListLimits{MaxDepth: 4})
 	want := []string{"", "a", `a\b`, `a\b\c`}
 	if !reflect.DeepEqual(dirs, want) {
 		t.Fatalf("listed %v, want %v", dirs, want)
@@ -71,26 +74,108 @@ func TestWalkShare_DepthLimit(t *testing.T) {
 	}
 }
 
-func TestWalkShare_DepthZeroListsRootOnly(t *testing.T) {
+func TestWalkShare_DepthOneListsRootOnly(t *testing.T) {
 	tree := map[string][]smb.SharedFile{"": {dirEntry("", "a")}, "a": {fileEntry("a", "x")}}
-	dirs, _ := walkDirs(t, treeLister(tree), ListLimits{MaxDepth: 0})
-	if !reflect.DeepEqual(dirs, []string{""}) {
-		t.Fatalf("listed %v, want only the root", dirs)
+	dirs, stats := walkDirs(t, treeLister(tree), ListLimits{MaxDepth: 1})
+	if !reflect.DeepEqual(dirs, []string{""}) || !stats.DepthLimited {
+		t.Fatalf("listed %v (depth limited %v), want only the root", dirs, stats.DepthLimited)
 	}
 }
 
-func TestWalkShare_SymlinkLoopStops(t *testing.T) {
-	// a directory symlink to "." that the server resolves itself: every level
-	// contains "loop" again and no reparse flag is visible
-	l := &fakeLister{list: func(dir string) ([]smb.SharedFile, error) {
-		return []smb.SharedFile{dirEntry(dir, "loop")}, nil
-	}}
-	dirs, stats := walkDirs(t, l, ListLimits{MaxDepth: 5})
-	if len(dirs) != 6 {
-		t.Fatalf("listed %d directories, want 6 (root plus 5 levels): %v", len(dirs), dirs)
+// --depth 0, the default, lists every level.
+func TestWalkShare_DepthZeroIsUnlimited(t *testing.T) {
+	tree := map[string][]smb.SharedFile{}
+	parent := ""
+	for i := range 40 {
+		name := fmt.Sprintf("d%02d", i)
+		tree[parent] = []smb.SharedFile{dirEntry(parent, name)}
+		parent = join(parent, name)
 	}
-	if !stats.DepthLimited {
-		t.Fatal("DepthLimited must be set")
+	dirs, stats := walkDirs(t, treeLister(tree), ListLimits{})
+	if len(dirs) != 41 || stats.DepthLimited {
+		t.Fatalf("listed %d directories (depth limited %v), want all 41", len(dirs), stats.DepthLimited)
+	}
+}
+
+// runaway serves list, and fails a walk that keeps descending, so a missing
+// loop guard fails the test instead of hanging it.
+func runaway(list func(dir string) []smb.SharedFile) *fakeLister {
+	return &fakeLister{list: func(dir string) ([]smb.SharedFile, error) {
+		if strings.Count(dir, `\`) > 30 {
+			return nil, errors.New("runaway walk")
+		}
+		return list(dir), nil
+	}}
+}
+
+func last(dir string) string {
+	return dir[strings.LastIndex(dir, `\`)+1:]
+}
+
+func junctionEntry(parent, name string) smb.SharedFile {
+	e := dirEntry(parent, name)
+	e.IsJunction = true
+	return e
+}
+
+// A directory symlink to "." that the server resolves itself shows no link
+// flag: every level lists "loop" again. With no depth limit the walk stops
+// at the first directory that lists what a directory above it listed.
+func TestWalkShare_SymlinkLoopStops(t *testing.T) {
+	l := runaway(func(dir string) []smb.SharedFile {
+		return []smb.SharedFile{dirEntry(dir, "loop")}
+	})
+	dirs, stats := walkDirs(t, l, ListLimits{})
+	if !reflect.DeepEqual(dirs, []string{""}) || stats.Loops != 1 {
+		t.Fatalf("listed %v with %d loop(s), want the root and 1 loop", dirs, stats.Loops)
+	}
+}
+
+// A junction back to the share root is followed once, and its listing,
+// the root's, is recognised as a loop.
+func TestWalkShare_JunctionLoopStops(t *testing.T) {
+	l := runaway(func(dir string) []smb.SharedFile {
+		switch last(dir) {
+		case "", "up": // up is a junction to the share root
+			return []smb.SharedFile{dirEntry(dir, "a")}
+		default:
+			return []smb.SharedFile{junctionEntry(dir, "up"), fileEntry(dir, "f")}
+		}
+	})
+	dirs, stats := walkDirs(t, l, ListLimits{FollowLinks: true})
+	if !reflect.DeepEqual(dirs, []string{"", "a"}) || stats.Loops != 1 {
+		t.Fatalf("listed %v with %d loop(s), want the root, a and 1 loop", dirs, stats.Loops)
+	}
+}
+
+// Two junctions that point at each other's folders make a cycle.
+func TestWalkShare_LinkCycleStops(t *testing.T) {
+	l := runaway(func(dir string) []smb.SharedFile {
+		switch last(dir) {
+		case "":
+			return []smb.SharedFile{dirEntry(dir, "a"), dirEntry(dir, "b")}
+		case "a", "toA":
+			return []smb.SharedFile{junctionEntry(dir, "toB")}
+		default:
+			return []smb.SharedFile{junctionEntry(dir, "toA")}
+		}
+	})
+	dirs, stats := walkDirs(t, l, ListLimits{FollowLinks: true})
+	want := []string{"", "a", `a\toB`, "b", `b\toA`}
+	if !reflect.DeepEqual(dirs, want) || stats.Loops != 2 {
+		t.Fatalf("listed %v with %d loop(s), want %v and 2 loops", dirs, stats.Loops, want)
+	}
+}
+
+// Nested directories of the same name are no loop when they are other
+// directories: their times differ.
+func TestWalkShare_SameNamesAreNoLoop(t *testing.T) {
+	outer, inner := dirEntry("", "a"), dirEntry("a", "a")
+	outer.LastWriteTime, inner.LastWriteTime = 100, 200
+	tree := map[string][]smb.SharedFile{"": {outer}, "a": {inner}, `a\a`: {fileEntry(`a\a`, "x")}}
+	dirs, stats := walkDirs(t, treeLister(tree), ListLimits{})
+	if !reflect.DeepEqual(dirs, []string{"", "a", `a\a`}) || stats.Loops != 0 {
+		t.Fatalf("listed %v with %d loop(s), want every directory", dirs, stats.Loops)
 	}
 }
 

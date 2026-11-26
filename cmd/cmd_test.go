@@ -24,7 +24,7 @@ func validConfig() Config {
 		IOTimeout:  time.Second,
 		SmbPort:    445,
 		WriteCheck: "file",
-		Depth:      5,
+		Depth:      0,
 
 		Discovery:        true,
 		DiscoveryThreads: 500,

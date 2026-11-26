@@ -2,18 +2,22 @@ package scanner
 
 import (
 	"context"
+	"encoding/binary"
+	"hash/fnv"
+	"slices"
+	"strings"
 
 	"github.com/jfjallid/go-smb/smb"
 )
 
 // ListLimits bounds a share listing.
 type ListLimits struct {
-	// MaxDepth is the deepest directory level listed below the share root,
-	// which is level 0. --depth, default 5.
+	// MaxDepth is the number of directory levels listed, the share root
+	// being level 1; 0, the default of --depth, lists every level.
 	MaxDepth int
 	// FollowLinks descends into directory symlinks and junctions, such as
-	// the domain folder in SYSVOL; on unless --disable-follow-links. One that
-	// points back up the tree loops only down to MaxDepth.
+	// the domain folder in SYSVOL; on unless --disable-follow-links. A link
+	// back up the tree is not followed round: see visit.
 	FollowLinks bool
 	// MaxFiles stops the listing of a share after this many entries. 0 means
 	// no limit.
@@ -30,6 +34,7 @@ type walkStats struct {
 	Files, Dirs  int64
 	Truncated    bool // MaxFiles stopped the listing
 	DepthLimited bool // deeper directories were not listed
+	Loops        int  // directories not listed: they repeat one above them
 }
 
 // walkShare lists a share pre-order: the root (depth 0), then each
@@ -59,24 +64,35 @@ type walker struct {
 	emit    func(dir smb.SharedFile, depth int, entries []smb.SharedFile)
 	onErr   func(dir string, err error)
 	stats   walkStats
+	// the listings of the directories above the one being visited
+	ancestors []uint64
 }
 
 // visit emits one listed directory and descends into its subdirectories.
+//
+// A link back up the tree, a junction or a symlink the server resolves
+// itself (which shows no link flag), leads to a directory that lists exactly
+// what a directory above it listed: the same entries with the same times.
+// Such a directory is not listed again, so the walk ends even with no
+// --depth. Last access times are left out of the comparison: listing a
+// directory may change them.
 func (w *walker) visit(dir smb.SharedFile, depth int, entries []smb.SharedFile) error {
 	entries = w.take(entries)
 	w.emit(dir, depth, entries)
 	if !w.recurse {
 		return nil
 	}
+	w.ancestors = append(w.ancestors, listingSignature(entries))
+	defer func() { w.ancestors = w.ancestors[:len(w.ancestors)-1] }()
 	for _, entry := range entries {
 		if !entry.IsDir {
 			continue
 		}
-		// a directory symlink or junction may point back up the tree
 		if entry.IsJunction && !w.lim.FollowLinks {
 			continue
 		}
-		if depth+1 > w.lim.MaxDepth {
+		// depth is 0 at the share root, which is level 1
+		if w.lim.MaxDepth > 0 && depth+2 > w.lim.MaxDepth {
 			w.stats.DepthLimited = true
 			continue
 		}
@@ -91,6 +107,10 @@ func (w *walker) visit(dir smb.SharedFile, depth int, entries []smb.SharedFile) 
 			if w.onErr != nil {
 				w.onErr(entry.FullPath, err)
 			}
+			continue
+		}
+		if slices.Contains(w.ancestors, listingSignature(children)) {
+			w.stats.Loops++
 			continue
 		}
 		if err := w.visit(entry, depth+1, children); err != nil {
@@ -121,4 +141,29 @@ func (w *walker) take(entries []smb.SharedFile) []smb.SharedFile {
 		}
 	}
 	return entries
+}
+
+// listingSignature identifies a directory by what it lists: each entry's
+// name, kind, size and creation, write and change times, in name order.
+func listingSignature(entries []smb.SharedFile) uint64 {
+	sorted := slices.Clone(entries)
+	slices.SortFunc(sorted, func(a, b smb.SharedFile) int { return strings.Compare(a.Name, b.Name) })
+	h := fnv.New64a()
+	var num [8]byte
+	for _, e := range sorted {
+		_, _ = h.Write([]byte(e.Name))
+		flags := byte(0)
+		if e.IsDir {
+			flags |= 1
+		}
+		if e.IsJunction {
+			flags |= 2
+		}
+		_, _ = h.Write([]byte{0, flags})
+		for _, v := range []uint64{e.Size, e.CreationTime, e.LastWriteTime, e.ChangeTime} {
+			binary.LittleEndian.PutUint64(num[:], v)
+			_, _ = h.Write(num[:])
+		}
+	}
+	return h.Sum64()
 }
