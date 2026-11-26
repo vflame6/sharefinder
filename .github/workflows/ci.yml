@@ -1,10 +1,9 @@
 name: CI
 
-# Pull requests, and main once they are merged: a branch with a pull request
-# is tested once, not once for the push and again for the pull request.
+# Pull requests only: what reaches main was tested in its pull request, and
+# commits pushed to main directly, such as the Homebrew cask the release
+# writes, run no CI.
 on:
-  push:
-    branches: [main]
   pull_request:
 
 permissions:
