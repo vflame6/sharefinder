@@ -94,7 +94,8 @@
             {type: 'string', render: text},
             {type: 'string', render: text},
             {type: 'string', render: badge('Yes', 'No', 'text-bg-danger', 'text-bg-secondary')},
-            {type: 'num'}
+            {type: 'num'},
+            {type: 'string', render: text}
         ]
     });
 
@@ -111,6 +112,7 @@
             {type: 'string', render: badge('Yes', 'No', 'text-bg-danger', 'text-bg-light border')},
             {type: 'string', render: text},
             {type: 'num'},
+            {type: 'string', render: text},
             {type: 'string', render: text}
         ],
         createdRow: function (row, data) {

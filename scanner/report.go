@@ -82,8 +82,8 @@ type reportSummary struct {
 type report struct {
 	scans   int
 	summary reportSummary
-	hosts   [][]any // ip, hostname, domain, os, signing, dialect, session, admin, shares
-	shares  [][]any // host, hostname, share, remark, type, read, write, write access, files, notes
+	hosts   [][]any // ip, hostname, domain, os, signing, dialect, session, admin, shares, identity
+	shares  [][]any // host, hostname, share, remark, type, read, write, write access, files, notes, identity
 }
 
 func (rep *report) collect(typ string, raw []byte) error {
@@ -110,7 +110,7 @@ func (rep *report) collect(typ string, raw []byte) error {
 				rep.summary.Admin++
 			}
 		}
-		rep.hosts = append(rep.hosts, []any{rec.Host, rec.Hostname, rec.Domain, rec.OS, rec.Signing, rec.Dialect, rec.Session, admin, len(rec.Shares)})
+		rep.hosts = append(rep.hosts, []any{rec.Host, rec.Hostname, rec.Domain, rec.OS, rec.Signing, rec.Dialect, rec.Session, admin, len(rec.Shares), rec.Identity})
 	case RecordShare:
 		var rec ShareRecord
 		if json.Unmarshal(raw, &rec) != nil {
@@ -123,7 +123,7 @@ func (rep *report) collect(typ string, raw []byte) error {
 			rep.summary.Writable++
 		}
 		rep.shares = append(rep.shares, []any{rec.Host, rec.Hostname, rec.Share, rec.Remark, rec.ShareType,
-			rec.Read, rec.Write, strings.Join(rec.WriteAccess, "; "), rec.Files, shareNotes(rec)})
+			rec.Read, rec.Write, strings.Join(rec.WriteAccess, "; "), rec.Files, shareNotes(rec), rec.Identity})
 	case RecordFile:
 		var rec struct {
 			Kind string `json:"kind"`

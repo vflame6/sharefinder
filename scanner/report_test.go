@@ -127,13 +127,13 @@ func TestReport_HostileNames(t *testing.T) {
 		var v any
 		jsonBlock(t, html, id, &v)
 	}
-	// every text column is rendered as text, never as HTML: 17 text columns
+	// every text column is rendered as text, never as HTML: 19 text columns
 	// across the three tables, and no string column without a renderer
 	if !strings.Contains(html, "var text = DataTable.render.text();") {
 		t.Error("the report must render text columns with DataTable.render.text()")
 	}
-	if n := strings.Count(html, "{type: 'string', render: text"); n != 17 {
-		t.Errorf("text columns rendered with render.text: %d, want 17", n)
+	if n := strings.Count(html, "{type: 'string', render: text"); n != 19 {
+		t.Errorf("text columns rendered with render.text: %d, want 19", n)
 	}
 	if strings.Contains(html, "{type: 'string'}") {
 		t.Error("a string column has no renderer, so its data would be drawn as HTML")
@@ -159,9 +159,15 @@ func TestReport_Counts(t *testing.T) {
 	if f := files[0]; f[0] != "10.0.0.5" || f[1] != "Data" || f[2] != "web.config" || f[3] != float64(1234) || f[4] != "2026-11-25T21:34:51Z" || f[5] != "config" {
 		t.Errorf("file row: %v", f)
 	}
-	// [host, hostname, share, remark, type, read, write, write access, files, status]
-	if s := shares[0]; s[0] != "10.0.0.5" || s[2] != "Data" || s[5] != true || s[6] != true || s[7] != "WRITE; WRITE (ACL)" || s[8] != float64(3) {
+	// [host, hostname, share, remark, type, read, write, write access, files, status, identity]
+	if s := shares[0]; s[0] != "10.0.0.5" || s[2] != "Data" || s[5] != true || s[6] != true || s[7] != "WRITE; WRITE (ACL)" || s[8] != float64(3) || s[10] != `CORP\jdoe` {
 		t.Errorf("share row: %v", s)
+	}
+	// a matrix scan records a host once per identity: rows say whose they are
+	var hosts [][]any
+	jsonBlock(t, html, "sf-hosts", &hosts)
+	if h := hosts[0]; h[len(h)-1] != `CORP\jdoe` {
+		t.Errorf("host row: %v", h)
 	}
 }
 

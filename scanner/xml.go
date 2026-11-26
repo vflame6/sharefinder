@@ -44,8 +44,8 @@ type Host struct {
 	Declared []string `xml:"-"`
 	Error    string   `xml:"-"`
 	// Identity is who the host was scanned as, when it differs from the
-	// scan's (matrix)
-	Identity string `xml:"-"`
+	// scan's (matrix): one host element per identity
+	Identity string `xml:"identity,attr,omitempty"`
 }
 
 type Share struct {

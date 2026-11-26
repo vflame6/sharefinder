@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"bytes"
+	"encoding/xml"
 	"strings"
 	"testing"
 
@@ -32,6 +33,19 @@ func TestSprintHostLine_Dialect(t *testing.T) {
 	}
 	if line := SprintHostLine(Host{IP: "10.0.0.5"}); strings.Contains(line, "dialect") {
 		t.Fatalf("an unknown dialect is left out: %q", line)
+	}
+}
+
+func TestXMLHost_Identity(t *testing.T) {
+	out, err := xml.Marshal(Host{IP: "10.0.0.5", Identity: "guest"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), `identity="guest"`) {
+		t.Fatalf("a matrix host says whose view it is: %s", out)
+	}
+	if out, _ := xml.Marshal(Host{IP: "10.0.0.5"}); strings.Contains(string(out), "identity") {
+		t.Fatalf("a single-identity scan keeps the legacy shape: %s", out)
 	}
 }
 
