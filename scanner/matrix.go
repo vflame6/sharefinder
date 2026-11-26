@@ -197,8 +197,13 @@ func (s *Scanner) matrixHost(ctx context.Context, host DNHost) {
 		conn, err := NewSMBConnection(ctx, host, id.options(o))
 		if err != nil {
 			stage := classify(err)
-			if stage == StageConnect {
-				// the host does not answer: no identity will get further
+			// a host that does not answer, or does not speak SMB2, fails the
+			// same way for every identity: report it once
+			if (stage == StageConnect && !reached) || stage == StageNegotiate {
+				if stage == StageNegotiate {
+					s.Stats.Reachable.Add(1)
+					s.Stats.Failed.Add(1)
+				}
 				if ctx.Err() == nil {
 					reportHostError(host.Address(), err)
 				}
@@ -233,6 +238,11 @@ func (s *Scanner) matrixHost(ctx context.Context, host DNHost) {
 	if reached {
 		s.Stats.Reachable.Add(1)
 	}
+	// stopped (Ctrl+C, the lockout guard): what was not checked would show as
+	// no access, so the host is not reported at all
+	if ctx.Err() != nil {
+		return
+	}
 
 	// the host's facts from the most privileged session: a user, else the
 	// guest, else the null session
@@ -257,6 +267,9 @@ func (s *Scanner) matrixHost(ctx context.Context, host DNHost) {
 		if conns[i] != nil {
 			views[i] = checkShares(ctx, conns[i], union, ids[i].options(o))
 		}
+	}
+	if ctx.Err() != nil {
+		return
 	}
 
 	// the matrix

@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -593,6 +594,85 @@ func TestIntegration_Matrix(t *testing.T) {
 	// made-up guest user and tester
 	if srv.LogonAttempts() != 3 {
 		t.Errorf("logons = %d, want 3", srv.LogonAttempts())
+	}
+}
+
+// A wrong password stops the scan: the host's checks are cut short, and the
+// matrix must not print the cut-short checks as "no access".
+func TestIntegration_MatrixStoppedPrintsNoCells(t *testing.T) {
+	srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares(), AllowAnonymous: true})
+	o := integrationOptions(srv.Port(), 5*time.Second)
+	ids, err := BuildIdentities([]string{testUser}, []string{"wrong"}, nil, nil, true, true, false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids[1].Guard = NewAuthGuard(1)
+	o.Matrix, o.Sink = ids, MultiSink{}
+	s := NewScanner(o, nil, time.Now(), 1)
+	var runErr error
+	out := captureLog(t, func() {
+		runErr = s.Run(context.Background(), TargetsFromList([]DNHost{{IP: net.ParseIP("127.0.0.1")}}))
+	})
+	if !errors.Is(runErr, ErrAuthLimitReached) {
+		t.Fatalf("run = %v, want the lockout guard to stop it", runErr)
+	}
+	if regexp.MustCompile(`(?m)^DATA\s`).MatchString(out) {
+		t.Fatalf("a stopped scan must not print the host's cut-short matrix:\n%s", out)
+	}
+}
+
+// refuseAfter forwards the first n connections to port, then stops
+// listening: later connections are refused.
+func refuseAfter(t *testing.T, port, n int) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for range n {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				b, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+				if err != nil {
+					_ = c.Close()
+					return
+				}
+				go func() { _, _ = io.Copy(b, c); _ = b.Close() }()
+				_, _ = io.Copy(c, b)
+				_ = c.Close()
+			}()
+		}
+		_ = ln.Close()
+	}()
+	return ln.Addr().(*net.TCPAddr).Port
+}
+
+// A host that answered the first identities stays in the matrix when a
+// later identity cannot connect: that identity's cells are x.
+func TestIntegration_MatrixLateConnectFailure(t *testing.T) {
+	srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares(), AllowGuest: true, AllowAnonymous: true})
+	o := integrationOptions(refuseAfter(t, srv.Port(), 2), 5*time.Second)
+	ids, err := BuildIdentities([]string{testUser}, []string{testPassword}, nil, nil, true, true, true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	o.Matrix, o.Sink = ids, MultiSink{}
+	s := NewScanner(o, nil, time.Now(), 1)
+	out := captureLog(t, func() {
+		if err := s.Run(context.Background(), TargetsFromList([]DNHost{{IP: net.ParseIP("127.0.0.1")}})); err != nil {
+			t.Error(err)
+		}
+	})
+	if !regexp.MustCompile(`(?m)^DATA\s+null:R\s+guest:R\s+tester:x$`).MatchString(out) {
+		t.Fatalf("the host stays, the identity that could not connect is x:\n%s", out)
+	}
+	if s.Stats.Reachable.Load() != 1 {
+		t.Fatalf("reachable = %d, want 1", s.Stats.Reachable.Load())
 	}
 }
 
