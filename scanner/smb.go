@@ -24,6 +24,9 @@ type Connection struct {
 	session *smb.Connection
 	// SessionType is "user", "guest" or "null": what the server granted.
 	SessionType string
+	// SigningRequired is the server's requirement from the negotiation:
+	// go-smb reports false after a null or guest logon, which never signs.
+	SigningRequired bool
 }
 
 func logCloseError(action string, err error) {
@@ -43,6 +46,7 @@ func NewSMBConnection(ctx context.Context, host DNHost, o *Options) (*Connection
 	// dial and negotiate; no credentials are sent yet. A host whose port
 	// answers but does not negotiate SMB2 is reported, not taken for
 	// unreachable.
+	var signingRequired bool
 	negotiate := func() (sessionConn, error) {
 		opts, dialer := options, &dialRecorder{Dialer: o.Dialer}
 		if o.Dialer != nil {
@@ -60,6 +64,8 @@ func NewSMBConnection(ctx context.Context, host DNHost, o *Options) (*Connection
 			}
 			return nil, &StageError{Stage: stage, Host: host.Address(), Err: err}
 		}
+		// before the logon, this is the server's SecurityMode
+		signingRequired = session.IsSigningRequired()
 		return smbSession{session}, nil
 	}
 	first, err := negotiate()
@@ -77,9 +83,10 @@ func NewSMBConnection(ctx context.Context, host DNHost, o *Options) (*Connection
 	}
 
 	conn := &Connection{
-		host:        host.Address(),
-		session:     session.conn.(smbSession).Connection,
-		SessionType: sessionType,
+		host:            host.Address(),
+		session:         session.conn.(smbSession).Connection,
+		SessionType:     sessionType,
+		SigningRequired: signingRequired,
 	}
 	return conn, nil
 }

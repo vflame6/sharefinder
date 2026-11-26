@@ -92,6 +92,9 @@ func (s *Scanner) StartOutputs() {
 	if o.FileUNC != nil {
 		sinks = append(sinks, NewUNCSink(o.FileUNC))
 	}
+	if o.FileRelay != nil {
+		sinks = append(sinks, NewRelaySink(o.FileRelay))
+	}
 	o.Sink = sinks
 }
 
@@ -113,7 +116,7 @@ func (s *Scanner) closeOutputs() {
 	if err := s.Options.Sink.Close(s.endRecord()); err != nil {
 		logger.Error(err)
 	}
-	for _, f := range []*os.File{s.Options.FileTXT, s.Options.FileXML, s.Options.FileJSON, s.Options.FileCSV, s.Options.FileUNC} {
+	for _, f := range []*os.File{s.Options.FileTXT, s.Options.FileXML, s.Options.FileJSON, s.Options.FileCSV, s.Options.FileUNC, s.Options.FileRelay} {
 		if f != nil {
 			_ = f.Close()
 		}

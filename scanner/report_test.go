@@ -127,13 +127,13 @@ func TestReport_HostileNames(t *testing.T) {
 		var v any
 		jsonBlock(t, html, id, &v)
 	}
-	// every text column is rendered as text, never as HTML: 16 text columns
+	// every text column is rendered as text, never as HTML: 17 text columns
 	// across the three tables, and no string column without a renderer
 	if !strings.Contains(html, "var text = DataTable.render.text();") {
 		t.Error("the report must render text columns with DataTable.render.text()")
 	}
-	if n := strings.Count(html, "{type: 'string', render: text"); n != 16 {
-		t.Errorf("text columns rendered with render.text: %d, want 16", n)
+	if n := strings.Count(html, "{type: 'string', render: text"); n != 17 {
+		t.Errorf("text columns rendered with render.text: %d, want 17", n)
 	}
 	if strings.Contains(html, "{type: 'string'}") {
 		t.Error("a string column has no renderer, so its data would be drawn as HTML")

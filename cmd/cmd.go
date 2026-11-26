@@ -26,9 +26,11 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 	var outputJSONFileName string
 	var outputCSVFileName string
 	var outputUNCFileName string
+	var outputRelayFileName string
 	var fileJSON *os.File
 	var fileCSV *os.File
 	var fileUNC *os.File
+	var fileRelay *os.File
 	var file *os.File
 	var fileXML *os.File
 	var err error
@@ -40,8 +42,8 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		return nil, errors.New("cannot use --html without --output-json, --resume or --output-xml: the report is named after them")
 	}
 
-	if (cfg.OutputXML != "" || cfg.OutputRaw != "" || cfg.OutputJSON != "" || cfg.OutputCSV != "" || cfg.OutputUNC != "" || outputHTML) && cfg.OutputAll != "" {
-		return nil, errors.New("cannot use --output-all with -o, --output-xml, --output-json, --output-csv, --output-unc or --html")
+	if (cfg.OutputXML != "" || cfg.OutputRaw != "" || cfg.OutputJSON != "" || cfg.OutputCSV != "" || cfg.OutputUNC != "" || cfg.OutputRelay != "" || outputHTML) && cfg.OutputAll != "" {
+		return nil, errors.New("cannot use --output-all with -o, --output-xml, --output-json, --output-csv, --output-unc, --output-relay-list or --html")
 	}
 
 	// --resume continues only the JSONL file: the text, XML, CSV and UNC files
@@ -52,7 +54,7 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 			flag string
 		}{
 			{cfg.OutputRaw != "", "-o"}, {cfg.OutputXML != "", "--output-xml"}, {cfg.OutputCSV != "", "--output-csv"},
-			{cfg.OutputUNC != "", "--output-unc"}, {cfg.OutputAll != "", "--output-all"},
+			{cfg.OutputUNC != "", "--output-unc"}, {cfg.OutputRelay != "", "--output-relay-list"}, {cfg.OutputAll != "", "--output-all"},
 		} {
 			if out.set {
 				return nil, fmt.Errorf("--resume continues only the JSONL file and cannot be combined with %s; use --html, or the report command once the scan is complete", out.flag)
@@ -126,6 +128,7 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		outputJSONFileName = scanner.OutputPath(cfg.OutputAll, ".jsonl")
 		outputCSVFileName = scanner.OutputPath(cfg.OutputAll, ".csv")
 		outputUNCFileName = scanner.OutputPath(cfg.OutputAll, ".unc.txt")
+		outputRelayFileName = scanner.OutputPath(cfg.OutputAll, ".relay.txt")
 		outputHTMLFileName = scanner.OutputPath(cfg.OutputAll, ".html")
 	default:
 		if cfg.OutputRaw != "" {
@@ -142,6 +145,9 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		}
 		if cfg.OutputUNC != "" {
 			outputUNCFileName = scanner.OutputPath(cfg.OutputUNC, ".unc.txt")
+		}
+		if cfg.OutputRelay != "" {
+			outputRelayFileName = scanner.OutputPath(cfg.OutputRelay, ".relay.txt")
 		}
 		if outputHTML {
 			base := cmp.Or(cfg.OutputJSON, cfg.Resume, cfg.OutputXML)
@@ -160,7 +166,7 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		outputJSONFileName = cfg.Resume
 	}
 	var outputs []string
-	for _, name := range []string{outputRawFileName, outputXMLFileName, outputJSONFileName, outputCSVFileName, outputUNCFileName, outputHTMLFileName} {
+	for _, name := range []string{outputRawFileName, outputXMLFileName, outputJSONFileName, outputCSVFileName, outputUNCFileName, outputRelayFileName, outputHTMLFileName} {
 		if name != "" && (cfg.Resume == "" || name != outputJSONFileName) {
 			outputs = append(outputs, name)
 		}
@@ -203,6 +209,13 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 	if outputUNCFileName != "" {
 		logger.Debugf("Writing the UNC list to %s", outputUNCFileName)
 		fileUNC, err = outputWriter.CreateFile(outputUNCFileName, false)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if outputRelayFileName != "" {
+		logger.Debugf("Writing the relay target list to %s", outputRelayFileName)
+		fileRelay, err = outputWriter.CreateFile(outputRelayFileName, false)
 		if err != nil {
 			return nil, err
 		}
@@ -256,6 +269,7 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		OutputJSONFileName: outputJSONFileName,
 		FileCSV:            fileCSV,
 		FileUNC:            fileUNC,
+		FileRelay:          fileRelay,
 		Password:           "",
 		Recurse:            cfg.Recurse,
 		Resume:             resume,

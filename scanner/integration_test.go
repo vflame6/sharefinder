@@ -458,6 +458,54 @@ func TestIntegration_ResumeFinishesOpenShares(t *testing.T) {
 	}
 }
 
+// Signing is the server's requirement, also for null and guest sessions,
+// which never sign: a relay list built from them must not list servers that
+// require signing.
+func TestIntegration_SigningDialectAndRelayList(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		required bool
+		mode     AuthMode
+	}{
+		{"user, signing required", true, AuthUser},
+		{"user, signing not required", false, AuthUser},
+		{"null session, signing required", true, AuthNull},
+		{"null session, signing not required", false, AuthNull},
+	} {
+		srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares(), SigningRequired: tc.required, AllowAnonymous: true})
+		o := integrationOptions(srv.Port(), 5*time.Second)
+		if tc.mode == AuthUser {
+			o = asUser(o, testPassword)
+		} else {
+			o.NullSession, o.Mode = true, AuthNull
+		}
+		var jsonl, relay bytes.Buffer
+		o.Sink = MultiSink{NewJSONLSink(&jsonl, ScanRecord{ScanID: "01J"}), NewRelaySink(&relay)}
+
+		s := NewScanner(o, nil, time.Now(), 1)
+		if err := s.Run(context.Background(), TargetsFromList([]DNHost{{IP: net.ParseIP("127.0.0.1")}})); err != nil {
+			t.Fatal(err)
+		}
+		s.CloseOutputter()
+
+		var host map[string]any
+		for _, rec := range jsonLines(t, jsonl.String()) {
+			if rec["type"] == "host" {
+				host = rec
+			}
+		}
+		if host == nil {
+			t.Fatalf("%s: no host record in %s", tc.name, jsonl.String())
+		}
+		if host["signing"] != tc.required || host["dialect"] != "3.1.1" {
+			t.Errorf("%s: signing %v, dialect %v; want %v, 3.1.1", tc.name, host["signing"], host["dialect"], tc.required)
+		}
+		if listed := relay.String() == "127.0.0.1\n"; listed == tc.required {
+			t.Errorf("%s: relay list %q", tc.name, relay.String())
+		}
+	}
+}
+
 func TestIntegration_TwoSharesTwoConns(t *testing.T) {
 	for _, tc := range []struct{ conns, logons int }{{2, 2}, {1, 1}} {
 		srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares()})

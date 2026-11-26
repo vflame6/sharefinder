@@ -136,7 +136,8 @@ func describeHost(conn *Connection, host DNHost, o *Options) *Host {
 		IP:      host.Address(),
 		Time:    time.Now(),
 		Version: "unknown",
-		Signing: conn.session.IsSigningRequired(),
+		Signing: conn.SigningRequired,
+		Dialect: dialectLabel(conn.session.Dialect()),
 		Session: conn.SessionType,
 	}
 	if strings.Contains(host.Hostname, ".") {

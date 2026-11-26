@@ -431,6 +431,36 @@ func TestRunScan_StoppedRunIsInterrupted(t *testing.T) {
 	}
 }
 
+func TestCreateScanner_RelayList(t *testing.T) {
+	dir := t.TempDir()
+	cfg := validConfig()
+	cfg.OutputRelay = filepath.Join(dir, "targets")
+	s, err := CreateScanner(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.CloseOutputter()
+	if _, err := os.Stat(filepath.Join(dir, "targets.relay.txt")); err != nil {
+		t.Fatalf("--output-relay-list targets writes targets.relay.txt: %v", err)
+	}
+
+	all := validConfig()
+	all.OutputAll = filepath.Join(dir, "scan")
+	if s, err = CreateScanner(all); err != nil {
+		t.Fatal(err)
+	}
+	s.CloseOutputter()
+	if _, err := os.Stat(filepath.Join(dir, "scan.relay.txt")); err != nil {
+		t.Fatalf("--output-all writes scan.relay.txt: %v", err)
+	}
+
+	both := validConfig()
+	both.OutputAll, both.OutputRelay = filepath.Join(dir, "other"), filepath.Join(dir, "x")
+	if _, err := CreateScanner(both); err == nil || !strings.Contains(err.Error(), "--output-relay-list") {
+		t.Fatalf("--output-all with --output-relay-list must be refused, got %v", err)
+	}
+}
+
 func TestCreateScanner_AcceptsDisabledIOTimeout(t *testing.T) {
 	cfg := validConfig()
 	cfg.IOTimeout = 0

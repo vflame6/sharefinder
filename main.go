@@ -34,15 +34,16 @@ var (
 	quietFlag = app.Flag("quiet", "Enable quiet mode, print only results").Bool()
 
 	// file output flags
-	outputRawFlag  = app.Flag("output", "Filename to write output in raw format").Short('o').Default("").String()
-	outputXMLFlag  = app.Flag("output-xml", "Filename to write XML formatted output").Default("").String()
-	outputJSONFlag = app.Flag("output-json", "Filename to write JSONL output: one record per line, written as results arrive").Default("").String()
-	outputCSVFlag  = app.Flag("output-csv", "Filename to write CSV output: one row per share").Default("").String()
-	outputUNCFlag  = app.Flag("output-unc", "Filename to write the readable shares as //host/share lines, for content scanners").Default("").String()
-	outputAllFlag  = app.Flag("output-all", "Filename to write output in all formats").Default("").String()
-	outputHTMLFlag = app.Flag("html", "Write an HTML report named after --output-json or --output-xml").Default("false").Bool()
-	forceFlag      = app.Flag("force", "Overwrite existing output files").Bool()
-	resumeFlag     = app.Flag("resume", "Continue the interrupted scan in this --output-json file: finished hosts and shares are skipped").PlaceHolder("SCAN.jsonl").String()
+	outputRawFlag   = app.Flag("output", "Filename to write output in raw format").Short('o').Default("").String()
+	outputXMLFlag   = app.Flag("output-xml", "Filename to write XML formatted output").Default("").String()
+	outputJSONFlag  = app.Flag("output-json", "Filename to write JSONL output: one record per line, written as results arrive").Default("").String()
+	outputCSVFlag   = app.Flag("output-csv", "Filename to write CSV output: one row per share").Default("").String()
+	outputUNCFlag   = app.Flag("output-unc", "Filename to write the readable shares as //host/share lines, for content scanners").Default("").String()
+	outputRelayFlag = app.Flag("output-relay-list", "Filename to write the hosts that do not require SMB signing, one address per line, for NTLM relay tools").Default("").String()
+	outputAllFlag   = app.Flag("output-all", "Filename to write output in all formats").Default("").String()
+	outputHTMLFlag  = app.Flag("html", "Write an HTML report named after --output-json or --output-xml").Default("false").Bool()
+	forceFlag       = app.Flag("force", "Overwrite existing output files").Bool()
+	resumeFlag      = app.Flag("resume", "Continue the interrupted scan in this --output-json file: finished hosts and shares are skipped").PlaceHolder("SCAN.jsonl").String()
 
 	// connection flags
 	threadsFlag          = app.Flag("threads", "Number of threads").Default("10").Int()
@@ -139,7 +140,7 @@ func main() {
 
 	// report and diff read finished scan files: no scanner is set up
 	if command == reportCommand.FullCommand() {
-		if *outputXMLFlag != "" || *outputJSONFlag != "" || *outputCSVFlag != "" || *outputUNCFlag != "" || *outputAllFlag != "" || *outputHTMLFlag {
+		if *outputXMLFlag != "" || *outputJSONFlag != "" || *outputCSVFlag != "" || *outputUNCFlag != "" || *outputRelayFlag != "" || *outputAllFlag != "" || *outputHTMLFlag {
 			logger.Fatal(errors.New("report writes only the HTML report: name it with -o"))
 		}
 		if err := cmd.ExecuteReport(*reportInputArg, *outputRawFlag, *forceFlag); err != nil {
@@ -148,7 +149,7 @@ func main() {
 		return
 	}
 	if command == diffCommand.FullCommand() {
-		if *outputRawFlag != "" || *outputXMLFlag != "" || *outputJSONFlag != "" || *outputCSVFlag != "" || *outputUNCFlag != "" || *outputAllFlag != "" || *outputHTMLFlag {
+		if *outputRawFlag != "" || *outputXMLFlag != "" || *outputJSONFlag != "" || *outputCSVFlag != "" || *outputUNCFlag != "" || *outputRelayFlag != "" || *outputAllFlag != "" || *outputHTMLFlag {
 			logger.Fatal(errors.New("diff prints to stdout: output flags do not apply"))
 		}
 		if err := cmd.ExecuteDiff(*diffOldArg, *diffNewArg); err != nil {
@@ -167,6 +168,7 @@ func main() {
 		OutputJSON:          *outputJSONFlag,
 		OutputCSV:           *outputCSVFlag,
 		OutputUNC:           *outputUNCFlag,
+		OutputRelay:         *outputRelayFlag,
 		OutputAll:           *outputAllFlag,
 		OutputHTML:          *outputHTMLFlag,
 		Force:               *forceFlag,

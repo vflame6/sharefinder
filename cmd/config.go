@@ -8,15 +8,16 @@ type Config struct {
 	CommandLine []string
 	TimeStart   time.Time
 
-	OutputRaw  string // -o/--output
-	OutputXML  string // --output-xml
-	OutputJSON string // --output-json
-	OutputCSV  string // --output-csv
-	OutputUNC  string // --output-unc
-	OutputAll  string // --output-all
-	OutputHTML bool   // --html
-	Force      bool   // --force: overwrite existing output files
-	Resume     string // --resume: the JSONL file of an interrupted scan
+	OutputRaw   string // -o/--output
+	OutputXML   string // --output-xml
+	OutputJSON  string // --output-json
+	OutputCSV   string // --output-csv
+	OutputUNC   string // --output-unc
+	OutputRelay string // --output-relay-list
+	OutputAll   string // --output-all
+	OutputHTML  bool   // --html
+	Force       bool   // --force: overwrite existing output files
+	Resume      string // --resume: the JSONL file of an interrupted scan
 
 	Threads   int           // --threads
 	Timeout   time.Duration // --timeout: connect timeout

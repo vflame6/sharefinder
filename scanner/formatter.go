@@ -18,6 +18,9 @@ var (
 // type and admin status are left out when unknown.
 func SprintHostLine(h Host) string {
 	result := fmt.Sprintf("[+] %s: %s (name:%s) (domain:%s) (signing:%v)", h.IP, printable(h.Version), printable(h.Hostname), printable(h.Domain), h.Signing)
+	if h.Dialect != "" {
+		result += fmt.Sprintf(" (dialect:%s)", h.Dialect)
+	}
 	if h.Session != "" {
 		result += fmt.Sprintf(" (session:%s)", h.Session)
 	}

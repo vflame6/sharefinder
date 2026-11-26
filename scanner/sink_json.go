@@ -77,7 +77,7 @@ func (s *jsonlSink) HostEnumerated(h *Host) {
 	record := HostRecord{
 		Type: RecordHost, ScanID: s.scanID, Time: h.Time, Identity: s.identity,
 		Host: h.IP, Hostname: h.Hostname, Domain: h.Domain, UNC: UNC(uncHost(h)),
-		OS: h.Version, Signing: h.Signing, Session: h.Session, Admin: h.Admin, Shares: shares, Error: h.Error,
+		OS: h.Version, Signing: h.Signing, Dialect: h.Dialect, Session: h.Session, Admin: h.Admin, Shares: shares, Error: h.Error,
 	}
 	if record.Time.IsZero() {
 		record.Time = s.now()

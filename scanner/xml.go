@@ -30,6 +30,7 @@ type Host struct {
 	Hostname string    `xml:"hostname,attr"`
 	Domain   string    `xml:"domain,attr"`
 	Signing  bool      `xml:"signing,attr"`
+	Dialect  string    `xml:"dialect,attr,omitempty"` // negotiated SMB dialect, such as 3.1.1
 	Session  string    `xml:"session,attr,omitempty"`
 	Admin    *bool     `xml:"admin,attr,omitempty"`
 	// FQDN is the DNS name the host was scanned by, when the target was a

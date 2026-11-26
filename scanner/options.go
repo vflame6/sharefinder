@@ -24,6 +24,7 @@ type Options struct {
 	FileCSV            *os.File // --output-csv
 	FileJSON           *os.File // --output-json
 	FileUNC            *os.File // --output-unc
+	FileRelay          *os.File // --output-relay-list
 	FileXML            *os.File
 	FollowLinks        bool          // --follow-links
 	Forest             bool          // --forest (hunt only)

@@ -82,7 +82,7 @@ type reportSummary struct {
 type report struct {
 	scans   int
 	summary reportSummary
-	hosts   [][]any // ip, hostname, domain, os, signing, session, admin, shares
+	hosts   [][]any // ip, hostname, domain, os, signing, dialect, session, admin, shares
 	shares  [][]any // host, hostname, share, remark, type, read, write, write access, files, notes
 }
 
@@ -110,7 +110,7 @@ func (rep *report) collect(typ string, raw []byte) error {
 				rep.summary.Admin++
 			}
 		}
-		rep.hosts = append(rep.hosts, []any{rec.Host, rec.Hostname, rec.Domain, rec.OS, rec.Signing, rec.Session, admin, len(rec.Shares)})
+		rep.hosts = append(rep.hosts, []any{rec.Host, rec.Hostname, rec.Domain, rec.OS, rec.Signing, rec.Dialect, rec.Session, admin, len(rec.Shares)})
 	case RecordShare:
 		var rec ShareRecord
 		if json.Unmarshal(raw, &rec) != nil {
