@@ -12,6 +12,7 @@ import (
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/vflame6/sharefinder/cmd"
 	"github.com/vflame6/sharefinder/logger"
+	"github.com/vflame6/sharefinder/scanner"
 	"golang.org/x/term"
 )
 
@@ -176,6 +177,9 @@ func main() {
 		}
 		return
 	}
+
+	// KRB5CCNAME=FILE:/path names the ticket cache for go-smb too
+	scanner.NormalizeKRB5CCName()
 
 	// credentials are asked for before any output file is created and before
 	// the scan's Ctrl+C handling starts: an interrupted prompt leaves nothing

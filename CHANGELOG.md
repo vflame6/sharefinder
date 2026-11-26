@@ -116,6 +116,16 @@ from the section of the released version.
   crashed `hunt -k`; it is refused.
 - `--debug` reported "failed to disconnect tree" for every share that go-smb
   had already disconnected.
+- `hunt -k` with an `ldap/` service ticket from impacket's getST failed the
+  bind ("wrong Token ID. Expected 0504, was 6030"): such tickets carry an RC4
+  session key, and the RC4 wrap tokens of the bind's last step (RFC 4757) are
+  now supported.
+- `KRB5CCNAME=FILE:/path` left the SMB logons without the tickets: go-smb
+  reads the variable as a bare path. The prefix is removed at start.
+- A ticket cache without a TGT and without a ticket for the DC's `ldap/`
+  service gave "No usable TGT or ST found in CCache"; the error now names the
+  tickets the cache holds: with service tickets only, `--dc-hostname` must be
+  the host name in the `ldap/` ticket.
 
 ## [1.4.1] - 2026-11-26
 

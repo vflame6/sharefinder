@@ -267,7 +267,12 @@ func newGSSAPIClient(o LDAPOptions) (*gssapiClient, error) {
 		// a service ticket for the DC in the ccache serves too
 		spn := []string{"ldap", strings.ToLower(o.DCHostname)}
 		if krb, err = client.NewFromCCache(ccache, spn, krb5Conf, settings...); err != nil {
-			return nil, fmt.Errorf("gssapi: ccache client: %w", err)
+			// gokrb5 has no error value for a cache whose tickets do not fit
+			if strings.Contains(err.Error(), "No usable TGT or ST") {
+				return nil, fmt.Errorf("gssapi: ticket cache %s: %w (it holds %s; with service tickets only, --dc-hostname must name the host of its ldap ticket)",
+					printable(ccachePath), err, cachedTickets(ccache))
+			}
+			return nil, fmt.Errorf("gssapi: ticket cache %s: %w", printable(ccachePath), err)
 		}
 	} else if o.Password != "" {
 		krb, err = client.NewWithPassword(o.Username, realm, o.Password, krb5Conf, settings...)
@@ -296,6 +301,27 @@ func (c *LDAPConnection) Close() error {
 }
 
 // --- helpers ---
+
+// NormalizeKRB5CCName removes the FILE: prefix of KRB5CCNAME. go-smb reads
+// the variable as a bare path, so with the prefix, a common way to name a
+// ticket cache, every SMB logon would go without the tickets.
+func NormalizeKRB5CCName() {
+	if cc := os.Getenv("KRB5CCNAME"); strings.HasPrefix(cc, "FILE:") {
+		_ = os.Setenv("KRB5CCNAME", strings.TrimPrefix(cc, "FILE:"))
+	}
+}
+
+// cachedTickets names the services of the tickets in a ticket cache.
+func cachedTickets(cc *credentials.CCache) string {
+	var spns []string
+	for _, cred := range cc.GetEntries() {
+		spns = append(spns, printable(cred.Server.PrincipalName.PrincipalNameString()))
+	}
+	if len(spns) == 0 {
+		return "no tickets"
+	}
+	return "tickets for " + strings.Join(spns, ", ")
+}
 
 func ccachePathFromEnv() (string, error) {
 	cc := os.Getenv("KRB5CCNAME")
