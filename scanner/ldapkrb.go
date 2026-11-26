@@ -28,6 +28,10 @@ package scanner
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/md5"
+	"crypto/rand"
+	"crypto/rc4"
 	"encoding/asn1"
 	"encoding/binary"
 	"errors"
@@ -37,6 +41,7 @@ import (
 	"github.com/jfjallid/gokrb5/v9/crypto"
 	"github.com/jfjallid/gokrb5/v9/gssapi"
 	"github.com/jfjallid/gokrb5/v9/iana/chksumtype"
+	"github.com/jfjallid/gokrb5/v9/iana/etypeID"
 	"github.com/jfjallid/gokrb5/v9/iana/flags"
 	"github.com/jfjallid/gokrb5/v9/iana/keyusage"
 	"github.com/jfjallid/gokrb5/v9/messages"
@@ -104,6 +109,11 @@ func (c *gssapiClient) InitSecContextWithOptions(target string, input []byte, ap
 // step of the bind (RFC 4752 section 3.1). sharefinder chooses no security
 // layer: the connection is protected by TLS, when there is TLS.
 func (c *gssapiClient) NegotiateSaslAuth(input []byte, authzid string) ([]byte, error) {
+	// with an RC4 key, as in the tickets impacket's getST gets, the offer is
+	// an RFC 4757 wrap token, which has the framing of a context token
+	if len(input) > 0 && input[0] == 0x60 {
+		return c.negotiateRC4(input, authzid)
+	}
 	offer, err := unwrapToken(input)
 	if err != nil {
 		return nil, err
@@ -118,11 +128,8 @@ func (c *gssapiClient) NegotiateSaslAuth(input []byte, authzid string) ([]byte, 
 	if _, err := offer.Verify(key, keyusage.GSSAPI_ACCEPTOR_SEAL); err != nil {
 		return nil, err
 	}
-	if len(offer.Payload) != 4 {
-		return nil, fmt.Errorf("the server's offer of security layers has %d bytes, want 4", len(offer.Payload))
-	}
-	if offer.Payload[0]&saslNoSecurityLayer == 0 {
-		return nil, errors.New("the server requires an LDAP security layer (signing or sealing), which sharefinder does not support")
+	if err := checkOffer(offer.Payload); err != nil {
+		return nil, err
 	}
 
 	etype, err := crypto.GetEtype(key.KeyType)
@@ -141,6 +148,138 @@ func (c *gssapiClient) NegotiateSaslAuth(input []byte, authzid string) ([]byte, 
 		return nil, err
 	}
 	return reply.Marshal()
+}
+
+// checkOffer checks the server's offer of security layers: 4 bytes, which
+// must include "no security layer".
+func checkOffer(payload []byte) error {
+	if len(payload) != 4 {
+		return fmt.Errorf("the server's offer of security layers has %d bytes, want 4", len(payload))
+	}
+	if payload[0]&saslNoSecurityLayer == 0 {
+		return errors.New("the server requires an LDAP security layer (signing or sealing), which sharefinder does not support")
+	}
+	return nil
+}
+
+// negotiateRC4 is NegotiateSaslAuth for an RC4-HMAC context: the offer and
+// the answer are RFC 4757 wrap tokens, protected with the acceptor subkey,
+// else the ticket's session key.
+func (c *gssapiClient) negotiateRC4(input []byte, authzid string) ([]byte, error) {
+	key := c.subkey
+	if len(key.KeyValue) == 0 {
+		key = c.ekey
+	}
+	if key.KeyType != etypeID.RC4_HMAC || len(key.KeyValue) != 16 {
+		return nil, fmt.Errorf("the server sent an RC4 wrap token, but the key of the context is of type %d", key.KeyType)
+	}
+	offer, err := unwrapRC4(input, key.KeyValue)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkOffer(offer); err != nil {
+		return nil, err
+	}
+	return wrapRC4(key.KeyValue, append([]byte{saslNoSecurityLayer, 0, 0, 0}, authzid...), 1)
+}
+
+// rc4WrapHeader opens an RFC 4757 wrap token that is not sealed: TOK_ID,
+// SGN_ALG HMAC-MD5, SEAL_ALG none, filler.
+var rc4WrapHeader = []byte{0x02, 0x01, 0x11, 0x00, 0xff, 0xff, 0xff, 0xff}
+
+// rc4WrapLen is the length of an RC4 wrap token before its data: the header,
+// SND_SEQ, SGN_CKSUM and the confounder.
+const rc4WrapLen = 32
+
+// unwrapRC4 checks the server's RC4 wrap token (RFC 4757 section 7.3) with
+// key and returns its data without the padding. Sealed tokens are refused:
+// a SASL GSSAPI offer is never sealed.
+func unwrapRC4(token, key []byte) ([]byte, error) {
+	var oid asn1.ObjectIdentifier
+	rest, err := asn1.UnmarshalWithParams(token, &oid, "application,explicit,tag:0")
+	if err != nil {
+		return nil, fmt.Errorf("the server's RC4 wrap token: %w", err)
+	}
+	if !oid.Equal(oidKRB5) || len(rest) <= rc4WrapLen {
+		return nil, errors.New("the server's RC4 wrap token is not a Kerberos wrap token")
+	}
+	if !bytes.Equal(rest[:8], rc4WrapHeader) {
+		return nil, fmt.Errorf("the server's RC4 token % x is not an unsealed HMAC-MD5 wrap token", rest[:8])
+	}
+	sndSeq, cksum, confounder, data := rest[8:16], rest[16:24], rest[24:32], rest[32:]
+	if !hmac.Equal(rc4Checksum(key, rest[:8], confounder, data), cksum) {
+		return nil, errors.New("the server's RC4 wrap token has a bad checksum")
+	}
+	// the sequence number is followed by 0xFFFFFFFF in a token the acceptor sent
+	if seq := rc4XOR(rc4SeqKey(key, cksum), sndSeq); !bytes.Equal(seq[4:], []byte{0xff, 0xff, 0xff, 0xff}) {
+		return nil, errors.New("the RC4 wrap token does not come from the server")
+	}
+	pad := int(data[len(data)-1])
+	if pad == 0 || pad > 8 || pad > len(data) {
+		return nil, errors.New("the server's RC4 wrap token has bad padding")
+	}
+	for _, b := range data[len(data)-pad:] {
+		if int(b) != pad {
+			return nil, errors.New("the server's RC4 wrap token has bad padding")
+		}
+	}
+	return data[:len(data)-pad], nil
+}
+
+// wrapRC4 makes the client's RC4 wrap token for payload, not sealed, with
+// sequence number seq.
+func wrapRC4(key, payload []byte, seq uint32) ([]byte, error) {
+	confounder := make([]byte, 8)
+	if _, err := rand.Read(confounder); err != nil {
+		return nil, err
+	}
+	// RC4 is a stream cipher: one byte of padding
+	data := append(append(make([]byte, 0, len(payload)+1), payload...), 1)
+	cksum := rc4Checksum(key, rc4WrapHeader, confounder, data)
+	// the sequence number, then 0x00000000: sent by the initiator
+	plainSeq := make([]byte, 8)
+	binary.BigEndian.PutUint32(plainSeq, seq)
+
+	msg := make([]byte, 0, rc4WrapLen-2+len(data))
+	msg = append(msg, rc4WrapHeader[2:]...)
+	msg = append(msg, rc4XOR(rc4SeqKey(key, cksum), plainSeq)...)
+	msg = append(msg, cksum...)
+	msg = append(msg, confounder...)
+	msg = append(msg, data...)
+	return krb5ContextToken(rc4WrapHeader[:2], msg)
+}
+
+// rc4Checksum is the SGN_CKSUM of an RC4 wrap token: the first 8 bytes of
+// the HMAC-MD5 checksum, with Microsoft's message type 13 for a wrap token,
+// of the header, the confounder and the padded data.
+func rc4Checksum(key, header, confounder, data []byte) []byte {
+	ksign := hmacMD5(key, []byte("signaturekey\x00"))
+	h := md5.New()
+	h.Write([]byte{13, 0, 0, 0}) // little-endian
+	h.Write(header)
+	h.Write(confounder)
+	h.Write(data)
+	return hmacMD5(ksign, h.Sum(nil))[:8]
+}
+
+// rc4SeqKey is the key that encrypts the SND_SEQ of an RC4 wrap token.
+func rc4SeqKey(key, cksum []byte) []byte {
+	return hmacMD5(hmacMD5(key, []byte{0, 0, 0, 0}), cksum)
+}
+
+// rc4XOR encrypts or decrypts data with RC4 under key, an HMAC-MD5 output.
+func rc4XOR(key, data []byte) []byte {
+	out := make([]byte, len(data))
+	if c, err := rc4.NewCipher(key); err == nil { // fails only for keys of 0 or over 256 bytes
+		c.XORKeyStream(out, data)
+	}
+	return out
+}
+
+func hmacMD5(key, data []byte) []byte {
+	m := hmac.New(md5.New, key)
+	m.Write(data)
+	return m.Sum(nil)
 }
 
 // DeleteSecContext forgets the keys of the context.
