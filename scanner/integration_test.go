@@ -365,6 +365,68 @@ func resumeRun(t *testing.T, srv *smbtest.Server, path string) string {
 	return string(data)
 }
 
+// Ctrl+C while the permissions of a host's shares are being checked, then
+// --resume: the shares that were not checked yet are checked by the resumed
+// scan, not taken for done.
+func TestIntegration_ResumeAfterCtrlCDuringChecks(t *testing.T) {
+	var shares []smbtest.Share
+	for i := range 20 {
+		shares = append(shares, smbtest.Share{Name: fmt.Sprintf("S%02d", i), Files: map[string]string{"a.txt": "a"}})
+	}
+	// 10 ms a request: checking 20 shares takes more than a second
+	srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: shares, Latency: 10 * time.Millisecond})
+	path := filepath.Join(t.TempDir(), "scan.jsonl")
+
+	o := asUser(integrationOptions(srv.Port(), 5*time.Second), testPassword)
+	f, err := o.Writer.CreateFile(path, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o.FileJSON, o.OutputJSONFileName = f, path
+	s := NewScanner(o, nil, time.Now(), 1)
+	s.StartOutputs()
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { // Ctrl+C while the shares are being checked
+		for srv.LogonAttempts() == 0 && ctx.Err() == nil {
+			time.Sleep(time.Millisecond)
+		}
+		time.Sleep(300 * time.Millisecond)
+		cancel()
+	}()
+	_ = s.Run(ctx, TargetsFromList([]DNHost{{IP: net.ParseIP("127.0.0.1")}}))
+	cancel()
+	s.Interrupted = true
+	s.CloseOutputter()
+	if first, _ := os.ReadFile(path); strings.Count(string(first), `"type":"share"`) == 20 {
+		t.Skip("the interrupt came after every share was checked")
+	}
+
+	r, err := LoadResume(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.HostDone(testUser, "127.0.0.1") {
+		data, _ := os.ReadFile(path)
+		t.Fatalf("a host interrupted while its shares were checked is not done:\n%s", data)
+	}
+
+	data := resumeRun(t, srv, path)
+	seen := map[string]int{}
+	for _, rec := range jsonLines(t, data) {
+		if rec["type"] == "share" {
+			seen[rec["share"].(string)]++
+		}
+	}
+	if len(seen) != 20 {
+		t.Fatalf("after --resume every share is recorded, got %d: %v", len(seen), seen)
+	}
+	for share, n := range seen {
+		if n != 1 {
+			t.Errorf("share %s recorded %d times", share, n)
+		}
+	}
+}
+
 func TestIntegration_ResumeSkipsDoneHosts(t *testing.T) {
 	srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares()})
 	resumeRun(t, srv, resumeFile(t, "DATA", "PUBLIC"))

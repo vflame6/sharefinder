@@ -84,13 +84,23 @@ func (s *Scanner) enumerateHost(ctx context.Context, host DNHost) {
 	logger.Debugf("Trying to list shares on %s (%s)", host.Address(), host.Hostname)
 	shares, err := conn.GetSharesList()
 	if err != nil {
+		// cut short by Ctrl+C: nothing is recorded, a resumed scan redoes it
+		if ctx.Err() != nil {
+			return
+		}
+		h.Error = "listing shares: " + err.Error()
 		sink.HostEnumerated(h)
 		sink.HostFinished(h)
 		s.Stats.Failed.Add(1)
-		if ctx.Err() == nil {
-			reportHostError(host.Address(), &StageError{Stage: StageEnumerate, Host: host.Address(), Err: err})
-		}
+		reportHostError(host.Address(), &StageError{Stage: StageEnumerate, Host: host.Address(), Err: err})
 		return
+	}
+	// every share a complete scan covers, also when Ctrl+C stops the checks
+	// early: --resume takes the host for done only once all are recorded
+	for _, share := range shares {
+		if !slices.Contains(o.Exclude, share.Name) {
+			h.Declared = append(h.Declared, share.Name)
+		}
 	}
 	// shares the resumed scan finished are neither checked nor listed again
 	if o.Resume != nil {

@@ -48,8 +48,9 @@ func LoadResume(path string) (*ResumeState, error) {
 				}
 			}
 		case RecordHost:
+			// a host whose shares could not be listed is scanned again
 			var rec HostRecord
-			if json.Unmarshal(raw, &rec) == nil {
+			if json.Unmarshal(raw, &rec) == nil && rec.Error == "" {
 				r.hosts[newResumeHost(rec.Identity, rec.Host)] = rec.Shares
 			}
 		case RecordShare:
@@ -90,6 +91,9 @@ func (r *ResumeState) compact(path string) error {
 		switch typ {
 		case RecordEnd:
 			keep = false
+		case RecordHost:
+			var rec HostRecord
+			keep = json.Unmarshal(raw, &rec) == nil && rec.Error == ""
 		case RecordShare:
 			var rec ShareRecord
 			keep = json.Unmarshal(raw, &rec) == nil && !rec.Partial

@@ -99,6 +99,26 @@ func TestLoadResume_CompactsPartialShares(t *testing.T) {
 	}
 }
 
+func TestLoadResume_FailedHostsAreScannedAgain(t *testing.T) {
+	var b strings.Builder
+	b.WriteString(jsonLine(t, ScanRecord{Type: RecordScan, ScanID: "01J", Identity: "tester"}))
+	b.WriteString(jsonLine(t, HostRecord{Type: RecordHost, ScanID: "01J", Identity: "tester", Host: "10.0.0.1", Shares: []string{}, Error: "listing shares: access denied"}))
+	path := filepath.Join(t.TempDir(), "scan.jsonl")
+	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r, err := LoadResume(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.HostDone("tester", "10.0.0.1") || r.HostSeen("tester", "10.0.0.1") {
+		t.Fatal("a host whose shares could not be listed is not done, and its new record must be written")
+	}
+	if data, _ := os.ReadFile(path); strings.Contains(string(data), `"type":"host"`) {
+		t.Fatalf("its failed record is dropped: %s", data)
+	}
+}
+
 func TestLoadResume_RefusesNonScanFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "notes.jsonl")
 	if err := os.WriteFile(path, []byte("hello\n"), 0o644); err != nil {

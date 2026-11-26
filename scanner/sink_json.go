@@ -64,14 +64,20 @@ func (s *jsonlSink) HostEnumerated(h *Host) {
 	if s.seen != nil && s.seen(s.identity, h.IP) {
 		return
 	}
+	// the declared shares, so a host cut short by Ctrl+C lists the shares it
+	// has not recorded yet
 	shares := make([]string, 0, len(h.Shares))
-	for _, share := range h.Shares {
-		shares = append(shares, share.ShareName)
+	if h.Declared != nil {
+		shares = append(shares, h.Declared...)
+	} else {
+		for _, share := range h.Shares {
+			shares = append(shares, share.ShareName)
+		}
 	}
 	record := HostRecord{
 		Type: RecordHost, ScanID: s.scanID, Time: h.Time, Identity: s.identity,
 		Host: h.IP, Hostname: h.Hostname, Domain: h.Domain, UNC: UNC(uncHost(h)),
-		OS: h.Version, Signing: h.Signing, Session: h.Session, Admin: h.Admin, Shares: shares,
+		OS: h.Version, Signing: h.Signing, Session: h.Session, Admin: h.Admin, Shares: shares, Error: h.Error,
 	}
 	if record.Time.IsZero() {
 		record.Time = s.now()

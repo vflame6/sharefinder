@@ -37,6 +37,11 @@ type Host struct {
 	// IP: the name a server reports for itself may point to another host.
 	FQDN   string  `xml:"fqdn,attr,omitempty"`
 	Shares []Share `xml:"share"`
+
+	// Declared names every share the server listed that the scan covers,
+	// checked or not; Error says why the shares could not be listed.
+	Declared []string `xml:"-"`
+	Error    string   `xml:"-"`
 }
 
 type Share struct {
