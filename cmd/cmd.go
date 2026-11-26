@@ -43,6 +43,12 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		return nil, errors.New("cannot use --recurse without --list")
 	}
 
+	if cfg.Timeout <= 0 {
+		return nil, errors.New("--timeout must be greater than 0")
+	}
+	if cfg.IOTimeout < 0 {
+		return nil, errors.New("--io-timeout must be 0 (no limit) or more")
+	}
 	if cfg.MaxAuthFailures < 0 {
 		return nil, errors.New("--max-auth-failures must be 0 (no limit) or more")
 	}
