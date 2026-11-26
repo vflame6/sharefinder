@@ -18,6 +18,10 @@ import (
 // set when the user gives the flag: --proxy changes their defaults
 var discoveryThreadsSet, connectTimeoutSet bool
 
+// set when -p is given, even empty: it then wins over SHAREFINDER_PASSWORD
+// and the prompt
+var authPasswordSet, huntPasswordSet bool
+
 // program options
 var (
 	// program description
@@ -78,8 +82,9 @@ var (
 	authCommand        = app.Command("auth", "authenticated module")
 	authTargetArg      = authCommand.Arg("target", "Target, IP range or filename").Required().String()
 	authUsernameFlag   = authCommand.Flag("username", "Username in format DOMAIN\\username for domain auth, and just username for local auth").Short('u').Required().String()
-	authPasswordFlag   = authCommand.Flag("password", "User's password").Short('p').String()
+	authPasswordFlag   = authCommand.Flag("password", "User's password; without it, SHAREFINDER_PASSWORD or a prompt").Short('p').IsSetByUser(&authPasswordSet).String()
 	authHashFlag       = authCommand.Flag("hashes", "NTLM hash of password to authenticate").Short('H').String()
+	authAESKeyFlag     = authCommand.Flag("aes-key", "Kerberos AES128 or AES256 key of the user, in hex (with -k)").String()
 	authLocalAuthFlag  = authCommand.Flag("local-auth", "Enable local authentication, the username is passed without domain").Bool()
 	authKerberosFlag   = authCommand.Flag("kerberos", "Use Kerberos authentication").Short('k').Bool()
 	authDcHostnameFlag = authCommand.Flag("dc-hostname", "Hostname of domain controller for Kerberos authentication").String()
@@ -90,8 +95,9 @@ var (
 	huntCommand        = app.Command("hunt", "hunting module")
 	huntDcArg          = huntCommand.Arg("dc", "Domain Controller IP").Required().IP()
 	huntUsernameFlag   = huntCommand.Flag("username", "Domain username in format DOMAIN\\username").Short('u').Required().String()
-	huntPasswordFlag   = huntCommand.Flag("password", "Domain user's password").Short('p').String()
+	huntPasswordFlag   = huntCommand.Flag("password", "Domain user's password; without it, SHAREFINDER_PASSWORD or a prompt").Short('p').IsSetByUser(&huntPasswordSet).String()
 	huntHashFlag       = huntCommand.Flag("hashes", "NTLM hash of password to authenticate").Short('H').String()
+	huntAESKeyFlag     = huntCommand.Flag("aes-key", "Kerberos AES128 or AES256 key of the user, in hex (with -k)").String()
 	huntResolverFlag   = huntCommand.Flag("resolver", "Custom DNS resolver IP address").Short('r').IP()
 	huntForestFlag     = huntCommand.Flag("forest", "Search all available domains in the current forest").Default("false").Bool()
 	huntKerberosFlag   = huntCommand.Flag("kerberos", "Use Kerberos authentication").Short('k').Bool()
@@ -217,10 +223,18 @@ func main() {
 		err = cmd.ExecuteGuest(ctx, scanner, *guestTargetArg, *guestUsernameFlag)
 	}
 	if command == authCommand.FullCommand() {
-		err = cmd.ExecuteAuth(ctx, scanner, *authTargetArg, *authUsernameFlag, *authPasswordFlag, *authHashFlag, *authLocalAuthFlag, *authKerberosFlag, *authDcHostnameFlag, *authDcIPFlag)
+		password, perr := cmd.Password(*authUsernameFlag, *authPasswordFlag, authPasswordSet, *authHashFlag, *authAESKeyFlag, *authKerberosFlag)
+		if perr != nil {
+			logger.Fatal(perr)
+		}
+		err = cmd.ExecuteAuth(ctx, scanner, *authTargetArg, *authUsernameFlag, password, *authHashFlag, *authAESKeyFlag, *authLocalAuthFlag, *authKerberosFlag, *authDcHostnameFlag, *authDcIPFlag)
 	}
 	if command == huntCommand.FullCommand() {
-		err = cmd.ExecuteHunt(ctx, scanner, *huntUsernameFlag, *huntPasswordFlag, *huntHashFlag, *huntDcArg, *huntResolverFlag, *huntForestFlag, *huntKerberosFlag, *huntDcHostnameFlag, *huntAllowPlainFlag)
+		password, perr := cmd.Password(*huntUsernameFlag, *huntPasswordFlag, huntPasswordSet, *huntHashFlag, *huntAESKeyFlag, *huntKerberosFlag)
+		if perr != nil {
+			logger.Fatal(perr)
+		}
+		err = cmd.ExecuteHunt(ctx, scanner, *huntUsernameFlag, password, *huntHashFlag, *huntAESKeyFlag, *huntDcArg, *huntResolverFlag, *huntForestFlag, *huntKerberosFlag, *huntDcHostnameFlag, *huntAllowPlainFlag)
 	}
 	interrupted := ctx.Err() != nil
 	finished.Store(true)

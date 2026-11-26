@@ -8,6 +8,7 @@ var credentialFlags = map[string]struct{}{
 	"--password": {},
 	"-H":         {},
 	"--hashes":   {},
+	"--aes-key":  {},
 }
 
 const maskedCredential = "***"

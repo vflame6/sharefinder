@@ -141,7 +141,7 @@ func GetSMBOptions(ctx context.Context, host DNHost, o *Options) smb.Options {
 			User:        o.Username,
 			Password:    o.Password,
 			Hash:        o.HashBytes,
-			AESKey:      nil,
+			AESKey:      o.AESKey,
 			SPN:         "cifs/" + hostname,
 			DCIP:        dcIPStr,
 			DialTimeout: o.Timeout,

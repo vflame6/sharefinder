@@ -427,7 +427,7 @@ func ExecuteGuest(ctx context.Context, s *scanner.Scanner, target, username stri
 	return runScan(ctx, s, "guest", produce)
 }
 
-func ExecuteAuth(ctx context.Context, s *scanner.Scanner, target, username, password, hash string, localAuth, kerberos bool, dcHostname string, dcIP net.IP) error {
+func ExecuteAuth(ctx context.Context, s *scanner.Scanner, target, username, password, hash, aesKey string, localAuth, kerberos bool, dcHostname string, dcIP net.IP) error {
 	var targetDomain string
 	var targetUsername string
 	var err error
@@ -462,12 +462,18 @@ func ExecuteAuth(ctx context.Context, s *scanner.Scanner, target, username, pass
 		}
 	}
 
+	aesBytes, err := kerberosKey(aesKey, kerberos)
+	if err != nil {
+		return err
+	}
+
 	// check if dcHostname is provided with kerberos authentication
 	if kerberos && dcHostname == "" {
 		return errors.New("--kerberos can't be used without --dc-hostname")
 	}
 
 	s.Options.Username = targetUsername
+	s.Options.AESKey = aesBytes
 	s.Options.Password = password
 	s.Options.Hash = hash
 	s.Options.HashBytes = hashBytes
@@ -486,7 +492,7 @@ func ExecuteAuth(ctx context.Context, s *scanner.Scanner, target, username, pass
 	return runScan(ctx, s, "auth", produce)
 }
 
-func ExecuteHunt(ctx context.Context, s *scanner.Scanner, username, password, hash string, dc, resolver net.IP, forest, kerberos bool, dcHostname string, allowPlaintextLDAP bool) error {
+func ExecuteHunt(ctx context.Context, s *scanner.Scanner, username, password, hash, aesKey string, dc, resolver net.IP, forest, kerberos bool, dcHostname string, allowPlaintextLDAP bool) error {
 	var targetDomain string
 	var targetUsername string
 	var err error
@@ -521,11 +527,17 @@ func ExecuteHunt(ctx context.Context, s *scanner.Scanner, username, password, ha
 		}
 	}
 
+	aesBytes, err := kerberosKey(aesKey, kerberos)
+	if err != nil {
+		return err
+	}
+
 	s.Options.Username = targetUsername
 	s.Options.Password = password
 	s.Options.Hash = hash
 	s.Options.HashBytes = hashBytes
 	s.Options.Kerberos = kerberos
+	s.Options.AESKey = aesBytes
 	s.Options.Domain = targetDomain
 	s.Options.LocalAuth = false
 	s.Options.DomainController = dc

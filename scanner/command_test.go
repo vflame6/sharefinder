@@ -37,6 +37,11 @@ func TestMaskCredentials(t *testing.T) {
 			want: []string{"auth", "-H", "***", "1.2.3.4"},
 		},
 		{
+			name: "AES key",
+			in:   []string{"auth", "--aes-key=abcd", "-k", "--aes-key", "ef01", "1.2.3.4"},
+			want: []string{"auth", "--aes-key=***", "-k", "--aes-key", "***", "1.2.3.4"},
+		},
+		{
 			name: "short flags with the value attached",
 			in:   []string{"auth", "-pSuperSecret1", "-Hdeadbeef", "1.2.3.4"},
 			want: []string{"auth", "-p***", "-H***", "1.2.3.4"},

@@ -59,6 +59,8 @@ type LDAPOptions struct {
 	// LDAP without TLS when LDAPS and StartTLS both fail.
 	AllowPlaintext bool
 	Dialer         *Dialer
+	// AESKey is the Kerberos AES key of the user (--aes-key)
+	AESKey []byte
 }
 
 // ldapTransport is how the LDAP connection is protected.
@@ -232,7 +234,8 @@ func dialLDAP(ctx context.Context, o LDAPOptions) (*ldap.Conn, ldapTransport, er
 	return withTimeout(l), transportPlain, nil
 }
 
-// newGSSAPIClient builds a Kerberos client from KRB5CCNAME or the password.
+// newGSSAPIClient builds a Kerberos client from the AES key, KRB5CCNAME or the
+// password.
 func newGSSAPIClient(o LDAPOptions) (*gssapi.Client, error) {
 	if o.DCHostname == "" {
 		return nil, fmt.Errorf("dcHostname is required for Kerberos (used as KDC and SPN host)")
@@ -245,7 +248,15 @@ func newGSSAPIClient(o LDAPOptions) (*gssapi.Client, error) {
 		return nil, fmt.Errorf("krb5 config: %w", err)
 	}
 
-	// try ccache first (KRB5CCNAME), fall back to password-based TGT
+	// an AES key given with --aes-key first, then the ccache (KRB5CCNAME),
+	// then the password
+	if len(o.AESKey) > 0 {
+		kt, err := aesKeytab(o.Username, realm, o.AESKey)
+		if err != nil {
+			return nil, fmt.Errorf("gssapi: %w", err)
+		}
+		return &gssapi.Client{Client: client.NewWithKeytab(o.Username, realm, kt, krb5Conf)}, nil
+	}
 	if ccachePath, ccErr := ccachePathFromEnv(); ccErr == nil {
 		ccache, err := credentials.LoadCCache(ccachePath)
 		if err != nil {
@@ -260,7 +271,7 @@ func newGSSAPIClient(o LDAPOptions) (*gssapi.Client, error) {
 	if o.Password != "" {
 		return &gssapi.Client{Client: client.NewWithPassword(o.Username, realm, o.Password, krb5Conf)}, nil
 	}
-	return nil, fmt.Errorf("kerberos requires either KRB5CCNAME ccache or -p password")
+	return nil, fmt.Errorf("kerberos requires --aes-key, a KRB5CCNAME ccache or a password")
 }
 
 func (c *LDAPConnection) Close() error {

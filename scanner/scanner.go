@@ -321,5 +321,6 @@ func (s *Scanner) ldapOptions(host net.IP, dcHostname string, useGC bool) LDAPOp
 		UseGC:          useGC,
 		AllowPlaintext: s.Options.AllowPlaintextLDAP,
 		Dialer:         s.Options.Dialer,
+		AESKey:         s.Options.AESKey,
 	}
 }

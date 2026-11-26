@@ -8,6 +8,7 @@ import (
 
 // Options is a struct to store scanner's configuration
 type Options struct {
+	AESKey             []byte     // --aes-key: Kerberos AES key of the user
 	AllowPlaintextLDAP bool       // --allow-plaintext-ldap (hunt)
 	AuthGuard          *AuthGuard // --max-auth-failures
 	CustomResolver     net.IP     // --resolver
