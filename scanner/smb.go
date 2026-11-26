@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/jfjallid/go-smb/dcerpc"
 	"github.com/jfjallid/go-smb/dcerpc/msrrp"
@@ -38,16 +39,26 @@ func NewSMBConnection(ctx context.Context, host DNHost, o *Options) (*Connection
 	options.ManualLogin = true
 
 	// dial and negotiate; no credentials are sent yet
-	session, err := smb.NewConnection(options)
-	if err != nil {
-		if session != nil {
-			// go-smb hands back a half-open connection on error
-			session.Close()
+	negotiate := func() (sessionConn, error) {
+		session, err := smb.NewConnection(options)
+		if err != nil {
+			if session != nil {
+				// go-smb hands back a half-open connection on error
+				session.Close()
+			}
+			return nil, err
 		}
+		return smbSession{session}, nil
+	}
+	first, err := negotiate()
+	if err != nil {
 		return nil, &StageError{Stage: StageConnect, Host: host.Address(), Err: err}
 	}
 
-	sessionType, err := establishSession(ctx, smbSession{session}, o.Mode, o.AuthGuard, host.Address(), accountScope{Domain: o.Domain, LocalAuth: o.LocalAuth})
+	// a connection that waits at the auth guard for half the I/O timeout may
+	// be closed by its read deadline: negotiate again before logging on
+	session := &freshSession{conn: first, ready: time.Now(), maxIdle: o.IOTimeout / 2, redial: negotiate, host: host.Address()}
+	sessionType, err := establishSession(ctx, session, o.Mode, o.AuthGuard, host.Address(), accountScope{Domain: o.Domain, LocalAuth: o.LocalAuth})
 	if err != nil {
 		session.Close()
 		return nil, err
@@ -55,7 +66,7 @@ func NewSMBConnection(ctx context.Context, host DNHost, o *Options) (*Connection
 
 	conn := &Connection{
 		host:        host.Address(),
-		session:     session,
+		session:     session.conn.(smbSession).Connection,
 		SessionType: sessionType,
 	}
 	return conn, nil

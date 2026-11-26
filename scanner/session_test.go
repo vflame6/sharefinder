@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
 
 // fakeSession stands in for a go-smb connection after negotiation.
@@ -18,6 +19,60 @@ func (f *fakeSession) SessionSetup() error     { f.setups++; return f.setupErr }
 func (f *fakeSession) IsGuestSession() bool    { return f.guest }
 func (f *fakeSession) IsNullSession() bool     { return f.null }
 func (f *fakeSession) ServerDomains() []string { return f.domains }
+
+// fakeConn is a negotiated connection that records Close.
+type fakeConn struct {
+	*fakeSession
+	closed bool
+}
+
+func (f *fakeConn) Close() { f.closed = true }
+
+func TestFreshSession_RenegotiatesAfterLongWait(t *testing.T) {
+	stale := &fakeConn{fakeSession: &fakeSession{setupErr: errors.New("Remote connection has closed!")}}
+	fresh := &fakeConn{fakeSession: &fakeSession{}}
+	redials := 0
+	f := &freshSession{
+		conn:    stale,
+		ready:   time.Now().Add(-10 * time.Second), // waited at the guard
+		maxIdle: time.Second,
+		redial:  func() (sessionConn, error) { redials++; return fresh, nil },
+		host:    "10.0.0.5",
+	}
+	if err := f.SessionSetup(); err != nil {
+		t.Fatalf("SessionSetup after a long wait = %v, want a logon on a fresh connection", err)
+	}
+	if redials != 1 || !stale.closed || stale.setups != 0 || fresh.setups != 1 {
+		t.Fatalf("redials %d, stale closed %v, stale setups %d, fresh setups %d", redials, stale.closed, stale.setups, fresh.setups)
+	}
+}
+
+func TestFreshSession_KeepsRecentConnection(t *testing.T) {
+	conn := &fakeConn{fakeSession: &fakeSession{}}
+	f := &freshSession{conn: conn, ready: time.Now(), maxIdle: time.Minute, host: "10.0.0.5",
+		redial: func() (sessionConn, error) { t.Fatal("must not redial a fresh connection"); return nil, nil }}
+	if err := f.SessionSetup(); err != nil || conn.setups != 1 {
+		t.Fatalf("SessionSetup = %v, setups %d", err, conn.setups)
+	}
+}
+
+func TestFreshSession_RedialFailureIsConnectionError(t *testing.T) {
+	f := &freshSession{
+		conn:    &fakeConn{fakeSession: &fakeSession{}},
+		ready:   time.Now().Add(-time.Hour),
+		maxIdle: time.Second,
+		redial:  func() (sessionConn, error) { return nil, errors.New("connection refused") },
+		host:    "10.0.0.5",
+	}
+	err := f.SessionSetup()
+	var stageErr *StageError
+	if !errors.As(err, &stageErr) || stageErr.Stage != StageConnect {
+		t.Fatalf("a failed re-dial is a connection error, got %#v", err)
+	}
+	if IsCredentialRejection(err) {
+		t.Fatal("a failed re-dial says nothing about the credentials")
+	}
+}
 
 func TestAccountScope_ForeignHost(t *testing.T) {
 	tests := []struct {

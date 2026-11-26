@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/jfjallid/go-smb/smb"
 )
@@ -106,7 +107,54 @@ func establishSession(ctx context.Context, s sessionSetupper, mode AuthMode, gua
 	return sessionTypeOf(s), nil
 }
 
-// smbSession adapts a go-smb connection to sessionSetupper.
+// sessionConn is a negotiated connection that can log on and be closed.
+type sessionConn interface {
+	sessionSetupper
+	Close()
+}
+
+// freshSession logs on over a connection that may have waited at the auth
+// guard. A connection idle for longer than maxIdle may already have been
+// closed by its I/O deadline, so it is replaced by a newly negotiated one
+// before the credentials are sent.
+type freshSession struct {
+	conn    sessionConn
+	ready   time.Time     // when conn was negotiated
+	maxIdle time.Duration // 0 never re-dials
+	redial  func() (sessionConn, error)
+	host    string
+}
+
+func (f *freshSession) SessionSetup() error {
+	if f.maxIdle > 0 && time.Since(f.ready) > f.maxIdle {
+		f.conn.Close()
+		conn, err := f.redial()
+		if err != nil {
+			f.conn = nil
+			return &StageError{Stage: StageConnect, Host: f.host, Err: err}
+		}
+		f.conn, f.ready = conn, time.Now()
+	}
+	return f.conn.SessionSetup()
+}
+
+func (f *freshSession) IsGuestSession() bool { return f.conn != nil && f.conn.IsGuestSession() }
+func (f *freshSession) IsNullSession() bool  { return f.conn != nil && f.conn.IsNullSession() }
+func (f *freshSession) ServerDomains() []string {
+	if f.conn == nil {
+		return nil
+	}
+	return f.conn.ServerDomains()
+}
+
+// Close closes the current connection.
+func (f *freshSession) Close() {
+	if f.conn != nil {
+		f.conn.Close()
+	}
+}
+
+// smbSession adapts a go-smb connection to sessionConn.
 type smbSession struct{ *smb.Connection }
 
 func (s smbSession) ServerDomains() []string {
