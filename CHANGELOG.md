@@ -7,6 +7,8 @@ from the section of the released version.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-26
+
 ### Added
 
 - `--output-json` writes JSONL: one `scan`, `host`, `share`, `file` or `end`
