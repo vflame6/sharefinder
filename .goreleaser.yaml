@@ -28,9 +28,8 @@ archives:
   - formats: [tar.gz]
 
 # Release notes are written by hand in CHANGELOG.md and passed with
-# --release-notes by the release workflow.
-changelog:
-  disable: true
+# --release-notes by the release workflow. Do not set changelog.disable: it
+# also skips loading --release-notes and leaves the release body empty.
 
 dockers_v2:
   - images:
