@@ -42,6 +42,9 @@ from the section of the released version.
   holds links and junctions that were not followed.
 - `--resume` warned of a different command when the scan used
   `--output-relay-list`.
+- `hunt --help` showed `--active-within=90d`, which reads as a default: there
+  is none, and without `--active-within` every computer is scanned. The help
+  now shows `--active-within=DURATION` and says so.
 
 ## [1.5.0] - 2026-11-26
 
