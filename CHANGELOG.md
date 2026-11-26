@@ -39,6 +39,11 @@ from the section of the released version.
 - `--resume scan.jsonl` continues an interrupted `--output-json` scan: finished
   hosts are not contacted again and finished shares are neither checked nor
   listed again.
+- Homebrew: the repository is its own tap
+  (`brew tap vflame6/sharefinder https://github.com/vflame6/sharefinder`); each
+  release commits the updated cask to `Casks/`.
+- Debian packaging in `debian/`, with the Go modules vendored into the orig
+  tarball and a manual page generated from the help.
 
 ### Changed
 

@@ -195,7 +195,14 @@ sharefinder diff q3.jsonl q4.jsonl
 
 ## Installation
 
-`sharefinder` requires **go1.26** or newer to install successfully.
+With Homebrew (macOS and Linux), from v1.5.0; this repository is the tap:
+
+```shell
+brew tap vflame6/sharefinder https://github.com/vflame6/sharefinder
+brew install --cask vflame6/sharefinder/sharefinder
+```
+
+With Go, which needs **go1.26** or newer:
 
 ```shell
 go install -v github.com/vflame6/sharefinder@latest
