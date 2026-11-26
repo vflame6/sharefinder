@@ -98,7 +98,7 @@ var (
 	huntPasswordFlag    = huntCommand.Flag("password", "Domain user's password; without it, SHAREFINDER_PASSWORD or a prompt").Short('p').IsSetByUser(&huntPasswordSet).String()
 	huntHashFlag        = huntCommand.Flag("hashes", "NTLM hash of password to authenticate").Short('H').String()
 	huntAESKeyFlag      = huntCommand.Flag("aes-key", "Kerberos AES128 or AES256 key of the user, in hex (with -k)").String()
-	huntResolverFlag    = huntCommand.Flag("resolver", "Custom DNS resolver IP address").Short('r').IP()
+	huntResolverFlag    = huntCommand.Flag("resolver", "DNS server that resolves the computer names (default: the DC); over TCP through --proxy").Short('r').IP()
 	huntForestFlag      = huntCommand.Flag("forest", "Search all available domains in the current forest").Default("false").Bool()
 	huntKerberosFlag    = huntCommand.Flag("kerberos", "Use Kerberos authentication").Short('k').Bool()
 	huntDcHostnameFlag  = huntCommand.Flag("dc-hostname", "Hostname of domain controller for Kerberos authentication").String()

@@ -220,7 +220,9 @@ only: on macOS and Windows the SMB logons need `-p`, `-H` or `--aes-key` (with
 ### Hunting a domain
 
 `hunt` lists the domain's computers over LDAP (`--forest` for every domain of
-the forest) and scans them as their names resolve. Disabled computer accounts
+the forest) and scans them as their names resolve: the DC resolves them, or
+the DNS server given with `--resolver`, asked over TCP through `--proxy`.
+Disabled computer accounts
 are skipped unless `--include-disabled`; `--active-within 90d` keeps the
 computers that logged on in the last 90 days. The servers that DFS links point
 to are added when they belong to a hunted domain; the others are named and
