@@ -143,7 +143,7 @@ are listed only with `--debug`; the summary counts them:
 | `--output-json NAME` | JSONL, `NAME.jsonl`: one `scan`, `host`, `share`, `file` or `end` record per line, written as results arrive, so a killed scan keeps what it found |
 | `--output-csv NAME` | one row per share, `NAME.csv`; cells that a spreadsheet would run as a formula are prefixed with `'` |
 | `--output-unc NAME` | `//host/share` for each readable disk share, `NAME.unc.txt`, for content scanners |
-| `--output-relay-list NAME` | the hosts that do not require SMB signing, `NAME.relay.txt`, for NTLM relay tools |
+| `--output-relay-list NAME` | the hosts that do not require SMB signing, `NAME.relay.txt`, for NTLM relay tools; taken from the negotiation, so also from null and guest scans whose logon is refused |
 | `--output-xml NAME` | the XML format of earlier versions, `NAME.xml` |
 | `--html` | an HTML report named after `--output-json` or `--output-xml` |
 | `--output-all NAME` | all of the above |
@@ -204,7 +204,10 @@ guard. The JSONL output records every identity's view.
 with Kerberos (`-k`), an AES key (`--aes-key`, 32 or 64 hex characters) or a
 `KRB5CCNAME` ticket cache. Without `-p`, the password is read from the
 `SHAREFINDER_PASSWORD` variable or asked for on the terminal, so it stays out
-of the process list and the shell history.
+of the process list and the shell history. Without a terminal (cron, scripts)
+and without any of these, sharefinder stops instead of trying an empty
+password, which would count a failed logon against the account; `-p ''`
+tests an empty password on purpose.
 
 ### Hunting a domain
 
@@ -212,7 +215,8 @@ of the process list and the shell history.
 the forest) and scans them as their names resolve. Disabled computer accounts
 are skipped unless `--include-disabled`; `--active-within 90d` keeps the
 computers that logged on in the last 90 days. The servers that DFS links point
-to are added, and the operating system recorded in AD is shown when the
+to are added when they belong to a hunted domain; the others are named and
+left out of scope. The operating system recorded in AD is shown when the
 registry cannot be read. `--ldap-only` prints the computers and stops.
 
 ### Safe defaults

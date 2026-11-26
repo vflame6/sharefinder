@@ -43,13 +43,18 @@ from the section of the released version.
   account are tested on each host in one pass, printed as one row per share
   (`DATA  null:R  guest:R  tester:RW`). Each account has its own lockout guard.
 - `--aes-key` for Kerberos (SMB and LDAP), a password prompt when `-p` is not
-  given, and the `SHAREFINDER_PASSWORD` environment variable.
+  given, and the `SHAREFINDER_PASSWORD` environment variable. Without a
+  password and without a terminal, sharefinder stops instead of trying an
+  empty password (`-p ''` tests one on purpose).
 - The negotiated SMB dialect is reported (host line, JSONL, XML, HTML), and
-  `--output-relay-list` writes the hosts that do not require signing.
+  `--output-relay-list` writes the hosts that do not require signing, taken
+  from the negotiation, also when the logon is refused.
 - `hunt` skips disabled computer accounts (`--include-disabled` keeps them),
-  takes `--active-within 90d`, adds the servers DFS links point to, shows the
-  operating system recorded in AD, and `--ldap-only` lists the computers
-  without scanning them.
+  takes `--active-within 90d`, adds the servers DFS links point to within the
+  hunted domains (others are named and skipped), shows the operating system
+  recorded in AD, and `--ldap-only` lists the computers without scanning them.
+- The HTML report shows the identity of each host and share row, which a
+  matrix scan records per identity.
 - Homebrew: the repository is its own tap
   (`brew tap vflame6/sharefinder https://github.com/vflame6/sharefinder`); each
   release commits the updated cask to `Casks/`.
