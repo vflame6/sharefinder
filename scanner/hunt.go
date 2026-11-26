@@ -112,10 +112,14 @@ func parseDFSTargetList(blob []byte) ([]string, error) {
 	return servers, nil
 }
 
-// mergeDFSServers adds the DFS servers that are not domain computers already
-// to computers. A short server name gets the domain's suffix, so the
-// domain's DNS can resolve it.
-func mergeDFSServers(computers []DNHost, servers []string, domain string) []DNHost {
+// mergeDFSServers adds to computers the DFS servers of the hunted domains
+// that are not among them yet. A short server name gets the domain's suffix,
+// so the domain's DNS can resolve it. A DFS link may point anywhere (a
+// partner, a child domain that is not hunted, a cloud file share): servers
+// outside the hunted domains are returned as foreign and not scanned, since
+// they would be out of scope and get an NTLM logon with the client's
+// credentials.
+func mergeDFSServers(computers []DNHost, servers []string, domain string, hunted map[string]bool) (merged []DNHost, foreign []string) {
 	seen := make(map[string]bool, len(computers))
 	for _, c := range computers {
 		seen[strings.ToLower(c.Hostname)] = true
@@ -124,12 +128,18 @@ func mergeDFSServers(computers []DNHost, servers []string, domain string) []DNHo
 		if !strings.Contains(server, ".") && domain != "" {
 			server += "." + domain
 		}
-		if key := strings.ToLower(server); !seen[key] {
-			seen[key] = true
-			computers = append(computers, DNHost{Hostname: server})
+		key := strings.ToLower(server)
+		if seen[key] {
+			continue
 		}
+		seen[key] = true
+		if _, serverDomain, _ := strings.Cut(key, "."); !hunted[serverDomain] {
+			foreign = append(foreign, server)
+			continue
+		}
+		computers = append(computers, DNHost{Hostname: server})
 	}
-	return computers
+	return computers, foreign
 }
 
 // HuntTargets returns a Producer that resolves domain computer names with

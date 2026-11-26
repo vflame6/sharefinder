@@ -241,6 +241,12 @@ func (s *Scanner) EnumerateDomainComputers(ctx context.Context) ([]DNHost, *Reso
 	}
 	filter := computerFilter(s.Options.IncludeDisabled, activeSince)
 
+	// DFS servers are scanned only within the domains being hunted
+	hunted := make(map[string]bool, len(searchBases))
+	for _, searchBase := range searchBases {
+		hunted[strings.ToLower(searchBase.Name)] = true
+	}
+
 	for _, searchBase := range searchBases {
 		logger.Warnf("Enumerating domain %s", printable(searchBase.Name))
 		conn := queryConn
@@ -266,13 +272,19 @@ func (s *Scanner) EnumerateDomainComputers(ctx context.Context) ([]DNHost, *Reso
 					names = append(names, DNHost{Hostname: hostname, OS: osName})
 				}
 			}
-			// file servers behind DFS links, which need not be computers of
-			// this domain (or enabled, or active)
+			// file servers behind DFS links: those of the hunted domains are
+			// added, the others are named and left out of scope
 			if servers, dfsErr := conn.SearchDFSServers(searchBase.BaseDN); dfsErr != nil {
 				logger.Debugf("No DFS targets from domain %s: %v", printable(searchBase.Name), dfsErr)
 			} else if before := len(names); len(servers) > 0 {
-				if names = mergeDFSServers(names, servers, searchBase.Name); len(names) > before {
-					logger.Warnf("Domain %s: %d more server(s) from DFS links", printable(searchBase.Name), len(names)-before)
+				var foreign []string
+				names, foreign = mergeDFSServers(names, servers, searchBase.Name, hunted)
+				if added := len(names) - before; added > 0 {
+					logger.Warnf("Domain %s: %d more server(s) from DFS links", printable(searchBase.Name), added)
+				}
+				if len(foreign) > 0 {
+					logger.Warnf("Domain %s: not scanning DFS link servers outside the hunted domain(s): %s (scan them with auth if they are in scope)",
+						printable(searchBase.Name), printable(strings.Join(foreign, ", ")))
 				}
 			}
 		}

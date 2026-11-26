@@ -183,7 +183,12 @@ func TestParseRemoteServerName(t *testing.T) {
 
 func TestMergeDFSServers(t *testing.T) {
 	computers := []DNHost{{Hostname: "FS01.corp.local", OS: "Windows Server 2022"}, {Hostname: "ws01.corp.local"}}
-	got := mergeDFSServers(computers, []string{"fs01.CORP.local", "nas01", "nas01", "san.corp.local"}, "corp.local")
+	hunted := map[string]bool{"corp.local": true}
+	// a DFS link may point anywhere: a partner, a child domain that is not
+	// hunted, a cloud file share. Those are out of scope and would get an
+	// NTLM logon with the client's credentials.
+	servers := []string{"fs01.CORP.local", "nas01", "nas01", "san.corp.local", "files.partner.com", "srv.child.corp.local", "acct.file.core.windows.net"}
+	got, foreign := mergeDFSServers(computers, servers, "corp.local", hunted)
 	var names []string
 	for _, h := range got {
 		names = append(names, h.Hostname)
@@ -191,8 +196,17 @@ func TestMergeDFSServers(t *testing.T) {
 	if strings.Join(names, ",") != "FS01.corp.local,ws01.corp.local,nas01.corp.local,san.corp.local" {
 		t.Fatalf("targets = %v", names)
 	}
+	if strings.Join(foreign, ",") != "files.partner.com,srv.child.corp.local,acct.file.core.windows.net" {
+		t.Fatalf("servers outside the hunted domains = %v", foreign)
+	}
 	if got[0].OS != "Windows Server 2022" {
 		t.Fatal("a DFS server that is also a computer keeps the computer's facts")
+	}
+
+	// with --forest the child domain is hunted too
+	_, foreign = mergeDFSServers(nil, []string{"srv.child.corp.local"}, "corp.local", map[string]bool{"corp.local": true, "child.corp.local": true})
+	if len(foreign) != 0 {
+		t.Fatalf("a server of a hunted domain is in scope: %v", foreign)
 	}
 }
 
