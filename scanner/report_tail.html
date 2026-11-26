@@ -243,6 +243,13 @@
         return r[5] ? r[5].split(', ') : [];
     }
 
+    // isFile says whether an entry is a file. The scan types any reparse
+    // point a link, a deduplicated or cloud-tiered file too: a link with a
+    // size is a file, as a directory has none.
+    function isFile(r) {
+        return r[6] === 'file' || (r[6] === 'link' && r[3] > 0);
+    }
+
     function byName(a, b) {
         return collator.compare(a, b) || (a < b ? -1 : a > b ? 1 : 0);
     }
@@ -254,17 +261,18 @@
         return {name: name, row: row, dirs: new Map(), files: new Map(), count: 0, bytes: 0, tags: new Set()};
     }
 
-    function addFile(f, r) {
+    function addFile(f, size, tags) {
         f.count++;
-        f.bytes += r[3];
-        tagsOf(r).forEach(function (t) {
+        f.bytes += size;
+        tags.forEach(function (t) {
             f.tags.add(t);
         });
     }
 
-    // buildTree makes the tree of a share's entries. Links go with the
-    // folders, so a link whose target was listed opens like one, and a path
-    // written twice, as a scan with several identities writes it, counts once.
+    // buildTree makes the tree of a share's entries. A link that is no file
+    // goes with the folders, so one whose target was listed opens like one,
+    // and a path written twice, as a scan with several identities writes it,
+    // counts once.
     function buildTree(rows) {
         var root = folder('', null);
         rows.forEach(function (r) {
@@ -281,7 +289,15 @@
                 chain.push(next);
                 at = next;
             });
-            if (r[6] === 'dir' || r[6] === 'link') {
+            if (isFile(r)) {
+                if (!at.files.has(name)) {
+                    at.files.set(name, r);
+                    var tags = tagsOf(r);
+                    chain.forEach(function (f) {
+                        addFile(f, r[3], tags);
+                    });
+                }
+            } else if (r[6] === 'dir' || r[6] === 'link') {
                 var node = at.dirs.get(name);
                 if (node === undefined) {
                     at.dirs.set(name, folder(name, r));
@@ -289,12 +305,7 @@
                     node.row = r;
                 }
             } else if (!at.files.has(name)) {
-                at.files.set(name, r);
-                if (r[6] === 'file') {
-                    chain.forEach(function (f) {
-                        addFile(f, r);
-                    });
-                }
+                at.files.set(name, r); // a kind this report does not know: shown, not counted
             }
         });
         return root;
@@ -305,9 +316,9 @@
         var stats = folder('', null);
         var seen = new Set();
         rows.forEach(function (r) {
-            if (r[6] === 'file' && !seen.has(r[2])) {
+            if (isFile(r) && !seen.has(r[2])) {
                 seen.add(r[2]);
-                addFile(stats, r);
+                addFile(stats, r[3], tagsOf(r));
             }
         });
         return stats;
@@ -376,7 +387,8 @@
         var kind = link ? 'link' : '';
         var time = f.row !== null ? shortTime(f.row[4]) : '';
         if (f.dirs.size + f.files.size === 0) {
-            return fillRow(el('div', 'sf-row sf-leaf'), false, icon, f.name, kind, tagsNode([], true), '', time);
+            return fillRow(el('div', 'sf-row sf-leaf'), false, icon, f.name, kind,
+                tagsNode(f.row !== null ? tagsOf(f.row) : [], false), '', time);
         }
         var details = el('details', 'sf-node');
         fillRow(details.appendChild(el('summary', 'sf-row')), true, icon, f.name, kind,
@@ -389,8 +401,9 @@
     }
 
     function drawFile(name, r) {
-        return fillRow(el('div', 'sf-row sf-leaf'), false, 'bi-file-earmark', name, '', tagsNode(tagsOf(r), false),
-            humanSize(r[3]), shortTime(r[4]));
+        var link = r[6] === 'link';
+        return fillRow(el('div', 'sf-row sf-leaf'), false, link ? 'bi-link-45deg' : 'bi-file-earmark', name,
+            link ? 'link' : '', tagsNode(tagsOf(r), false), humanSize(r[3]), shortTime(r[4]));
     }
 
     // drawChildren draws a folder's entries, folders first, childLimit at a
