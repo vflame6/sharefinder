@@ -214,8 +214,8 @@ A ticket cache from impacket's getTGT serves both the LDAP bind of `hunt` and
 the SMB logons. With service tickets only (getST), `--dc-hostname` must be the
 host name in the `ldap/` ticket (usually the FQDN), and each host needs its
 own `cifs/` (or `host/`) ticket. go-smb reads a ticket cache for SMB on Linux
-only: on macOS and Windows the SMB logons need a password, a hash or an AES
-key.
+only: on macOS and Windows the SMB logons need `-p`, `-H` or `--aes-key` (with
+`KRB5CCNAME` set, the password is not asked for).
 
 ### Hunting a domain
 

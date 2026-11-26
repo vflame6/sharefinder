@@ -103,6 +103,7 @@ func socksRecorder(t *testing.T) (addr string, connects <-chan string) {
 // Through --proxy the Kerberos exchange of the LDAP bind goes through the
 // proxy too: the KDC is usually reachable only from inside the network.
 func TestGSSAPIClient_KDCThroughProxy(t *testing.T) {
+	t.Setenv("KRB5CCNAME", "") // the password logs on, whatever the shell exports
 	proxyAddr, connects := socksRecorder(t)
 	d, err := NewDialer(proxyAddr, 2*time.Second, 2*time.Second)
 	if err != nil {
@@ -143,22 +144,33 @@ func TestGSSAPIClient_KDCThroughProxy(t *testing.T) {
 // impacket's getST writes one, and points KRB5CCNAME at it.
 func writeCCache(t *testing.T, spns ...string) {
 	t.Helper()
-	cc := credentials.NewV4CCache()
-	user := types.NewPrincipalName(nametype.KRB_NT_PRINCIPAL, "jdoe")
-	cc.SetDefaultPrincipal(credentials.NewPrincipal(user, "CORP.LOCAL"))
-	now := time.Now()
+	tickets := make(map[string][]byte, len(spns))
 	for _, spn := range spns {
-		sname := types.NewPrincipalName(nametype.KRB_NT_SRV_INST, spn)
 		tkt := messages.Ticket{
 			TktVNO:  5,
 			Realm:   "CORP.LOCAL",
-			SName:   sname,
+			SName:   types.NewPrincipalName(nametype.KRB_NT_SRV_INST, spn),
 			EncPart: types.EncryptedData{EType: etypeID.AES256_CTS_HMAC_SHA1_96, KVNO: 2, Cipher: []byte("opaque")},
 		}
 		b, err := tkt.Marshal()
 		if err != nil {
 			t.Fatal(err)
 		}
+		tickets[spn] = b
+	}
+	writeCCacheTickets(t, tickets)
+}
+
+// writeCCacheTickets writes a ticket cache of jdoe@CORP.LOCAL holding the
+// given ticket bytes for each service, and points KRB5CCNAME at it.
+func writeCCacheTickets(t *testing.T, tickets map[string][]byte) {
+	t.Helper()
+	cc := credentials.NewV4CCache()
+	user := types.NewPrincipalName(nametype.KRB_NT_PRINCIPAL, "jdoe")
+	cc.SetDefaultPrincipal(credentials.NewPrincipal(user, "CORP.LOCAL"))
+	now := time.Now()
+	for spn, b := range tickets {
+		sname := types.NewPrincipalName(nametype.KRB_NT_SRV_INST, spn)
 		cc.AddCredential(&credentials.Credential{
 			Client:      credentials.NewPrincipal(user, "CORP.LOCAL"),
 			Server:      credentials.NewPrincipal(sname, "CORP.LOCAL"),
@@ -200,6 +212,19 @@ func TestNewGSSAPIClient_ServiceTicketCache(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the error does not name %s: %v", want, err)
 		}
+	}
+}
+
+// The --dc-hostname hint is only for a cache whose tickets do not fit: a
+// cache whose TGT cannot be read says so, without the hint.
+func TestNewGSSAPIClient_UnreadableTicketCache(t *testing.T) {
+	writeCCacheTickets(t, map[string][]byte{"krbtgt/CORP.LOCAL": []byte("not a ticket")})
+	_, err := newGSSAPIClient(LDAPOptions{Host: net.ParseIP("192.0.2.10"), Username: "jdoe", Domain: "corp.local", DCHostname: "dc01", Kerberos: true})
+	if err == nil {
+		t.Fatal("an unreadable TGT gave a client")
+	}
+	if strings.Contains(err.Error(), "--dc-hostname") {
+		t.Errorf("the error sends the user to --dc-hostname for an unreadable TGT: %v", err)
 	}
 }
 
@@ -525,8 +550,9 @@ func testRC4Sums(t *testing.T, key, header, confounder, data []byte) (cksum []by
 }
 
 // openRC4Token checks an RC4 wrap token that is not sealed and returns its
-// data, unpadded, and whether the acceptor sent it.
-func openRC4Token(t *testing.T, token, key []byte) (payload []byte, fromAcceptor bool) {
+// data, unpadded, and its SND_SEQ decrypted: the sequence number, then
+// ff ff ff ff from the acceptor or 00 00 00 00 from the initiator.
+func openRC4Token(t *testing.T, token, key []byte) (payload, sndSeq []byte) {
 	t.Helper()
 	var oid asn1.ObjectIdentifier
 	rest, err := asn1.UnmarshalWithParams(token, &oid, "application,explicit,tag:0")
@@ -546,15 +572,21 @@ func openRC4Token(t *testing.T, token, key []byte) (payload []byte, fromAcceptor
 	if pad := data[len(data)-1]; pad != 1 {
 		t.Fatalf("padding % x, want one byte 01 (RC4 is a stream cipher)", data)
 	}
-	return data[:len(data)-1], bytes.Equal(plainSeq[4:], []byte{0xff, 0xff, 0xff, 0xff})
+	return data[:len(data)-1], plainSeq
 }
 
 // rc4Token makes an RC4 wrap token, not sealed, for payload.
 func rc4Token(t *testing.T, key, payload []byte, fromAcceptor bool) []byte {
 	t.Helper()
+	return rc4TokenData(t, key, append(append([]byte{}, payload...), 1), fromAcceptor)
+}
+
+// rc4TokenData makes an RC4 wrap token, not sealed, for data that is padded
+// already.
+func rc4TokenData(t *testing.T, key, data []byte, fromAcceptor bool) []byte {
+	t.Helper()
 	header := []byte{0x02, 0x01, 0x11, 0x00, 0xff, 0xff, 0xff, 0xff}
 	confounder := []byte("confound")
-	data := append(append([]byte{}, payload...), 1)
 	cksum, seq := testRC4Sums(t, key, header, confounder, data)
 	plainSeq := []byte{0, 0, 0, 7, 0, 0, 0, 0}
 	if fromAcceptor {
@@ -575,18 +607,19 @@ func TestNegotiateSaslAuth_RC4(t *testing.T) {
 		t.Fatal(err)
 	}
 	// the test's own RFC 4757 code reads Windows' token: it is signed with
-	// the acceptor subkey
-	if payload, fromAcceptor := openRC4Token(t, offer, subkey.KeyValue); !fromAcceptor || !bytes.Equal(payload, []byte{0x07, 0xa0, 0x00, 0x00}) {
-		t.Fatalf("Windows' offer: % x, from the acceptor %v", payload, fromAcceptor)
+	// the acceptor subkey, and marked as sent by the acceptor
+	if payload, seq := openRC4Token(t, offer, subkey.KeyValue); !bytes.Equal(seq[4:], []byte{0xff, 0xff, 0xff, 0xff}) || !bytes.Equal(payload, []byte{0x07, 0xa0, 0x00, 0x00}) {
+		t.Fatalf("Windows' offer: % x, SND_SEQ % x", payload, seq)
 	}
 
 	reply, err := (&gssapiClient{ekey: ekey, subkey: subkey}).NegotiateSaslAuth(offer, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	payload, fromAcceptor := openRC4Token(t, reply, subkey.KeyValue)
-	if fromAcceptor {
-		t.Error("the reply says it comes from the server")
+	payload, seq := openRC4Token(t, reply, subkey.KeyValue)
+	// sequence number 1, big-endian, then 00 00 00 00: sent by the initiator
+	if want := []byte{0, 0, 0, 1, 0, 0, 0, 0}; !bytes.Equal(seq, want) {
+		t.Errorf("reply SND_SEQ % x, want % x", seq, want)
 	}
 	if !bytes.Equal(payload, []byte{1, 0, 0, 0}) {
 		t.Errorf("reply payload % x, want 01 00 00 00 (no security layer)", payload)
@@ -609,17 +642,30 @@ func TestNegotiateSaslAuth_RC4Refuses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tampered := append([]byte{}, offer...)
-	tampered[len(tampered)-5] ^= 0x01 // the offered layers
+	// Windows' data ends 07 a0 00 00 01: the layers, the largest message
+	// size, the padding. A change the offer's own checks would let through
+	// is caught by the checksum.
+	tampered := func(i int, mask byte) []byte {
+		b := append([]byte{}, offer...)
+		b[len(b)-i] ^= mask
+		return b
+	}
 	sealed := append([]byte{}, offer...)
 	sealed[17], sealed[18] = 0x10, 0x00 // SEAL_ALG RC4
-	for name, token := range map[string][]byte{
-		"signed with another key": rc4Token(t, ekey.KeyValue, []byte{0x07, 0, 0x10, 0}, true),
-		"tampered":                tampered,
-		"sealed":                  sealed,
-		"not from the server":     rc4Token(t, subkey.KeyValue, []byte{0x07, 0, 0x10, 0}, false),
-		"truncated":               offer[:40],
-		"no payload":              rc4Token(t, subkey.KeyValue, nil, true),
+	for name, tc := range map[string]struct {
+		token []byte
+		want  string // in the error
+	}{
+		"signed with another key":       {rc4Token(t, ekey.KeyValue, []byte{0x07, 0, 0x10, 0}, true), "checksum"},
+		"a layer taken off":             {tampered(5, 0x02), "checksum"},
+		"another largest size":          {tampered(4, 0x01), "checksum"},
+		"sealed":                        {sealed, "unsealed"},
+		"not from the server":           {rc4Token(t, subkey.KeyValue, []byte{0x07, 0, 0x10, 0}, false), "does not come from the server"},
+		"truncated":                     {offer[:40], ""},
+		"no payload":                    {rc4Token(t, subkey.KeyValue, nil, true), "0 bytes"},
+		"padding of 0":                  {rc4TokenData(t, subkey.KeyValue, []byte{0x07, 0, 0x10, 0, 0}, true), "padding"},
+		"padding longer than a block":   {rc4TokenData(t, subkey.KeyValue, append([]byte{0x07, 0, 0x10, 0}, bytes.Repeat([]byte{9}, 9)...), true), "padding"},
+		"padding bytes that do not add": {rc4TokenData(t, subkey.KeyValue, []byte{0x07, 0, 0x10, 0, 1, 2}, true), "padding"},
 	} {
 		func() {
 			defer func() {
@@ -627,8 +673,8 @@ func TestNegotiateSaslAuth_RC4Refuses(t *testing.T) {
 					t.Errorf("%s: panic: %v", name, r)
 				}
 			}()
-			if _, err := c.NegotiateSaslAuth(token, ""); err == nil {
-				t.Errorf("%s: accepted", name)
+			if _, err := c.NegotiateSaslAuth(tc.token, ""); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("%s: %v, want an error about %q", name, err, tc.want)
 			}
 		}()
 	}

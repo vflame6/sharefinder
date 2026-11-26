@@ -267,8 +267,12 @@ func newGSSAPIClient(o LDAPOptions) (*gssapiClient, error) {
 		// a service ticket for the DC in the ccache serves too
 		spn := []string{"ldap", strings.ToLower(o.DCHostname)}
 		if krb, err = client.NewFromCCache(ccache, spn, krb5Conf, settings...); err != nil {
-			return nil, fmt.Errorf("gssapi: ticket cache %s: %w (it holds %s; with service tickets only, --dc-hostname must name the host of its ldap ticket)",
-				printable(ccachePath), err, cachedTickets(ccache))
+			// gokrb5 has no error value for a cache whose tickets do not fit
+			if strings.Contains(err.Error(), "No usable TGT or ST") {
+				return nil, fmt.Errorf("gssapi: ticket cache %s: %w (it holds %s; with service tickets only, --dc-hostname must name the host of its ldap ticket)",
+					printable(ccachePath), err, cachedTickets(ccache))
+			}
+			return nil, fmt.Errorf("gssapi: ticket cache %s: %w", printable(ccachePath), err)
 		}
 	} else if o.Password != "" {
 		krb, err = client.NewWithPassword(o.Username, realm, o.Password, krb5Conf, settings...)
