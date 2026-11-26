@@ -77,10 +77,12 @@ var rejectionStatuses = []uint32{
 	smb.StatusPasswordMustChange,
 }
 
-// rejectionMarkers match refusals that have no sentinel error: STATUS_ACCOUNT_EXPIRED,
-// which go-smb v0.8.2 only reports as a hex code, and Kerberos KDC errors.
+// statusAccountExpired (STATUS_ACCOUNT_EXPIRED) has no sentinel in go-smb; it
+// arrives as an *smb.NTStatusError carrying the raw status.
+const statusAccountExpired uint32 = 0xc0000193
+
+// rejectionMarkers match Kerberos KDC refusals, which gokrb5 reports as text.
 var rejectionMarkers = []string{
-	"0xc0000193",
 	"kdc_err_preauth_failed",
 	"kdc_err_client_revoked",
 	"kdc_err_key_expired",
@@ -99,6 +101,10 @@ func IsCredentialRejection(err error) bool {
 		if errors.Is(err, smb.StatusMap[status]) {
 			return true
 		}
+	}
+	var statusErr *smb.NTStatusError
+	if errors.As(err, &statusErr) && statusErr.Status == statusAccountExpired {
+		return true
 	}
 	msg := strings.ToLower(err.Error())
 	for _, marker := range rejectionMarkers {

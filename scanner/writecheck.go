@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/jfjallid/go-smb/dcerpc/mssrvs"
 	"github.com/jfjallid/go-smb/smb"
@@ -199,8 +198,7 @@ func probeWriteFile(p fileProber, host, share, name string) bool {
 
 // isNotFoundError reports STATUS_OBJECT_NAME_NOT_FOUND.
 func isNotFoundError(err error) bool {
-	return errors.Is(err, smb.StatusMap[smb.StatusObjectNameNotFound]) ||
-		strings.Contains(strings.ToLower(err.Error()), "0xc0000034")
+	return errors.Is(err, smb.StatusMap[smb.StatusObjectNameNotFound])
 }
 
 func contains(list []string, s string) bool {

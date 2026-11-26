@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -80,7 +81,6 @@ func GetSMBOptions(ctx context.Context, host DNHost, o *Options) smb.Options {
 		Host:                  host.Address(),
 		Port:                  o.SmbPort,
 		RequireMessageSigning: false,
-		ForceSMB2:             false,
 		DialTimeout:           o.Timeout,
 		ProxyDialer:           o.Dialer,
 	}
@@ -327,17 +327,17 @@ func (conn *Connection) CheckReadAccess(share string) error {
 	return err
 }
 
+// statusPrivilegeNotHeld (STATUS_PRIVILEGE_NOT_HELD) has no sentinel in go-smb.
+const statusPrivilegeNotHeld uint32 = 0xc0000061
+
+// isExpectedSMBWriteDeniedError reports a write probe the server refused:
+// access denied or privilege not held.
 func isExpectedSMBWriteDeniedError(err error) bool {
-	if err == nil {
-		return false
+	if errors.Is(err, smb.StatusMap[smb.StatusAccessDenied]) {
+		return true
 	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "0xc0000061") ||
-		strings.Contains(msg, "status_privilege_not_held") ||
-		strings.Contains(msg, "privilege not held") ||
-		strings.Contains(msg, "0xc0000022") ||
-		strings.Contains(msg, "status_access_denied") ||
-		strings.Contains(msg, "access denied")
+	var statusErr *smb.NTStatusError
+	return errors.As(err, &statusErr) && statusErr.Status == statusPrivilegeNotHeld
 }
 
 // WalkShare connects to share and lists it within lim; see walkShare.

@@ -16,6 +16,7 @@ import (
 // privileges) those are expected, not actionable, and clutter normal output.
 var goSmbLogPackages = []string{
 	"github.com/jfjallid/go-smb/smb",
+	"github.com/jfjallid/go-smb/smb/compress",
 	"github.com/jfjallid/go-smb/dcerpc",
 	"github.com/jfjallid/go-smb/dcerpc/msrrp",
 	"github.com/jfjallid/go-smb/dcerpc/msscmr",

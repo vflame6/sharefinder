@@ -3,10 +3,13 @@ package scanner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/jfjallid/go-smb/smb"
 )
 
 func TestNewSMBConnection_SilentHostTimesOut(t *testing.T) {
@@ -41,9 +44,10 @@ func TestIsExpectedSMBWriteDeniedError(t *testing.T) {
 		want bool
 	}{
 		{name: "nil", err: nil, want: false},
-		{name: "privilege not held hex", err: errors.New("server returned error 0xc0000061"), want: true},
-		{name: "privilege not held symbolic", err: errors.New("STATUS_PRIVILEGE_NOT_HELD"), want: true},
-		{name: "access denied hex", err: errors.New("0xc0000022"), want: true},
+		{name: "access denied", err: &smb.NTStatusError{Op: "Create", Status: smb.StatusAccessDenied, Err: smb.StatusMap[smb.StatusAccessDenied]}, want: true},
+		{name: "wrapped access denied", err: fmt.Errorf("put file: %w", &smb.NTStatusError{Op: "Create", Status: smb.StatusAccessDenied, Err: smb.StatusMap[smb.StatusAccessDenied]}), want: true},
+		{name: "privilege not held (unmapped status)", err: &smb.NTStatusError{Op: "Create", Status: statusPrivilegeNotHeld}, want: true},
+		{name: "other status", err: &smb.NTStatusError{Op: "Create", Status: smb.StatusBadNetworkName, Err: smb.StatusMap[smb.StatusBadNetworkName]}, want: false},
 		{name: "unexpected transport", err: errors.New("connection reset by peer"), want: false},
 	}
 
