@@ -69,6 +69,11 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		return nil, err
 	}
 
+	discovery, err := discoveryConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	// every SMB, LDAP and proxied DNS connection goes through this dialer: it
 	// applies the connect and I/O timeouts and can close everything on Ctrl+C
 	dialer, err := scanner.NewDialer(cfg.Proxy, cfg.Timeout, cfg.IOTimeout)
@@ -189,6 +194,7 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		AuthGuard:          scanner.NewAuthGuard(cfg.MaxAuthFailures),
 		WriteCheck:         writeCheck,
 		Depth:              cfg.Depth,
+		Discovery:          discovery,
 		FollowLinks:        cfg.FollowLinks,
 		MaxFiles:           cfg.MaxFiles,
 		FileTXT:            file,
@@ -220,6 +226,32 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 	s := scanner.NewScanner(options, cfg.CommandLine, cfg.TimeStart, cfg.Threads)
 	s.Version = cfg.Version
 	return s, nil
+}
+
+// discoveryConfig validates the sweep flags. Through --proxy every probe is a
+// SOCKS request, so unless the user chose otherwise the sweep runs 50 probes
+// at once and waits as long as the SMB stage (--timeout): a short timeout over
+// a slow tunnel would drop live hosts without a trace.
+func discoveryConfig(cfg Config) (scanner.SweepConfig, error) {
+	sweep := scanner.SweepConfig{Enabled: cfg.Discovery, Threads: cfg.DiscoveryThreads, Timeout: cfg.ConnectTimeout}
+	if !sweep.Enabled {
+		return sweep, nil
+	}
+	if cfg.Proxy != "" {
+		if !cfg.DiscoveryThreadsSet {
+			sweep.Threads = 50
+		}
+		if !cfg.ConnectTimeoutSet {
+			sweep.Timeout = cfg.Timeout
+		}
+	}
+	if sweep.Threads < 1 {
+		return sweep, errors.New("--discovery-threads must be at least 1")
+	}
+	if sweep.Timeout <= 0 {
+		return sweep, errors.New("--connect-timeout must be greater than 0")
+	}
+	return sweep, nil
 }
 
 // runScan enumerates the hosts produce sends and logs how the module ended.

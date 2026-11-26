@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/vflame6/sharefinder/logger"
+	"github.com/vflame6/sharefinder/scanner"
 )
 
 func validConfig() Config {
@@ -21,6 +22,10 @@ func validConfig() Config {
 		SmbPort:    445,
 		WriteCheck: "file",
 		Depth:      5,
+
+		Discovery:        true,
+		DiscoveryThreads: 500,
+		ConnectTimeout:   time.Second,
 	}
 }
 
@@ -250,6 +255,53 @@ func TestExecuteDiff(t *testing.T) {
 	out.Reset()
 	if err := ExecuteDiff(old, old); err != nil || out.String() != "No changes\n" {
 		t.Fatalf("a scan diffed with itself: %q, %v", out.String(), err)
+	}
+}
+
+func TestCreateScanner_DiscoveryDefaults(t *testing.T) {
+	s, err := CreateScanner(validConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := s.Options.Discovery, (scanner.SweepConfig{Enabled: true, Threads: 500, Timeout: time.Second}); got != want {
+		t.Fatalf("discovery = %+v, want %+v", got, want)
+	}
+
+	// through a proxy every probe is a SOCKS request: fewer at once, and the
+	// connect timeout of the SMB stage, so slow tunnels do not hide hosts
+	proxied := validConfig()
+	proxied.Proxy, proxied.Timeout = "127.0.0.1:1080", 7*time.Second
+	if s, err = CreateScanner(proxied); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := s.Options.Discovery, (scanner.SweepConfig{Enabled: true, Threads: 50, Timeout: 7 * time.Second}); got != want {
+		t.Fatalf("proxied discovery = %+v, want %+v", got, want)
+	}
+
+	// values the user set are kept
+	proxied.DiscoveryThreadsSet, proxied.DiscoveryThreads = true, 200
+	proxied.ConnectTimeoutSet, proxied.ConnectTimeout = true, 3*time.Second
+	if s, err = CreateScanner(proxied); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := s.Options.Discovery, (scanner.SweepConfig{Enabled: true, Threads: 200, Timeout: 3 * time.Second}); got != want {
+		t.Fatalf("user-set discovery = %+v, want %+v", got, want)
+	}
+
+	for _, bad := range []func(*Config){
+		func(c *Config) { c.DiscoveryThreads = 0 },
+		func(c *Config) { c.ConnectTimeout = 0 },
+	} {
+		cfg := validConfig()
+		bad(&cfg)
+		if _, err := CreateScanner(cfg); err == nil {
+			t.Errorf("invalid discovery settings accepted: %+v", cfg)
+		}
+	}
+	off := validConfig()
+	off.Discovery, off.DiscoveryThreads = false, 0
+	if s, err = CreateScanner(off); err != nil || s.Options.Discovery.Enabled {
+		t.Fatalf("--no-discovery: %+v, %v", s.Options.Discovery, err)
 	}
 }
 

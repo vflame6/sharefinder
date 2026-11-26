@@ -320,6 +320,28 @@ func TestIntegration_JSONL(t *testing.T) {
 	}
 }
 
+func TestIntegration_DiscoverySweep(t *testing.T) {
+	srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares()})
+	o := asUser(integrationOptions(srv.Port(), 5*time.Second), testPassword)
+	o.Sink = MultiSink{}
+	o.Discovery = SweepConfig{Enabled: true, Threads: 50, Timeout: 500 * time.Millisecond}
+
+	s := NewScanner(o, nil, time.Now(), 2)
+	targets := []DNHost{{IP: net.ParseIP("192.0.2.1")}, {IP: net.ParseIP("127.0.0.1")}, {IP: net.ParseIP("203.0.113.9")}}
+	if err := s.Run(context.Background(), TargetsFromList(targets)); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := s.Stats.SummaryLine(), "Summary: 3 targets, 1 reachable, 1 authenticated, 0 failed"; got != want {
+		t.Fatalf("%s, want %s", got, want)
+	}
+	if done := s.Stats.Done.Load(); done != 3 {
+		t.Fatalf("done = %d, want 3", done)
+	}
+	if srv.LogonAttempts() != 1 {
+		t.Fatalf("logons = %d, want 1: the sweep itself never logs on", srv.LogonAttempts())
+	}
+}
+
 func TestIntegration_ProgressCounts(t *testing.T) {
 	srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares()})
 	o := asUser(integrationOptions(srv.Port(), 5*time.Second), testPassword)

@@ -15,6 +15,9 @@ import (
 	"golang.org/x/term"
 )
 
+// set when the user gives the flag: --proxy changes their defaults
+var discoveryThreadsSet, connectTimeoutSet bool
+
 // program options
 var (
 	// program description
@@ -37,12 +40,15 @@ var (
 	forceFlag      = app.Flag("force", "Overwrite existing output files").Bool()
 
 	// connection flags
-	threadsFlag         = app.Flag("threads", "Number of threads").Default("10").Int()
-	timeoutFlag         = app.Flag("timeout", "Seconds to wait for connection").Default("5s").Duration()
-	ioTimeoutFlag       = app.Flag("io-timeout", "Abort an SMB or LDAP operation when the server sends nothing for this long").Default("30s").Duration()
-	smbPortFlag         = app.Flag("smb-port", "Target port of SMB service").Default("445").Int()
-	proxyFlag           = app.Flag("proxy", "SOCKS-proxy address to use for connection in format IP:PORT").Default("").String()
-	maxAuthFailuresFlag = app.Flag("max-auth-failures", "Stop the scan after this many rejected logons; 0 disables the guard").Default("1").Int()
+	threadsFlag          = app.Flag("threads", "Number of threads").Default("10").Int()
+	timeoutFlag          = app.Flag("timeout", "Seconds to wait for connection").Default("5s").Duration()
+	ioTimeoutFlag        = app.Flag("io-timeout", "Abort an SMB or LDAP operation when the server sends nothing for this long").Default("30s").Duration()
+	smbPortFlag          = app.Flag("smb-port", "Target port of SMB service").Default("445").Int()
+	proxyFlag            = app.Flag("proxy", "SOCKS-proxy address to use for connection in format IP:PORT").Default("").String()
+	discoveryFlag        = app.Flag("discovery", "Probe the SMB port of every target first and enumerate only the hosts that answer").Default("true").Bool()
+	discoveryThreadsFlag = app.Flag("discovery-threads", "Number of concurrent port probes (50 by default with --proxy)").Default("500").IsSetByUser(&discoveryThreadsSet).Int()
+	connectTimeoutFlag   = app.Flag("connect-timeout", "Time to wait for the SMB port to answer a probe (--timeout by default with --proxy)").Default("1s").IsSetByUser(&connectTimeoutSet).Duration()
+	maxAuthFailuresFlag  = app.Flag("max-auth-failures", "Stop the scan after this many rejected logons; 0 disables the guard").Default("1").Int()
 
 	// SMB interaction flags
 	excludeFlag      = app.Flag("exclude", "Exclude list").Short('e').Default("IPC$,NETLOGON,ADMIN$,print$,C$").String()
@@ -145,31 +151,36 @@ func main() {
 
 	// set up a scanner
 	scanner, err := cmd.CreateScanner(cmd.Config{
-		Version:         cmd.VERSION,
-		CommandLine:     os.Args[1:],
-		TimeStart:       time.Now(),
-		OutputRaw:       *outputRawFlag,
-		OutputXML:       *outputXMLFlag,
-		OutputJSON:      *outputJSONFlag,
-		OutputCSV:       *outputCSVFlag,
-		OutputUNC:       *outputUNCFlag,
-		OutputAll:       *outputAllFlag,
-		OutputHTML:      *outputHTMLFlag,
-		Force:           *forceFlag,
-		Threads:         *threadsFlag,
-		Timeout:         *timeoutFlag,
-		IOTimeout:       *ioTimeoutFlag,
-		SmbPort:         *smbPortFlag,
-		Proxy:           *proxyFlag,
-		MaxAuthFailures: *maxAuthFailuresFlag,
-		WriteCheck:      *writeCheckFlag,
-		Exclude:         *excludeFlag,
-		ExcludeHosts:    *excludeHostsFlag,
-		List:            *listFlag,
-		Recurse:         *recurseFlag,
-		Depth:           *depthFlag,
-		FollowLinks:     *followLinksFlag,
-		MaxFiles:        *maxFilesFlag,
+		Version:             cmd.VERSION,
+		CommandLine:         os.Args[1:],
+		TimeStart:           time.Now(),
+		OutputRaw:           *outputRawFlag,
+		OutputXML:           *outputXMLFlag,
+		OutputJSON:          *outputJSONFlag,
+		OutputCSV:           *outputCSVFlag,
+		OutputUNC:           *outputUNCFlag,
+		OutputAll:           *outputAllFlag,
+		OutputHTML:          *outputHTMLFlag,
+		Force:               *forceFlag,
+		Threads:             *threadsFlag,
+		Timeout:             *timeoutFlag,
+		IOTimeout:           *ioTimeoutFlag,
+		SmbPort:             *smbPortFlag,
+		Proxy:               *proxyFlag,
+		Discovery:           *discoveryFlag,
+		DiscoveryThreads:    *discoveryThreadsFlag,
+		DiscoveryThreadsSet: discoveryThreadsSet,
+		ConnectTimeout:      *connectTimeoutFlag,
+		ConnectTimeoutSet:   connectTimeoutSet,
+		MaxAuthFailures:     *maxAuthFailuresFlag,
+		WriteCheck:          *writeCheckFlag,
+		Exclude:             *excludeFlag,
+		ExcludeHosts:        *excludeHostsFlag,
+		List:                *listFlag,
+		Recurse:             *recurseFlag,
+		Depth:               *depthFlag,
+		FollowLinks:         *followLinksFlag,
+		MaxFiles:            *maxFilesFlag,
 	})
 	if err != nil {
 		logger.Fatal(err)

@@ -23,6 +23,14 @@ type Config struct {
 	SmbPort   int           // --smb-port
 	Proxy     string        // --proxy
 
+	// discovery sweep; the *Set fields say whether the user gave the flag, as
+	// --proxy changes their defaults
+	Discovery           bool // --[no-]discovery
+	DiscoveryThreads    int  // --discovery-threads
+	DiscoveryThreadsSet bool
+	ConnectTimeout      time.Duration // --connect-timeout
+	ConnectTimeoutSet   bool
+
 	MaxAuthFailures int    // --max-auth-failures
 	WriteCheck      string // --write-check
 

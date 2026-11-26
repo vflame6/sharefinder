@@ -18,28 +18,41 @@ func (s *Scanner) sink() Sink {
 	return s.Options.Sink
 }
 
-// processHost scans one target and reports it through the sinks as it goes:
-// the host and its share permissions first, then each share's listing, so no
-// listing is held in memory.
+// processHost admits one target and enumerates it.
 func (s *Scanner) processHost(ctx context.Context, target DNHost) {
-	o := s.Options
-	sink := s.sink()
-	defer s.Stats.Done.Add(1)
+	if host, ok := s.admit(ctx, target); ok {
+		s.enumerateHost(ctx, host)
+	}
+}
 
-	// resolve hostnames, apply --exclude-hosts and skip duplicates
+// admit resolves a hostname target, applies --exclude-hosts and skips
+// duplicates. A target that is not admitted is done.
+func (s *Scanner) admit(ctx context.Context, target DNHost) (DNHost, bool) {
 	host, ok, err := s.resolveTarget(ctx, target)
 	if err != nil {
 		s.Stats.Targets.Add(1)
+		s.Stats.Done.Add(1)
 		if ctx.Err() == nil {
 			logger.Warnf("[-] %v", err)
 		}
-		return
+		return host, false
 	}
 	if !ok {
+		s.Stats.Done.Add(1)
 		logger.Debugf("Skipping %s: excluded or already scanned", host.Address())
-		return
+		return host, false
 	}
 	s.Stats.Targets.Add(1)
+	return host, true
+}
+
+// enumerateHost scans an admitted host and reports it through the sinks as it
+// goes: the host and its share permissions first, then each share's listing,
+// so no listing is held in memory.
+func (s *Scanner) enumerateHost(ctx context.Context, host DNHost) {
+	o := s.Options
+	sink := s.sink()
+	defer s.Stats.Done.Add(1)
 
 	logger.Debugf("Trying to establish SMB connection to %s (%s)", host.Address(), host.Hostname)
 	conn, err := NewSMBConnection(ctx, host, o)

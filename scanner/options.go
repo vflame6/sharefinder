@@ -12,9 +12,10 @@ type Options struct {
 	AuthGuard          *AuthGuard // --max-auth-failures
 	CustomResolver     net.IP     // --resolver
 	DCHostname         string
-	Dialer             *Dialer // --proxy, --timeout, --io-timeout
-	Domain             string  // part of --username
-	Depth              int     // --depth
+	Dialer             *Dialer     // --proxy, --timeout, --io-timeout
+	Domain             string      // part of --username
+	Depth              int         // --depth
+	Discovery          SweepConfig // --discovery, --discovery-threads, --connect-timeout
 	DomainController   net.IP
 	Exclude            []string   // --exclude
 	ExcludeHosts       *TargetSet // --exclude-hosts
