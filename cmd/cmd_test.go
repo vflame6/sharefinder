@@ -1,11 +1,15 @@
 package cmd
 
 import (
+	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/vflame6/sharefinder/logger"
 )
 
 func validConfig() Config {
@@ -217,6 +221,35 @@ func TestLoadTargets_SetsProgressTotal(t *testing.T) {
 	}
 	if got := s.Stats.Total.Load(); got != 3 {
 		t.Fatalf("progress total = %d, want 3 (4 targets, 1 excluded)", got)
+	}
+}
+
+func TestExecuteDiff(t *testing.T) {
+	dir := t.TempDir()
+	scan := `{"type":"scan","scan_id":"01JDK4","time":"2026-11-26T10:00:00Z","identity":"tester"}` + "\n"
+	share := `{"type":"share","scan_id":"01JDK4","time":"2026-11-26T10:00:00Z","identity":"tester","host":"10.0.0.5","share":"DATA","unc":"//10.0.0.5/DATA","read":true,"write":%t}` + "\n"
+	end := `{"type":"end","scan_id":"01JDK4","time":"2026-11-26T10:00:00Z","identity":"tester","targets":1,"reachable":1,"authenticated":1,"failed":0}` + "\n"
+	old, newer := filepath.Join(dir, "old.jsonl"), filepath.Join(dir, "new.jsonl")
+	if err := os.WriteFile(old, []byte(scan+fmt.Sprintf(share, false)+end), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(newer, []byte(scan+fmt.Sprintf(share, true)+end), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	logger.SetWriters(&out, &errOut)
+	t.Cleanup(func() { logger.SetWriters(os.Stdout, os.Stderr) })
+	if err := ExecuteDiff(old, newer); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := out.String(), "Permission changes\n~ //10.0.0.5/DATA  READ -> READ,WRITE\n"; got != want {
+		t.Fatalf("diff on stdout = %q, want %q", got, want)
+	}
+
+	out.Reset()
+	if err := ExecuteDiff(old, old); err != nil || out.String() != "No changes\n" {
+		t.Fatalf("a scan diffed with itself: %q, %v", out.String(), err)
 	}
 }
 

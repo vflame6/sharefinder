@@ -94,6 +94,12 @@ var (
 	// render the HTML report of a JSONL file
 	reportCommand  = app.Command("report", "Write the HTML report of an --output-json file, named after it or after -o")
 	reportInputArg = reportCommand.Arg("jsonl", "JSONL file written by --output-json").Required().ExistingFile()
+
+	// diff command
+	// compare two JSONL scans
+	diffCommand = app.Command("diff", "Print the shares that are new, removed or have other permissions in the later of two --output-json files")
+	diffOldArg  = diffCommand.Arg("old", "Earlier JSONL scan").Required().ExistingFile()
+	diffNewArg  = diffCommand.Arg("new", "Later JSONL scan").Required().ExistingFile()
 )
 
 func main() {
@@ -117,12 +123,21 @@ func main() {
 		logger.Fatal(err)
 	}
 
-	// the report command reads a finished scan file: no scanner is set up
+	// report and diff read finished scan files: no scanner is set up
 	if command == reportCommand.FullCommand() {
 		if *outputXMLFlag != "" || *outputJSONFlag != "" || *outputCSVFlag != "" || *outputUNCFlag != "" || *outputAllFlag != "" || *outputHTMLFlag {
 			logger.Fatal(errors.New("report writes only the HTML report: name it with -o"))
 		}
 		if err := cmd.ExecuteReport(*reportInputArg, *outputRawFlag, *forceFlag); err != nil {
+			logger.Fatal(err)
+		}
+		return
+	}
+	if command == diffCommand.FullCommand() {
+		if *outputRawFlag != "" || *outputXMLFlag != "" || *outputJSONFlag != "" || *outputCSVFlag != "" || *outputUNCFlag != "" || *outputAllFlag != "" || *outputHTMLFlag {
+			logger.Fatal(errors.New("diff prints to stdout: output flags do not apply"))
+		}
+		if err := cmd.ExecuteDiff(*diffOldArg, *diffNewArg); err != nil {
 			logger.Fatal(err)
 		}
 		return
