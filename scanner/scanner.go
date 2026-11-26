@@ -23,6 +23,7 @@ type Scanner struct {
 	Threads     int
 	Version     string // sharefinder version, for the outputs
 	Interrupted bool   // the scan was stopped by Ctrl+C
+	Stats       Stats  // counts for the summary line and the end record
 
 	closeOnce sync.Once
 	scanned   sync.Map // addresses already scanned, for deduplication
@@ -89,7 +90,7 @@ func (s *Scanner) closeOutputs() {
 	// a run that never started (e.g. hunt failed in LDAP) still terminates
 	// its XML and JSONL files
 	s.StartOutputs()
-	if err := s.Options.Sink.Close(EndRecord{Time: s.TimeEnd, Interrupted: s.Interrupted}); err != nil {
+	if err := s.Options.Sink.Close(s.endRecord()); err != nil {
 		logger.Error(err)
 	}
 	for _, f := range []*os.File{s.Options.FileTXT, s.Options.FileXML, s.Options.FileJSON} {

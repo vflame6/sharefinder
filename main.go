@@ -173,6 +173,9 @@ func main() {
 
 	// terminate and close every output file, also after an interrupt
 	scanner.CloseOutputter()
+	if err == nil || scanner.Stats.Targets.Load() > 0 {
+		logger.Warn(scanner.Stats.SummaryLine())
+	}
 
 	if interrupted {
 		os.Exit(130)

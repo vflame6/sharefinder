@@ -2,7 +2,6 @@ package scanner
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -27,8 +26,9 @@ func (s *Scanner) processHost(ctx context.Context, target DNHost) {
 	// resolve hostnames, apply --exclude-hosts and skip duplicates
 	host, ok, err := s.resolveTarget(ctx, target)
 	if err != nil {
+		s.Stats.Targets.Add(1)
 		if ctx.Err() == nil {
-			logger.Error(err)
+			logger.Warnf("[-] %v", err)
 		}
 		return
 	}
@@ -36,16 +36,23 @@ func (s *Scanner) processHost(ctx context.Context, target DNHost) {
 		logger.Debugf("Skipping %s: excluded or already scanned", host.Address())
 		return
 	}
+	s.Stats.Targets.Add(1)
 
 	logger.Debugf("Trying to establish SMB connection to %s (%s)", host.Address(), host.Hostname)
 	conn, err := NewSMBConnection(ctx, host, o)
 	if err != nil {
+		if classify(err) != StageConnect {
+			s.Stats.Reachable.Add(1)
+			s.Stats.Failed.Add(1)
+		}
 		if ctx.Err() == nil {
-			logger.Error(fmt.Errorf("error during authentication on %s: %v", host.Address(), err))
+			reportHostError(host.Address(), err)
 		}
 		return
 	}
 	defer conn.Close()
+	s.Stats.Reachable.Add(1)
+	s.Stats.Authenticated.Add(1)
 	logger.Debugf("Successfully established SMB connection to %s (%s)", host.Address(), host.Hostname)
 
 	h := describeHost(conn, host, o)
@@ -55,8 +62,9 @@ func (s *Scanner) processHost(ctx context.Context, target DNHost) {
 	if err != nil {
 		sink.HostEnumerated(h)
 		sink.HostFinished(h)
+		s.Stats.Failed.Add(1)
 		if ctx.Err() == nil {
-			logger.Error(fmt.Errorf("error during shares enumeration on %s: %v", host.Address(), err))
+			reportHostError(host.Address(), &StageError{Stage: StageEnumerate, Host: host.Address(), Err: err})
 		}
 		return
 	}
