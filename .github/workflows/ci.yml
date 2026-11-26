@@ -1,7 +1,10 @@
 name: CI
 
+# Pull requests, and main once they are merged: a branch with a pull request
+# is tested once, not once for the push and again for the pull request.
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
@@ -51,22 +54,37 @@ jobs:
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
-  build:
-    name: build (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+  windows:
+    name: go test (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: go test
+        run: go test ./...
+
+  # Every target .goreleaser.yaml builds. No code is specific to macOS, so
+  # building and vetting for darwin here stands in for a macOS runner.
+  cross:
+    name: cross-compile release targets
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version: stable
       - name: go build
-        run: go build ./...
-      - name: go test
-        run: go test ./...
+        run: |
+          for target in linux/386 linux/amd64 linux/arm64 windows/386 windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
+            echo "$target"
+            GOOS="${target%/*}" GOARCH="${target#*/}" go build ./...
+          done
+      - name: go vet (darwin)
+        run: GOOS=darwin GOARCH=arm64 go vet ./...
 
   docker:
     name: docker build
