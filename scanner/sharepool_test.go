@@ -169,6 +169,33 @@ func TestListShares_NoSlotNoExtraWorker(t *testing.T) {
 	}
 }
 
+// On a busy scan every slot is taken when a host's listing starts; a slot
+// that frees later must still give the host its second connection.
+func TestListShares_LateSlotIsUsed(t *testing.T) {
+	s, sink := poolScanner(2, 2, 2) // this host's worker and another host's
+	probe := &poolProbe{}
+	h := &Host{IP: "10.0.0.5"}
+	open := func(context.Context) (shareConn, error) {
+		probe.opened.Add(1)
+		return &slowConn{probe: probe}, nil
+	}
+	time.AfterFunc(20*time.Millisecond, func() { s.slots.release() }) // the other host is done
+
+	start := time.Now()
+	s.listShares(context.Background(), h, poolJobs(h, 10), &slowConn{probe: probe}, open)
+	took := time.Since(start)
+
+	if probe.opened.Load() != 1 || probe.max != 2 {
+		t.Fatalf("extra connections %d, listings at once %d; want 1 and 2", probe.opened.Load(), probe.max)
+	}
+	if took > 450*time.Millisecond {
+		t.Fatalf("10 shares x 50 ms with a second connection from 20 ms on took %v", took)
+	}
+	if len(sink.finished) != 10 || len(s.slots) != 1 {
+		t.Fatalf("finished %d shares, %d slots in use; want 10 and 1", len(sink.finished), len(s.slots))
+	}
+}
+
 func TestListShares_FailedOpenLeavesJobsToOthers(t *testing.T) {
 	s, sink := poolScanner(3, 4, 1)
 	probe := &poolProbe{}

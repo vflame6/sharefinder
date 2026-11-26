@@ -12,15 +12,18 @@ import (
 // holds one, and each extra connection that lists shares of a host holds one.
 type slots chan struct{}
 
-// tryAcquire takes a slot only if one is free now; a nil slots has none.
-func (sl slots) tryAcquire() bool {
+// acquire waits for a free slot until stop is closed or ctx is done; a nil
+// slots has none.
+func (sl slots) acquire(ctx context.Context, stop <-chan struct{}) bool {
 	if sl == nil {
 		return false
 	}
 	select {
 	case sl <- struct{}{}:
 		return true
-	default:
+	case <-stop:
+		return false
+	case <-ctx.Done():
 		return false
 	}
 }
@@ -43,8 +46,9 @@ type shareConn interface {
 
 // listShares lists the shares of h and then finishes the host. The first
 // connection, whose slot the host worker holds, takes jobs at once; up to
-// --max-conns-per-host - 1 more connections are opened with open, each only
-// while a slot is free, so busy scans never exceed --threads connections.
+// --max-conns-per-host - 1 more connections are opened with open as slots
+// free up while jobs remain, so a large host listed late in a busy scan
+// still gets them, and the scan never exceeds --threads connections.
 // Every job is finished, also after Ctrl+C (as partial).
 func (s *Scanner) listShares(ctx context.Context, h *Host, jobs []shareJob, first shareConn, open func(context.Context) (shareConn, error)) {
 	o := s.Options
@@ -53,6 +57,7 @@ func (s *Scanner) listShares(ctx context.Context, h *Host, jobs []shareJob, firs
 
 	var mu sync.Mutex
 	next := 0
+	drained := make(chan struct{}) // closed when the last job is taken
 	take := func() (shareJob, bool) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -60,7 +65,15 @@ func (s *Scanner) listShares(ctx context.Context, h *Host, jobs []shareJob, firs
 			return shareJob{}, false
 		}
 		next++
+		if next == len(jobs) {
+			close(drained)
+		}
 		return jobs[next-1], true
+	}
+	remaining := func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return next < len(jobs)
 	}
 	work := func(conn shareConn) {
 		for job, ok := take(); ok; job, ok = take() {
@@ -75,11 +88,17 @@ func (s *Scanner) listShares(ctx context.Context, h *Host, jobs []shareJob, firs
 	}
 
 	var wg sync.WaitGroup
-	for extra := min(o.MaxConnsPerHost, len(jobs)) - 1; extra > 0 && s.slots.tryAcquire(); extra-- {
+	for range min(o.MaxConnsPerHost, len(jobs)) - 1 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			if !s.slots.acquire(ctx, drained) {
+				return
+			}
 			defer s.slots.release()
+			if !remaining() {
+				return
+			}
 			conn, err := open(ctx)
 			if err != nil {
 				if ctx.Err() == nil {
