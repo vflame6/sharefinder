@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/go-ldap/ldap/v3"
 )
 
 // slowDNS answers after 100 ms: hostN resolves to 10.0.0.N, names starting
@@ -207,6 +209,95 @@ func TestMergeDFSServers(t *testing.T) {
 	_, foreign = mergeDFSServers(nil, []string{"srv.child.corp.local"}, "corp.local", map[string]bool{"corp.local": true, "child.corp.local": true})
 	if len(foreign) != 0 {
 		t.Fatalf("a server of a hunted domain is in scope: %v", foreign)
+	}
+}
+
+// fakeDirectory answers computer searches for the base DNs it holds and
+// refers every other base elsewhere, as a DC does for another domain.
+type fakeDirectory struct {
+	domains map[string][]*ldap.Entry
+	filters []string
+}
+
+func (f *fakeDirectory) SearchComputers(baseDN, filter string) (*ldap.SearchResult, error) {
+	f.filters = append(f.filters, filter)
+	entries, ok := f.domains[baseDN]
+	if !ok {
+		return nil, &ldap.Error{ResultCode: ldap.LDAPResultReferral, Err: errors.New("referral")}
+	}
+	return &ldap.SearchResult{Entries: entries}, nil
+}
+
+func (f *fakeDirectory) SearchDFSServers(string) ([]string, error) { return nil, nil }
+
+func computerEntry(name, os string) *ldap.Entry {
+	return ldap.NewEntry("CN="+name, map[string][]string{"dNSHostName": {name}, "operatingSystem": {os}})
+}
+
+var goadForest = []DomainPartition{
+	{Name: "north.sevenkingdoms.local", BaseDN: "DC=north,DC=sevenkingdoms,DC=local"},
+	{Name: "sevenkingdoms.local", BaseDN: "DC=sevenkingdoms,DC=local"},
+}
+
+// GOAD: through the Global Catalog, computers of other domains came without
+// their OS, and --active-within dropped them (the GC cannot evaluate
+// lastLogonTimestamp for them). Each domain is now asked on its own DC.
+func TestListDomainComputers_AsksEachDomainsDC(t *testing.T) {
+	own := &fakeDirectory{domains: map[string][]*ldap.Entry{
+		"DC=north,DC=sevenkingdoms,DC=local": {computerEntry("winterfell.north.sevenkingdoms.local", "Windows Server 2019"), computerEntry("castelblack.north.sevenkingdoms.local", "Windows Server 2019")},
+	}}
+	root := &fakeDirectory{domains: map[string][]*ldap.Entry{
+		// a subtree search of the root may also list a child domain's computer
+		"DC=sevenkingdoms,DC=local": {computerEntry("kingslanding.sevenkingdoms.local", "Windows Server 2019"), computerEntry("WINTERFELL.north.sevenkingdoms.local", "")},
+	}}
+	src := domainSources{
+		own: own,
+		chase: func(domain string) (computerDirectory, func(), error) {
+			if domain != "sevenkingdoms.local" {
+				t.Fatalf("chased %s", domain)
+			}
+			return root, func() {}, nil
+		},
+		gc: func() (computerDirectory, error) { t.Fatal("the Global Catalog is a last resort"); return nil, nil },
+	}
+	since := time.Now().Add(-90 * 24 * time.Hour)
+	got := listDomainComputers(context.Background(), goadForest, false, since, src)
+
+	var names []string
+	for _, h := range got {
+		names = append(names, h.Hostname+"="+h.OS)
+	}
+	want := "winterfell.north.sevenkingdoms.local=Windows Server 2019,castelblack.north.sevenkingdoms.local=Windows Server 2019,kingslanding.sevenkingdoms.local=Windows Server 2019"
+	if strings.Join(names, ",") != want {
+		t.Fatalf("computers:\n%v\nwant\n%s", names, want)
+	}
+	if len(root.filters) != 1 || !strings.Contains(root.filters[0], "lastLogonTimestamp>=") {
+		t.Fatalf("the other domain's DC applies --active-within: %v", root.filters)
+	}
+}
+
+func TestListDomainComputers_GlobalCatalogLastResort(t *testing.T) {
+	own := &fakeDirectory{domains: map[string][]*ldap.Entry{"DC=north,DC=sevenkingdoms,DC=local": {computerEntry("winterfell.north.sevenkingdoms.local", "")}}}
+	gc := &fakeDirectory{domains: map[string][]*ldap.Entry{"DC=sevenkingdoms,DC=local": {computerEntry("kingslanding.sevenkingdoms.local", "")}}}
+	src := domainSources{
+		own:   own,
+		chase: func(string) (computerDirectory, func(), error) { return nil, nil, errors.New("no DC answers") },
+		gc:    func() (computerDirectory, error) { return gc, nil },
+	}
+	var got []DNHost
+	logs := captureLog(t, func() {
+		got = listDomainComputers(context.Background(), goadForest, false, time.Now().Add(-time.Hour), src)
+	})
+	if len(got) != 2 || got[1].Hostname != "kingslanding.sevenkingdoms.local" {
+		t.Fatalf("computers %v", got)
+	}
+	// the GC cannot evaluate the logon time of another domain's computers:
+	// they are listed without the filter, and the user is told
+	if len(gc.filters) != 1 || strings.Contains(gc.filters[0], "lastLogonTimestamp") {
+		t.Fatalf("Global Catalog filter: %v", gc.filters)
+	}
+	if !strings.Contains(logs, "Global Catalog") || !strings.Contains(logs, "--active-within") {
+		t.Fatalf("the fallback must be called out: %q", logs)
 	}
 }
 

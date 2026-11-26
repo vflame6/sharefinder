@@ -203,24 +203,6 @@ func (s *Scanner) EnumerateDomainComputers(ctx context.Context) ([]DNHost, *Reso
 		return nil, nil, errors.New("no domain naming contexts found")
 	}
 
-	// Prefer GC for cross-domain SearchComputers (one connection covers the forest).
-	// If GC is unreachable we keep ldapConn and chase referrals per-domain below.
-	queryConn := ldapConn
-	if s.Options.Forest {
-		gcConn, gcErr := NewLDAPConnection(ctx, s.ldapOptions(s.Options.DomainController, s.Options.DCHostname, true))
-		if gcErr != nil {
-			logger.Warnf("Global Catalog unavailable on %s, will chase per-domain referrals: %v", s.Options.DomainController, gcErr)
-		} else {
-			defer func() {
-				if err := gcConn.Close(); err != nil {
-					logger.Error(err)
-				}
-			}()
-			queryConn = gcConn
-		}
-	}
-
-	var names []DNHost
 	var resolver net.IP
 	if s.Options.CustomResolver != nil {
 		resolver = s.Options.CustomResolver
@@ -241,61 +223,40 @@ func (s *Scanner) EnumerateDomainComputers(ctx context.Context) ([]DNHost, *Reso
 	if s.Options.ActiveWithin > 0 {
 		activeSince = time.Now().Add(-s.Options.ActiveWithin)
 	}
-	filter := computerFilter(s.Options.IncludeDisabled, activeSince)
-
-	// DFS servers are scanned only within the domains being hunted
-	hunted := make(map[string]bool, len(searchBases))
-	for _, searchBase := range searchBases {
-		hunted[strings.ToLower(searchBase.Name)] = true
+	// each domain is asked on one of its own DCs: the Global Catalog lacks
+	// the OS and the logon time of other domains' computers, and is opened
+	// only when no DC of a domain answers
+	var gcConn *LDAPConnection
+	defer func() {
+		if gcConn != nil {
+			if err := gcConn.Close(); err != nil {
+				logger.Error(err)
+			}
+		}
+	}()
+	src := domainSources{
+		own: ldapConn,
+		chase: func(domain string) (computerDirectory, func(), error) {
+			alt, err := s.dialDCForDomain(ctx, domain, &r, resolver)
+			if err != nil {
+				return nil, nil, err
+			}
+			return alt, func() {
+				if err := alt.Close(); err != nil {
+					logger.Error(err)
+				}
+			}, nil
+		},
+		gc: func() (computerDirectory, error) {
+			conn, err := NewLDAPConnection(ctx, s.ldapOptions(s.Options.DomainController, s.Options.DCHostname, true))
+			if err != nil {
+				return nil, err
+			}
+			gcConn = conn
+			return conn, nil
+		},
 	}
-
-	for _, searchBase := range searchBases {
-		logger.Warnf("Enumerating domain %s", printable(searchBase.Name))
-		conn := queryConn
-		sr, err := conn.SearchComputers(searchBase.BaseDN, filter)
-		var altConn *LDAPConnection
-		if err != nil && isLDAPReferral(err) {
-			// Referral-chase fallback: connect directly to a DC of the referred domain.
-			logger.Warnf("Domain %s referred — chasing via direct DC connection", printable(searchBase.Name))
-			var dialErr error
-			if altConn, dialErr = s.dialDCForDomain(ctx, searchBase.Name, &r, resolver); dialErr != nil {
-				logger.Warnf("Skipping domain %s: %v", printable(searchBase.Name), dialErr)
-				continue
-			}
-			conn = altConn
-			sr, err = conn.SearchComputers(searchBase.BaseDN, filter)
-		}
-		if err != nil {
-			logger.Warnf("Skipping domain %s: %v", printable(searchBase.Name), err)
-		} else {
-			for _, entry := range sr.Entries {
-				if hostname := entry.GetAttributeValue("dNSHostName"); hostname != "" {
-					osName := strings.TrimSpace(entry.GetAttributeValue("operatingSystem") + " " + entry.GetAttributeValue("operatingSystemVersion"))
-					names = append(names, DNHost{Hostname: hostname, OS: osName})
-				}
-			}
-			// file servers behind DFS links: those of the hunted domains are
-			// added, the others are named and left out of scope
-			if servers, dfsErr := conn.SearchDFSServers(searchBase.BaseDN); dfsErr != nil {
-				logger.Debugf("No DFS targets from domain %s: %v", printable(searchBase.Name), dfsErr)
-			} else if before := len(names); len(servers) > 0 {
-				var foreign []string
-				names, foreign = mergeDFSServers(names, servers, searchBase.Name, hunted)
-				if added := len(names) - before; added > 0 {
-					logger.Warnf("Domain %s: %d more server(s) from DFS links", printable(searchBase.Name), added)
-				}
-				if len(foreign) > 0 {
-					logger.Warnf("Domain %s: not scanning DFS link servers outside the hunted domain(s): %s (scan them with auth if they are in scope)",
-						printable(searchBase.Name), printable(strings.Join(foreign, ", ")))
-				}
-			}
-		}
-		if altConn != nil {
-			if closeErr := altConn.Close(); closeErr != nil {
-				logger.Error(closeErr)
-			}
-		}
-	}
+	names := listDomainComputers(ctx, searchBases, s.Options.IncludeDisabled, activeSince, src)
 	if ctx.Err() != nil {
 		return nil, nil, context.Cause(ctx)
 	}
