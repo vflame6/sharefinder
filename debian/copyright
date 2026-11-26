@@ -1,0 +1,130 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: sharefinder
+Upstream-Contact: https://github.com/vflame6/sharefinder/issues
+Source: https://github.com/vflame6/sharefinder
+Comment: The orig tarball contains the vendored Go modules (vendor/), see
+ debian/README.source.
+
+Files: *
+Copyright: 2025-2026 vflame6
+License: MIT
+
+Files: scanner/vendor.html
+Copyright: OpenJS Foundation and other contributors (jQuery 3.7.0)
+           2011-2024 The Bootstrap Authors (Bootstrap 5.3.0, Bootstrap Icons 1.11.3)
+           SpryMedia Ltd (DataTables 2.2.2)
+License: MIT
+
+Files: debian/*
+Copyright: 2026 vflame6
+License: MIT
+
+Files: vendor/github.com/alecthomas/kingpin/*
+       vendor/github.com/alecthomas/units/*
+Copyright: 2014 Alec Thomas
+License: MIT
+
+Files: vendor/github.com/Azure/go-ntlmssp/*
+Copyright: 2016 Microsoft
+License: MIT
+
+Files: vendor/github.com/go-asn1-ber/asn1-ber/*
+       vendor/github.com/go-ldap/ldap/*
+Copyright: 2011-2015 Michael Mitton
+License: MIT
+
+Files: vendor/github.com/jfjallid/go-smb/*
+Copyright: 2023 Jimmy Fjällid
+License: MIT
+
+Files: vendor/github.com/jfjallid/go-smb/gss/*
+Copyright: 2017 stacktitan
+License: MIT
+
+Files: vendor/github.com/jfjallid/golog/*
+Copyright: 2022 Jimmy Fjällid
+License: MIT
+
+Files: vendor/github.com/alexbrainman/sspi/*
+       vendor/github.com/jcmturner/gofork/*
+       vendor/github.com/jfjallid/gofork/*
+       vendor/github.com/xhit/go-str2duration/*
+       vendor/golang.org/x/*
+Copyright: 2009-2012 The Go Authors
+License: BSD-3-clause
+
+Files: vendor/github.com/google/uuid/*
+Copyright: 2009, 2014 Google Inc.
+License: BSD-3-clause
+
+Files: vendor/software.sslmate.com/src/go-pkcs12/*
+Copyright: 2015, 2018, 2019 Opsmate, Inc.
+License: BSD-3-clause
+
+Files: vendor/github.com/jcmturner/aescts/*
+       vendor/github.com/jcmturner/dnsutils/*
+       vendor/github.com/jcmturner/goidentity/*
+       vendor/github.com/jcmturner/gokrb5/*
+       vendor/github.com/jcmturner/rpc/*
+       vendor/github.com/jfjallid/gokrb5/*
+       vendor/github.com/jfjallid/mstypes/*
+       vendor/github.com/jfjallid/ndr/*
+Copyright: Jonathan Turner and contributors
+           Jimmy Fjällid
+License: Apache-2.0
+
+Files: vendor/github.com/hashicorp/go-uuid/*
+Copyright: 2015-2022 HashiCorp, Inc.
+License: MPL-2.0
+
+License: MIT
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+ .
+ The above copyright notice and this permission notice shall be included in all
+ copies or substantial portions of the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ SOFTWARE.
+
+License: BSD-3-clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are met:
+ .
+ 1. Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+ 2. Redistributions in binary form must reproduce the above copyright notice,
+    this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.
+ 3. Neither the name of the copyright holder nor the names of its contributors
+    may be used to endorse or promote products derived from this software
+    without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ POSSIBILITY OF SUCH DAMAGE.
+
+License: Apache-2.0
+ On Debian systems, the complete text of the Apache License, Version 2.0 can
+ be found in /usr/share/common-licenses/Apache-2.0.
+
+License: MPL-2.0
+ On Debian systems, the complete text of the Mozilla Public License, Version
+ 2.0 can be found in /usr/share/common-licenses/MPL-2.0.

@@ -1,0 +1,28 @@
+#!/usr/bin/make -f
+
+# The Go modules are vendored into the orig tarball (see README.source): build
+# from vendor/ with the packaged toolchain only.
+export GO111MODULE := on
+export GOFLAGS := -mod=vendor
+export GOTOOLCHAIN := local
+# copy vendor/, go.mod and the HTML files the report embeds into the build tree
+export DH_GOLANG_INSTALL_ALL := 1
+
+VERSION := $(shell dpkg-parsechangelog -SVersion | sed -e 's/^[0-9]*://' -e 's/-[^-]*$$//' -e 's/+ds[0-9]*$$//')
+
+%:
+	dh $@ --builddirectory=_build --buildsystem=golang --with=golang
+
+override_dh_auto_build:
+	dh_auto_build -- -ldflags "-s -w -X github.com/vflame6/sharefinder/cmd.VERSION=v$(VERSION)"
+
+override_dh_auto_install:
+	dh_auto_install -- --no-source
+
+# the manual page is generated from the command-line help; its NAME line gets
+# the "name \- summary" form whatis needs
+override_dh_installman:
+	_build/bin/sharefinder --help-man \
+		| sed '/^\.SH "NAME"/{n;s/.*/sharefinder \\- network share discovery tool for SMB networks and domains/;}' \
+		> debian/sharefinder.1
+	dh_installman debian/sharefinder.1

@@ -1,0 +1,28 @@
+Source: sharefinder
+Section: net
+Priority: optional
+Maintainer: vflame6 <vflame6@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13),
+               dh-golang,
+               golang-any (>= 2:1.26~)
+Standards-Version: 4.7.0
+Homepage: https://github.com/vflame6/sharefinder
+Vcs-Browser: https://github.com/vflame6/sharefinder
+Vcs-Git: https://github.com/vflame6/sharefinder.git
+Rules-Requires-Root: no
+XS-Go-Import-Path: github.com/vflame6/sharefinder
+
+Package: sharefinder
+Architecture: any
+Depends: ${misc:Depends},
+         ${shlibs:Depends}
+Static-Built-Using: ${misc:Static-Built-Using}
+Description: network share discovery tool for SMB networks and domains
+ sharefinder enumerates SMB shares, their read and write permissions and
+ their files across networks and Active Directory domains. It finds shares
+ open to null, guest or authenticated sessions, hunts domain computers
+ through LDAP, and writes the results as text, JSONL, CSV, XML and an HTML
+ report.
+ .
+ A port sweep runs before enumeration, a wrong password stops the scan
+ after one rejected logon, and interrupted scans can be resumed.
