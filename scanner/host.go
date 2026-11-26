@@ -154,6 +154,11 @@ func describeHost(conn *Connection, host DNHost, o *Options) *Host {
 		h.Hostname = host.Hostname
 		h.Domain = o.Domain
 	}
+	// hunt's LDAP data names the edition (Server 2022 Datacenter), which the
+	// NTLM build guess cannot; the registry, read with admin rights, still wins
+	if host.OS != "" {
+		h.Version = host.OS
+	}
 	if !o.NullSession {
 		isAdmin, adminErr := conn.CheckLocalAdmin()
 		if adminErr != nil {

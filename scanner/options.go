@@ -28,6 +28,8 @@ type Options struct {
 	FileXML            *os.File
 	FollowLinks        bool          // --follow-links
 	Forest             bool          // --forest (hunt only)
+	IncludeDisabled    bool          // --include-disabled (hunt)
+	ActiveWithin       time.Duration // --active-within (hunt): computers that logged on within
 	Hash               string        // --hashes
 	HashBytes          []byte        // --hashes
 	IOTimeout          time.Duration // --io-timeout

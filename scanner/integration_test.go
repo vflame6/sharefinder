@@ -506,6 +506,25 @@ func TestIntegration_SigningDialectAndRelayList(t *testing.T) {
 	}
 }
 
+// hunt knows a computer's operating system from LDAP, which names the
+// edition; it is shown when the registry cannot be read (no admin rights).
+func TestIntegration_LDAPOperatingSystem(t *testing.T) {
+	srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares()})
+	o := asUser(integrationOptions(srv.Port(), 5*time.Second), testPassword)
+	var jsonl bytes.Buffer
+	o.Sink = NewJSONLSink(&jsonl, ScanRecord{ScanID: "01J"})
+	s := NewScanner(o, nil, time.Now(), 1)
+	target := DNHost{IP: net.ParseIP("127.0.0.1"), OS: "Windows Server 2022 Datacenter 10.0 (20348)"}
+	if err := s.Run(context.Background(), TargetsFromList([]DNHost{target})); err != nil {
+		t.Fatal(err)
+	}
+	for _, rec := range jsonLines(t, jsonl.String()) {
+		if rec["type"] == "host" && rec["os"] != target.OS {
+			t.Fatalf("host os = %v, want %s", rec["os"], target.OS)
+		}
+	}
+}
+
 func TestIntegration_TwoSharesTwoConns(t *testing.T) {
 	for _, tc := range []struct{ conns, logons int }{{2, 2}, {1, 1}} {
 		srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares()})

@@ -24,6 +24,7 @@ type Scanner struct {
 	Version     string // sharefinder version, for the outputs
 	Interrupted bool   // the scan stopped early: Ctrl+C, or an error such as the lockout guard
 	StopReason  string // why it stopped early, for the end record
+	NoScan      bool   // nothing was scanned (hunt --ldap-only): no summary
 	Stats       Stats  // counts for the summary line and the end record
 
 	closeOnce sync.Once
@@ -35,6 +36,7 @@ type Scanner struct {
 type DNHost struct {
 	Hostname string
 	IP       net.IP
+	OS       string // operating system from LDAP (hunt)
 }
 
 // NewScanner is a function to create new Scanner struct
@@ -226,33 +228,52 @@ func (s *Scanner) EnumerateDomainComputers(ctx context.Context) ([]DNHost, *Reso
 		r = NewResolver("udp", resolver, s.Options.Timeout, nil)
 	}
 
+	// enabled computers unless --include-disabled, and with --active-within
+	// only those that logged on recently
+	var activeSince time.Time
+	if s.Options.ActiveWithin > 0 {
+		activeSince = time.Now().Add(-s.Options.ActiveWithin)
+	}
+	filter := computerFilter(s.Options.IncludeDisabled, activeSince)
+
 	for _, searchBase := range searchBases {
 		logger.Warnf("Enumerating domain %s", printable(searchBase.Name))
-		sr, err := queryConn.SearchComputers(searchBase.BaseDN)
+		conn := queryConn
+		sr, err := conn.SearchComputers(searchBase.BaseDN, filter)
+		var altConn *LDAPConnection
 		if err != nil && isLDAPReferral(err) {
 			// Referral-chase fallback: connect directly to a DC of the referred domain.
 			logger.Warnf("Domain %s referred — chasing via direct DC connection", printable(searchBase.Name))
-			altConn, dialErr := s.dialDCForDomain(ctx, searchBase.Name, &r, resolver)
-			if dialErr != nil {
+			var dialErr error
+			if altConn, dialErr = s.dialDCForDomain(ctx, searchBase.Name, &r, resolver); dialErr != nil {
 				logger.Warnf("Skipping domain %s: %v", printable(searchBase.Name), dialErr)
 				continue
 			}
-			sr, err = altConn.SearchComputers(searchBase.BaseDN)
-			if closeErr := altConn.Close(); closeErr != nil {
-				logger.Error(closeErr)
-			}
+			conn = altConn
+			sr, err = conn.SearchComputers(searchBase.BaseDN, filter)
 		}
 		if err != nil {
 			logger.Warnf("Skipping domain %s: %v", printable(searchBase.Name), err)
-			continue
+		} else {
+			for _, entry := range sr.Entries {
+				if hostname := entry.GetAttributeValue("dNSHostName"); hostname != "" {
+					osName := strings.TrimSpace(entry.GetAttributeValue("operatingSystem") + " " + entry.GetAttributeValue("operatingSystemVersion"))
+					names = append(names, DNHost{Hostname: hostname, OS: osName})
+				}
+			}
+			// file servers behind DFS links, which need not be computers of
+			// this domain (or enabled, or active)
+			if servers, dfsErr := conn.SearchDFSServers(searchBase.BaseDN); dfsErr != nil {
+				logger.Debugf("No DFS targets from domain %s: %v", printable(searchBase.Name), dfsErr)
+			} else if before := len(names); len(servers) > 0 {
+				if names = mergeDFSServers(names, servers, searchBase.Name); len(names) > before {
+					logger.Warnf("Domain %s: %d more server(s) from DFS links", printable(searchBase.Name), len(names)-before)
+				}
+			}
 		}
-		if len(sr.Entries) == 0 {
-			continue
-		}
-
-		for _, entry := range sr.Entries {
-			if hostname := entry.GetAttributeValue("dNSHostName"); hostname != "" {
-				names = append(names, DNHost{Hostname: hostname})
+		if altConn != nil {
+			if closeErr := altConn.Close(); closeErr != nil {
+				logger.Error(closeErr)
 			}
 		}
 	}

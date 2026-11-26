@@ -322,7 +322,9 @@ func newKrb5Config(realm, kdcAddr string) (*config.Config, error) {
 	return config.NewFromString(confStr)
 }
 
-func (conn *LDAPConnection) SearchComputers(baseDN string) (*ldap.SearchResult, error) {
+// SearchComputers lists the computers under baseDN that match filter (see
+// computerFilter), with their DNS name and operating system.
+func (conn *LDAPConnection) SearchComputers(baseDN, filter string) (*ldap.SearchResult, error) {
 	searchRequest := ldap.NewSearchRequest(
 		baseDN,
 		ldap.ScopeWholeSubtree,
@@ -330,8 +332,8 @@ func (conn *LDAPConnection) SearchComputers(baseDN string) (*ldap.SearchResult, 
 		math.MaxInt32,
 		0,
 		false,
-		"(objectCategory=Computer)",
-		[]string{"dNSHostName"},
+		filter,
+		[]string{"dNSHostName", "operatingSystem", "operatingSystemVersion", "lastLogonTimestamp", "userAccountControl"},
 		nil,
 	)
 	sr, err := conn.connection.SearchWithPaging(searchRequest, math.MaxInt32)
@@ -339,6 +341,43 @@ func (conn *LDAPConnection) SearchComputers(baseDN string) (*ldap.SearchResult, 
 		return nil, err
 	}
 	return sr, nil
+}
+
+// SearchDFSServers returns the servers DFS links point to under baseDN: the
+// targets of msDFS-Linkv2 objects and the remoteServerName of legacy fTDfs
+// objects. Values that cannot be read are skipped.
+func (conn *LDAPConnection) SearchDFSServers(baseDN string) ([]string, error) {
+	searchRequest := ldap.NewSearchRequest(
+		baseDN,
+		ldap.ScopeWholeSubtree,
+		ldap.NeverDerefAliases,
+		math.MaxInt32,
+		0,
+		false,
+		"(|(objectClass=msDFS-Linkv2)(objectClass=fTDfs))",
+		[]string{"msDFS-TargetListv2", "remoteServerName"},
+		nil,
+	)
+	sr, err := conn.connection.SearchWithPaging(searchRequest, math.MaxInt32)
+	if err != nil {
+		return nil, err
+	}
+	var servers []string
+	for _, entry := range sr.Entries {
+		if blob := entry.GetRawAttributeValue("msDFS-TargetListv2"); len(blob) > 0 {
+			targets, err := parseDFSTargetList(blob)
+			if err != nil {
+				logger.Debugf("Skipping the DFS link %s: %v", printable(entry.DN), err)
+			}
+			servers = append(servers, targets...)
+		}
+		for _, v := range entry.GetAttributeValues("remoteServerName") {
+			if server, ok := parseRemoteServerName(v); ok {
+				servers = append(servers, server)
+			}
+		}
+	}
+	return servers, nil
 }
 
 func (conn *LDAPConnection) SearchForestDomains() ([]DomainPartition, error) {

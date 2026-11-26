@@ -93,17 +93,20 @@ var (
 
 	// hunt command
 	// hunt for targets from AD and find shares and permissions
-	huntCommand        = app.Command("hunt", "hunting module")
-	huntDcArg          = huntCommand.Arg("dc", "Domain Controller IP").Required().IP()
-	huntUsernameFlag   = huntCommand.Flag("username", "Domain username in format DOMAIN\\username").Short('u').Required().String()
-	huntPasswordFlag   = huntCommand.Flag("password", "Domain user's password; without it, SHAREFINDER_PASSWORD or a prompt").Short('p').IsSetByUser(&huntPasswordSet).String()
-	huntHashFlag       = huntCommand.Flag("hashes", "NTLM hash of password to authenticate").Short('H').String()
-	huntAESKeyFlag     = huntCommand.Flag("aes-key", "Kerberos AES128 or AES256 key of the user, in hex (with -k)").String()
-	huntResolverFlag   = huntCommand.Flag("resolver", "Custom DNS resolver IP address").Short('r').IP()
-	huntForestFlag     = huntCommand.Flag("forest", "Search all available domains in the current forest").Default("false").Bool()
-	huntKerberosFlag   = huntCommand.Flag("kerberos", "Use Kerberos authentication").Short('k').Bool()
-	huntDcHostnameFlag = huntCommand.Flag("dc-hostname", "Hostname of domain controller for Kerberos authentication").String()
-	huntAllowPlainFlag = huntCommand.Flag("allow-plaintext-ldap", "Allow a simple bind, which sends the password, over LDAP without TLS when LDAPS and StartTLS fail").Bool()
+	huntCommand         = app.Command("hunt", "hunting module")
+	huntDcArg           = huntCommand.Arg("dc", "Domain Controller IP").Required().IP()
+	huntUsernameFlag    = huntCommand.Flag("username", "Domain username in format DOMAIN\\username").Short('u').Required().String()
+	huntPasswordFlag    = huntCommand.Flag("password", "Domain user's password; without it, SHAREFINDER_PASSWORD or a prompt").Short('p').IsSetByUser(&huntPasswordSet).String()
+	huntHashFlag        = huntCommand.Flag("hashes", "NTLM hash of password to authenticate").Short('H').String()
+	huntAESKeyFlag      = huntCommand.Flag("aes-key", "Kerberos AES128 or AES256 key of the user, in hex (with -k)").String()
+	huntResolverFlag    = huntCommand.Flag("resolver", "Custom DNS resolver IP address").Short('r').IP()
+	huntForestFlag      = huntCommand.Flag("forest", "Search all available domains in the current forest").Default("false").Bool()
+	huntKerberosFlag    = huntCommand.Flag("kerberos", "Use Kerberos authentication").Short('k').Bool()
+	huntDcHostnameFlag  = huntCommand.Flag("dc-hostname", "Hostname of domain controller for Kerberos authentication").String()
+	huntAllowPlainFlag  = huntCommand.Flag("allow-plaintext-ldap", "Allow a simple bind, which sends the password, over LDAP without TLS when LDAPS and StartTLS fail").Bool()
+	huntIncludeDisabled = huntCommand.Flag("include-disabled", "Also scan computers whose account is disabled").Bool()
+	huntActiveWithin    = huntCommand.Flag("active-within", "Scan only computers that logged on within this time, such as 90d, 12w or 36h (lastLogonTimestamp, which lags up to 14 days)").PlaceHolder("90d").String()
+	huntLDAPOnly        = huntCommand.Flag("ldap-only", "Print the computers (name, address, operating system) and stop: no SMB, no port sweep").Bool()
 
 	// report command
 	// render the HTML report of a JSONL file
@@ -236,7 +239,10 @@ func main() {
 		if perr != nil {
 			logger.Fatal(perr)
 		}
-		err = cmd.ExecuteHunt(ctx, scanner, *huntUsernameFlag, password, *huntHashFlag, *huntAESKeyFlag, *huntDcArg, *huntResolverFlag, *huntForestFlag, *huntKerberosFlag, *huntDcHostnameFlag, *huntAllowPlainFlag)
+		err = cmd.ExecuteHunt(ctx, scanner, *huntUsernameFlag, password, *huntHashFlag, *huntAESKeyFlag, *huntKerberosFlag, *huntDcHostnameFlag, cmd.HuntConfig{
+			DC: *huntDcArg, Resolver: *huntResolverFlag, Forest: *huntForestFlag, AllowPlaintextLDAP: *huntAllowPlainFlag,
+			IncludeDisabled: *huntIncludeDisabled, ActiveWithin: *huntActiveWithin, LDAPOnly: *huntLDAPOnly,
+		})
 	}
 	interrupted := ctx.Err() != nil
 	finished.Store(true)
@@ -244,7 +250,7 @@ func main() {
 
 	// terminate and close every output file, also after an interrupt
 	scanner.CloseOutputter()
-	if err == nil || scanner.Stats.Targets.Load() > 0 {
+	if !scanner.NoScan && (err == nil || scanner.Stats.Targets.Load() > 0) {
 		logger.Warn(scanner.Stats.SummaryLine())
 	}
 

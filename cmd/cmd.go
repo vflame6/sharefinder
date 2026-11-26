@@ -506,12 +506,29 @@ func ExecuteAuth(ctx context.Context, s *scanner.Scanner, target, username, pass
 	return runScan(ctx, s, "auth", produce)
 }
 
-func ExecuteHunt(ctx context.Context, s *scanner.Scanner, username, password, hash, aesKey string, dc, resolver net.IP, forest, kerberos bool, dcHostname string, allowPlaintextLDAP bool) error {
+// HuntConfig holds the flags of the hunt command besides the credentials.
+type HuntConfig struct {
+	DC, Resolver       net.IP
+	Forest             bool
+	AllowPlaintextLDAP bool
+	IncludeDisabled    bool   // --include-disabled
+	ActiveWithin       string // --active-within, such as 90d
+	LDAPOnly           bool   // --ldap-only: list the computers, scan nothing
+}
+
+func ExecuteHunt(ctx context.Context, s *scanner.Scanner, username, password, hash, aesKey string, kerberos bool, dcHostname string, h HuntConfig) error {
 	var targetDomain string
 	var targetUsername string
 	var err error
 
 	logger.Warn("Executing hunt module")
+
+	var activeWithin time.Duration
+	if h.ActiveWithin != "" {
+		if activeWithin, err = scanner.ParseActiveWithin(h.ActiveWithin); err != nil {
+			return err
+		}
+	}
 
 	// if both password and hashes are empty, will use blank password to authenticate
 	// check if both password and hash are provided
@@ -554,11 +571,13 @@ func ExecuteHunt(ctx context.Context, s *scanner.Scanner, username, password, ha
 	s.Options.AESKey = aesBytes
 	s.Options.Domain = targetDomain
 	s.Options.LocalAuth = false
-	s.Options.DomainController = dc
+	s.Options.DomainController = h.DC
 	s.Options.DCHostname = dcHostname
-	s.Options.CustomResolver = resolver
-	s.Options.Forest = forest
-	s.Options.AllowPlaintextLDAP = allowPlaintextLDAP
+	s.Options.CustomResolver = h.Resolver
+	s.Options.Forest = h.Forest
+	s.Options.AllowPlaintextLDAP = h.AllowPlaintextLDAP
+	s.Options.IncludeDisabled = h.IncludeDisabled
+	s.Options.ActiveWithin = activeWithin
 
 	if s.Options.Forest {
 		logger.Warnf("Starting forest-wide enumeration from %s", s.Options.Domain)
@@ -571,6 +590,12 @@ func ExecuteHunt(ctx context.Context, s *scanner.Scanner, username, password, ha
 	computers, dns, err := s.EnumerateDomainComputers(ctx)
 	if err != nil {
 		return err
+	}
+
+	if h.LDAPOnly {
+		s.NoScan = true
+		logger.Warnf("Found %d domain computers", len(computers))
+		return s.ListComputers(ctx, computers, dns.LookupHost)
 	}
 
 	logger.Warnf("Found %d domain computers. Starting SMB shares enumeration...", len(computers))

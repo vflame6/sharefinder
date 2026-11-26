@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -458,6 +459,21 @@ func TestCreateScanner_RelayList(t *testing.T) {
 	both.OutputAll, both.OutputRelay = filepath.Join(dir, "other"), filepath.Join(dir, "x")
 	if _, err := CreateScanner(both); err == nil || !strings.Contains(err.Error(), "--output-relay-list") {
 		t.Fatalf("--output-all with --output-relay-list must be refused, got %v", err)
+	}
+}
+
+func TestExecuteHunt_ChecksActiveWithinFirst(t *testing.T) {
+	s, err := CreateScanner(validConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	err = ExecuteHunt(context.Background(), s, `CORP\jdoe`, "x", "", "", false, "", HuntConfig{DC: net.ParseIP("192.0.2.1"), ActiveWithin: "90y"})
+	if err == nil || !strings.Contains(err.Error(), "--active-within") {
+		t.Fatalf("ExecuteHunt = %v, want an --active-within error", err)
+	}
+	if time.Since(start) > time.Second {
+		t.Fatal("a bad --active-within must be refused before the DC is contacted")
 	}
 }
 
