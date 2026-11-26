@@ -366,6 +366,45 @@ func TestCreateScanner_Resume(t *testing.T) {
 	}
 }
 
+func TestCreateScanner_ResumeRefusesOutputsItCannotContinue(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "scan.jsonl")
+	scan := `{"type":"scan","scan_id":"01JPREV","time":"2026-11-26T10:00:00Z","identity":"tester"}` + "\n"
+	if err := os.WriteFile(path, []byte(scan), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// a text, XML, CSV or UNC file of the first run would be recreated empty
+	for name, set := range map[string]func(*Config){
+		"-o":           func(c *Config) { c.OutputRaw = filepath.Join(dir, "scan") },
+		"--output-xml": func(c *Config) { c.OutputXML = filepath.Join(dir, "scan") },
+		"--output-csv": func(c *Config) { c.OutputCSV = filepath.Join(dir, "scan") },
+		"--output-unc": func(c *Config) { c.OutputUNC = filepath.Join(dir, "scan") },
+		"--output-all": func(c *Config) { c.OutputAll = filepath.Join(dir, "scan") },
+	} {
+		cfg := validConfig()
+		cfg.Resume, cfg.Force = path, true
+		set(&cfg)
+		if _, err := CreateScanner(cfg); err == nil || !strings.Contains(err.Error(), name) {
+			t.Errorf("--resume with %s must be refused, got %v", name, err)
+		}
+	}
+	if data, _ := os.ReadFile(path); string(data) != scan {
+		t.Fatalf("a refused resume must leave the scan file alone: %q", data)
+	}
+
+	// the HTML report is built from the whole JSONL file, so it is complete
+	cfg := validConfig()
+	cfg.Resume, cfg.OutputHTML = path, true
+	s, err := CreateScanner(cfg)
+	if err != nil {
+		t.Fatalf("--resume with --html: %v", err)
+	}
+	s.CloseOutputter()
+	if _, err := os.Stat(filepath.Join(dir, "scan.html")); err != nil {
+		t.Fatalf("--resume scan.jsonl --html writes scan.html: %v", err)
+	}
+}
+
 func TestCreateScanner_AcceptsDisabledIOTimeout(t *testing.T) {
 	cfg := validConfig()
 	cfg.IOTimeout = 0

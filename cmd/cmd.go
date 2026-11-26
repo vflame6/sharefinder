@@ -44,6 +44,22 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		return nil, errors.New("cannot use --output-all with -o, --output-xml, --output-json, --output-csv, --output-unc or --html")
 	}
 
+	// --resume continues only the JSONL file: the text, XML, CSV and UNC files
+	// of the interrupted run would be recreated with only the rest of the scan
+	if cfg.Resume != "" {
+		for _, out := range []struct {
+			set  bool
+			flag string
+		}{
+			{cfg.OutputRaw != "", "-o"}, {cfg.OutputXML != "", "--output-xml"}, {cfg.OutputCSV != "", "--output-csv"},
+			{cfg.OutputUNC != "", "--output-unc"}, {cfg.OutputAll != "", "--output-all"},
+		} {
+			if out.set {
+				return nil, fmt.Errorf("--resume continues only the JSONL file and cannot be combined with %s; use --html, or the report command once the scan is complete", out.flag)
+			}
+		}
+	}
+
 	// recursive output is available only if the list option is specified
 	// it is done like that just to make the execution clear and avoid user mistakes
 	if cfg.Recurse && !cfg.List {
