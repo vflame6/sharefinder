@@ -9,6 +9,34 @@ import (
 	"github.com/jcmturner/gokrb5/v8/types"
 )
 
+// With an AES key, the AS exchange may only ask for that key's etype: the KDC
+// lists AES256 first for accounts that have it, and the keytab then holds
+// no matching key for an AES128 --aes-key.
+func TestKrb5Config_AESKeyEtype(t *testing.T) {
+	for _, tc := range []struct {
+		key  []byte
+		want []int32
+	}{
+		{bytes.Repeat([]byte{1}, 16), []int32{etypeID.AES128_CTS_HMAC_SHA1_96}},
+		{bytes.Repeat([]byte{1}, 32), []int32{etypeID.AES256_CTS_HMAC_SHA1_96}},
+	} {
+		cfg, err := newKrb5Config("CORP.LOCAL", "10.0.0.1", tc.key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := cfg.LibDefaults.DefaultTktEnctypeIDs; len(got) != 1 || got[0] != tc.want[0] {
+			t.Errorf("%d-byte key: AS-REQ etypes %v, want %v", len(tc.key), got, tc.want)
+		}
+	}
+	cfg, err := newKrb5Config("CORP.LOCAL", "10.0.0.1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.LibDefaults.DefaultTktEnctypeIDs) < 2 {
+		t.Errorf("without a key the default etypes stay: %v", cfg.LibDefaults.DefaultTktEnctypeIDs)
+	}
+}
+
 func TestAESKeytab(t *testing.T) {
 	aes128 := bytes.Repeat([]byte{0x11}, 16)
 	aes256 := bytes.Repeat([]byte{0x22}, 32)
