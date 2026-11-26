@@ -27,6 +27,7 @@ type Scanner struct {
 
 	closeOnce sync.Once
 	scanned   sync.Map // addresses already scanned, for deduplication
+	slots     slots    // SMB connections in use, at most Threads; made by Run
 	tempJSON  string   // JSONL file created only to render --html, removed at the end
 }
 

@@ -51,14 +51,15 @@ var (
 	maxAuthFailuresFlag  = app.Flag("max-auth-failures", "Stop the scan after this many rejected logons; 0 disables the guard").Default("1").Int()
 
 	// SMB interaction flags
-	excludeFlag      = app.Flag("exclude", "Exclude list").Short('e').Default("IPC$,NETLOGON,ADMIN$,print$,C$").String()
-	excludeHostsFlag = app.Flag("exclude-hosts", "Skip these targets: IPs, CIDRs, ranges, hostnames (comma-separated) or a file").Default("").String()
-	listFlag         = app.Flag("list", "List readable shares").Default("false").Bool()
-	recurseFlag      = app.Flag("recurse", "List readable shares recursively").Default("false").Bool()
-	depthFlag        = app.Flag("depth", "Maximum directory depth below the share root for --recurse (0 lists the root only)").Default("5").Int()
-	followLinksFlag  = app.Flag("follow-links", "Descend into directory symlinks and junctions during --recurse").Bool()
-	maxFilesFlag     = app.Flag("max-files", "Stop listing a share after this many entries (0 = no limit)").Default("0").Int()
-	writeCheckFlag   = app.Flag("write-check", "How to test write access: mask (open the share root with write rights, creates nothing), file (create and delete a temporary file) or off").Default("file").Enum("mask", "file", "off")
+	excludeFlag         = app.Flag("exclude", "Exclude list").Short('e').Default("IPC$,NETLOGON,ADMIN$,print$,C$").String()
+	excludeHostsFlag    = app.Flag("exclude-hosts", "Skip these targets: IPs, CIDRs, ranges, hostnames (comma-separated) or a file").Default("").String()
+	listFlag            = app.Flag("list", "List readable shares").Default("false").Bool()
+	recurseFlag         = app.Flag("recurse", "List readable shares recursively").Default("false").Bool()
+	depthFlag           = app.Flag("depth", "Maximum directory depth below the share root for --recurse (0 lists the root only)").Default("5").Int()
+	followLinksFlag     = app.Flag("follow-links", "Descend into directory symlinks and junctions during --recurse").Bool()
+	maxFilesFlag        = app.Flag("max-files", "Stop listing a share after this many entries (0 = no limit)").Default("0").Int()
+	maxConnsPerHostFlag = app.Flag("max-conns-per-host", "Connections that list the shares of one host in parallel, while --threads allows").Default("2").Int()
+	writeCheckFlag      = app.Flag("write-check", "How to test write access: mask (open the share root with write rights, creates nothing), file (create and delete a temporary file) or off").Default("file").Enum("mask", "file", "off")
 
 	// null command
 	// find null sessions shares and permissions
@@ -181,6 +182,7 @@ func main() {
 		Depth:               *depthFlag,
 		FollowLinks:         *followLinksFlag,
 		MaxFiles:            *maxFilesFlag,
+		MaxConnsPerHost:     *maxConnsPerHostFlag,
 	})
 	if err != nil {
 		logger.Fatal(err)

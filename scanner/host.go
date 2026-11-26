@@ -87,20 +87,22 @@ func (s *Scanner) enumerateHost(ctx context.Context, host DNHost) {
 	h.Shares = checkShares(ctx, conn, shares, o)
 	sink.HostEnumerated(h)
 
-	limits := ListLimits{MaxDepth: o.Depth, FollowLinks: o.FollowLinks, MaxFiles: o.MaxFiles}
+	// shares that are not listed are finished now; listings are jobs that
+	// may run over several connections
+	var jobs []shareJob
 	for i := range h.Shares {
 		share := &h.Shares[i]
 		if o.List && share.ReadPermission {
-			if ctx.Err() != nil {
-				share.Partial = true
-			} else {
-				listShare(ctx, conn, sink, h, share, limits, o.Recurse, &s.Stats.Files)
-			}
+			jobs = append(jobs, shareJob{host: h, share: share})
+			continue
 		}
 		sink.ShareFinished(h, share)
 		s.Stats.Shares.Add(1)
 	}
-	sink.HostFinished(h)
+	open := func(ctx context.Context) (shareConn, error) {
+		return NewSMBConnection(ctx, host, o)
+	}
+	s.listShares(ctx, h, jobs, conn, open)
 }
 
 // describeHost collects the facts of a connected host.
@@ -148,11 +150,11 @@ func describeHost(conn *Connection, host DNHost, o *Options) *Host {
 
 // listShare lists a readable share within limits, sending each directory to
 // the sink as it is listed and counting its files in files.
-func listShare(ctx context.Context, conn *Connection, sink Sink, h *Host, share *Share, limits ListLimits, recurse bool, files *atomic.Int64) {
+func listShare(ctx context.Context, conn shareConn, sink Sink, h *Host, share *Share, limits ListLimits, recurse bool, files *atomic.Int64) {
 	share.Listed = true
 	onErr := func(dir string, err error) {
 		if ctx.Err() == nil {
-			logger.Warnf("Failed to list directory %s\\%s\\%s: %v", conn.host, share.ShareName, dir, err)
+			logger.Warnf("Failed to list directory %s\\%s\\%s: %v", h.IP, share.ShareName, dir, err)
 		}
 	}
 	emit := listingEmitter(sink, h, share)
@@ -173,12 +175,12 @@ func listShare(ctx context.Context, conn *Connection, sink Sink, h *Host, share 
 		share.Partial = true
 	case err != nil:
 		share.ListError = err.Error()
-		logger.Warnf("Failed to list share %s\\%s: %v", conn.host, share.ShareName, err)
+		logger.Warnf("Failed to list share %s\\%s: %v", h.IP, share.ShareName, err)
 	}
 	if stats.Truncated {
-		logger.Warnf("\\\\%s\\%s: listing truncated at %d entries (--max-files)", conn.host, share.ShareName, limits.MaxFiles)
+		logger.Warnf("\\\\%s\\%s: listing truncated at %d entries (--max-files)", h.IP, share.ShareName, limits.MaxFiles)
 	}
 	if stats.DepthLimited {
-		logger.Warnf("\\\\%s\\%s: directories deeper than --depth %d were not listed", conn.host, share.ShareName, limits.MaxDepth)
+		logger.Warnf("\\\\%s\\%s: directories deeper than --depth %d were not listed", h.IP, share.ShareName, limits.MaxDepth)
 	}
 }

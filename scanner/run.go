@@ -55,6 +55,9 @@ func (s *Scanner) Run(ctx context.Context, produce Producer) error {
 		close(sweepDone)
 	}
 
+	// each host worker holds a slot while it works; extra connections that
+	// list a host's shares in parallel take free slots
+	s.slots = make(slots, max(s.Threads, 1))
 	var wg sync.WaitGroup
 	for i := 0; i < s.Threads; i++ {
 		wg.Add(1)
@@ -88,7 +91,13 @@ func (s *Scanner) worker(ctx context.Context, queue <-chan DNHost, enumerate fun
 			if !ok {
 				return
 			}
+			select {
+			case s.slots <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
 			enumerate(ctx, host)
+			s.slots.release()
 		}
 	}
 }

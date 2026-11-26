@@ -63,6 +63,9 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 	if cfg.MaxFiles < 0 {
 		return nil, errors.New("--max-files must be 0 (no limit) or more")
 	}
+	if cfg.MaxConnsPerHost < 1 {
+		return nil, errors.New("--max-conns-per-host must be at least 1")
+	}
 
 	writeCheck, err := scanner.ParseWriteCheckMode(cfg.WriteCheck)
 	if err != nil {
@@ -197,6 +200,7 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		Discovery:          discovery,
 		FollowLinks:        cfg.FollowLinks,
 		MaxFiles:           cfg.MaxFiles,
+		MaxConnsPerHost:    cfg.MaxConnsPerHost,
 		FileTXT:            file,
 		FileXML:            fileXML,
 		Hash:               "",

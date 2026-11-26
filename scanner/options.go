@@ -32,6 +32,7 @@ type Options struct {
 	Kerberos           bool
 	List               bool // --list
 	MaxFiles           int  // --max-files
+	MaxConnsPerHost    int  // --max-conns-per-host: connections that list one host's shares
 	LocalAuth          bool // --local-auth
 	Mode               AuthMode
 	NullSession        bool

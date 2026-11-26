@@ -12,8 +12,9 @@ import (
 
 // Sink receives scan results as they are produced, so that no host's tree has
 // to be held in memory. Implementations are safe for concurrent use: workers
-// call them for different hosts at the same time, and events of one host
-// arrive in order.
+// call them for different hosts at the same time, and the shares of one host
+// may be listed in parallel (--max-conns-per-host). The events of one share
+// arrive in order; HostEnumerated comes first and HostFinished last.
 type Sink interface {
 	// HostEnumerated: the host's facts and its permission-checked shares.
 	HostEnumerated(h *Host)

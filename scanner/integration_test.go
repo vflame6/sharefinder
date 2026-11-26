@@ -320,6 +320,25 @@ func TestIntegration_JSONL(t *testing.T) {
 	}
 }
 
+func TestIntegration_TwoSharesTwoConns(t *testing.T) {
+	for _, tc := range []struct{ conns, logons int }{{2, 2}, {1, 1}} {
+		srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares()})
+		o := asUser(integrationOptions(srv.Port(), 5*time.Second), testPassword)
+		o.List, o.Recurse, o.Sink, o.MaxConnsPerHost = true, true, MultiSink{}, tc.conns
+
+		s := NewScanner(o, nil, time.Now(), 2)
+		if err := s.Run(context.Background(), TargetsFromList([]DNHost{{IP: net.ParseIP("127.0.0.1")}})); err != nil {
+			t.Fatal(err)
+		}
+		if got := srv.LogonAttempts(); got != tc.logons {
+			t.Errorf("--max-conns-per-host %d: %d logons, want %d", tc.conns, got, tc.logons)
+		}
+		if shares, files := s.Stats.Shares.Load(), s.Stats.Files.Load(); shares != 2 || files != 3 {
+			t.Errorf("--max-conns-per-host %d: shares %d, files %d; want 2, 3", tc.conns, shares, files)
+		}
+	}
+}
+
 func TestIntegration_DiscoverySweep(t *testing.T) {
 	srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares()})
 	o := asUser(integrationOptions(srv.Port(), 5*time.Second), testPassword)
