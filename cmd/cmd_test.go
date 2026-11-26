@@ -72,9 +72,12 @@ func TestCreateScanner_OutputNamesAndOverwrite(t *testing.T) {
 		t.Fatalf("existing output must be refused without --force, got %v", err)
 	}
 	cfg.Force = true
-	if _, err := CreateScanner(cfg); err != nil {
+	s, err = CreateScanner(cfg)
+	if err != nil {
 		t.Fatalf("--force must allow overwriting: %v", err)
 	}
+	// Windows cannot remove the test directory while the file is open
+	s.CloseOutputter()
 }
 
 func TestCreateScanner_RefusesBeforeCreatingAnything(t *testing.T) {
