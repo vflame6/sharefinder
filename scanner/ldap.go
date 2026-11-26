@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 	"github.com/jcmturner/gokrb5/v8/config"
 	"github.com/jcmturner/gokrb5/v8/credentials"
 	"github.com/vflame6/sharefinder/logger"
-	"golang.org/x/net/proxy"
 	"math"
 	"net"
 	"os"
@@ -45,154 +45,222 @@ func GetBaseDN(domain string) string {
 	return result
 }
 
-func NewLDAPConnection(host net.IP, username, password string, hash string, domain string, timeout time.Duration, proxyDialer proxy.Dialer, kerberos bool, dcHostname string, useGC bool) (*LDAPConnection, error) {
-	var l *ldap.Conn
-	var err error
+// LDAPOptions describes one LDAP connection to a domain controller.
+type LDAPOptions struct {
+	Host       net.IP
+	Username   string
+	Password   string
+	Hash       string
+	Domain     string
+	DCHostname string
+	Kerberos   bool
+	UseGC      bool // Global Catalog ports 3269/3268 instead of 636/389
+	// AllowPlaintext permits a simple bind, which sends the password, over
+	// LDAP without TLS when LDAPS and StartTLS both fail.
+	AllowPlaintext bool
+	Dialer         *Dialer
+}
 
-	// GC ports (3268/3269) avoid LDAP referrals for cross-domain searches; required by --forest.
-	var dialLDAPS, dialLDAP string
-	if useGC {
-		dialLDAPS = fmt.Sprintf("%s:3269", host.String())
-		dialLDAP = fmt.Sprintf("%s:3268", host.String())
-	} else {
-		dialLDAPS = fmt.Sprintf("%s:636", host.String())
-		dialLDAP = fmt.Sprintf("%s:389", host.String())
+// ldapTransport is how the LDAP connection is protected.
+type ldapTransport int
+
+const (
+	transportLDAPS ldapTransport = iota
+	transportStartTLS
+	transportPlain
+)
+
+// bindMethod is how sharefinder authenticates to LDAP.
+type bindMethod int
+
+const (
+	bindGSSAPI bindMethod = iota + 1
+	bindNTLMHash
+	bindNTLMPassword
+	bindSimple
+)
+
+// chooseBind picks the bind for the credentials and transport. Kerberos never
+// falls back to another method. Over plain LDAP a password goes into an NTLM
+// bind, which does not send it; a simple bind, which sends it in clear text,
+// is used there only when AllowPlaintext is set.
+func chooseBind(o LDAPOptions, t ldapTransport) (bindMethod, error) {
+	switch {
+	case o.Kerberos:
+		return bindGSSAPI, nil
+	case o.Hash != "":
+		return bindNTLMHash, nil
+	case t == transportPlain && !o.AllowPlaintext:
+		return bindNTLMPassword, nil
+	default:
+		return bindSimple, nil
 	}
+}
 
-	var dialer proxy.Dialer
-	if proxyDialer != nil {
-		dialer = proxyDialer
-	} else {
-		dialer = &net.Dialer{Timeout: timeout}
+// ldapBinder is the part of *ldap.Conn that binds.
+type ldapBinder interface {
+	GSSAPIBind(client ldap.GSSAPIClient, servicePrincipal, authzid string) error
+	NTLMBindWithHash(domain, username, hash string) error
+	NTLMBind(domain, username, password string) error
+	Bind(username, password string) error
+}
+
+// bindLDAP performs exactly the bind chooseBind selects.
+func bindLDAP(b ldapBinder, o LDAPOptions, t ldapTransport, gss ldap.GSSAPIClient) error {
+	method, err := chooseBind(o, t)
+	if err != nil {
+		return err
+	}
+	switch method {
+	case bindGSSAPI:
+		// SPN must be host-based ldap/<fqdn>
+		spn := "ldap/" + strings.ToLower(o.DCHostname)
+		if err := b.GSSAPIBind(gss, spn, ""); err != nil {
+			return fmt.Errorf("kerberos LDAP bind failed: %w", err)
+		}
+	case bindNTLMHash:
+		if err := b.NTLMBindWithHash(o.Domain, o.Username, o.Hash); err != nil {
+			return fmt.Errorf("NTLM bind failed: %w", err)
+		}
+	case bindNTLMPassword:
+		if err := b.NTLMBind(o.Domain, o.Username, o.Password); err != nil {
+			return fmt.Errorf("NTLM bind failed: %w", err)
+		}
+	default:
+		// simple bind with UPN (user@domain)
+		if err := b.Bind(o.Username+"@"+o.Domain, o.Password); err != nil {
+			return fmt.Errorf("simple bind failed: %w", err)
+		}
+	}
+	return nil
+}
+
+// NewLDAPConnection connects to the domain controller over LDAPS, else LDAP
+// with StartTLS, else plain LDAP, and binds with the credentials in o.
+func NewLDAPConnection(ctx context.Context, o LDAPOptions) (*LDAPConnection, error) {
+	l, transport, err := dialLDAP(ctx, o)
+	if err != nil {
+		return nil, err
+	}
+	conn := &LDAPConnection{connection: l}
+
+	var gss ldap.GSSAPIClient
+	if o.Kerberos {
+		gc, err := newGSSAPIClient(o)
+		if err != nil {
+			_ = l.Close()
+			return nil, err
+		}
+		conn.gssClient = gc
+		gss = gc
+	}
+	if err := bindLDAP(l, o, transport, gss); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	return conn, nil
+}
+
+// dialLDAP opens the best protected LDAP connection the server offers. It
+// does not open a plain connection that could not be used to bind.
+func dialLDAP(ctx context.Context, o LDAPOptions) (*ldap.Conn, ldapTransport, error) {
+	// GC ports (3268/3269) avoid LDAP referrals for cross-domain searches; required by --forest.
+	ldapsAddr, ldapAddr := net.JoinHostPort(o.Host.String(), "636"), net.JoinHostPort(o.Host.String(), "389")
+	if o.UseGC {
+		ldapsAddr, ldapAddr = net.JoinHostPort(o.Host.String(), "3269"), net.JoinHostPort(o.Host.String(), "3268")
 	}
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: true,
 	}
+	ioTimeout := o.Dialer.IOTimeout()
+	withTimeout := func(l *ldap.Conn) *ldap.Conn {
+		if ioTimeout > 0 {
+			l.SetTimeout(ioTimeout)
+		}
+		return l
+	}
 
-	// LDAP connection setup
+	// LDAPS
+	if raw, err := o.Dialer.DialTracked(ctx, "tcp", ldapsAddr); err == nil {
+		tlsConn := tls.Client(raw, tlsConfig)
+		// handshake now, bounded by the connect timeout, so a server that
+		// accepts TCP but never speaks TLS cannot hang the scan
+		handshakeCtx, cancel := context.WithTimeout(ctx, o.Dialer.ConnectTimeout())
+		err = tlsConn.HandshakeContext(handshakeCtx)
+		cancel()
+		if err == nil {
+			l := ldap.NewConn(tlsConn, true)
+			l.Start()
+			return withTimeout(l), transportLDAPS, nil
+		}
+		_ = raw.Close()
+	}
 
-	// try to connect over LDAPS
-	var isLDAPS bool
-	connect, err := dialer.Dial("tcp", dialLDAPS)
+	// LDAP with StartTLS
+	logger.Warnf("Failed to connect to LDAPS on %s, trying LDAP with STARTTLS", ldapsAddr)
+	raw, err := o.Dialer.DialTracked(ctx, "tcp", ldapAddr)
+	if err != nil {
+		return nil, 0, err
+	}
+	l := ldap.NewConn(raw, false)
+	l.Start()
+	// bound the StartTLS exchange and handshake, then lift the deadline:
+	// afterwards go-ldap's request timeout governs the connection
+	if ioTimeout > 0 {
+		_ = raw.SetDeadline(time.Now().Add(ioTimeout))
+	}
+	err = l.StartTLS(tlsConfig)
+	_ = raw.SetDeadline(time.Time{})
 	if err == nil {
-		// Wrap raw TCP connection in TLS with our config
-		tlsConn := tls.Client(connect, tlsConfig)
+		return withTimeout(l), transportStartTLS, nil
+	}
+	_ = l.Close()
 
-		// Force handshake now so errors are caught early
-		if err = tlsConn.Handshake(); err != nil {
-			isLDAPS = false
-		} else {
-			// Hand the TLS connection to go-ldap
-			l = ldap.NewConn(tlsConn, true)
-			l.Start()
-			isLDAPS = true
-		}
+	// plain LDAP: a password goes into an NTLM bind unless a simple bind was
+	// explicitly allowed
+	if method, _ := chooseBind(o, transportPlain); method == bindSimple {
+		logger.Warnf("Failed to set up STARTTLS on %s; trying plain LDAP with a simple bind, which sends the password in clear text (--allow-plaintext-ldap)", ldapAddr)
 	} else {
-		isLDAPS = false
+		logger.Warnf("Failed to set up STARTTLS on %s, trying plain LDAP without sending the password", ldapAddr)
+	}
+	raw, err = o.Dialer.DialTracked(ctx, "tcp", ldapAddr)
+	if err != nil {
+		return nil, 0, err
+	}
+	l = ldap.NewConn(raw, false)
+	l.Start()
+	return withTimeout(l), transportPlain, nil
+}
+
+// newGSSAPIClient builds a Kerberos client from KRB5CCNAME or the password.
+func newGSSAPIClient(o LDAPOptions) (*gssapi.Client, error) {
+	if o.DCHostname == "" {
+		return nil, fmt.Errorf("dcHostname is required for Kerberos (used as KDC and SPN host)")
 	}
 
-	if !isLDAPS {
-		// try LDAP with STARTTLS if LDAPS is failed
-		logger.Warnf("Failed to connect to LDAPS on %s, trying LDAP with STARTTLS", dialLDAPS)
+	// build krb5 config in memory — no temp files
+	realm := strings.ToUpper(o.Domain)
+	krb5Conf, err := newKrb5Config(realm, o.Host.String())
+	if err != nil {
+		return nil, fmt.Errorf("krb5 config: %w", err)
+	}
 
-		connect, err = dialer.Dial("tcp", dialLDAP)
+	// try ccache first (KRB5CCNAME), fall back to password-based TGT
+	if ccachePath, ccErr := ccachePathFromEnv(); ccErr == nil {
+		ccache, err := credentials.LoadCCache(ccachePath)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("gssapi: load ccache file: %w", err)
 		}
-		l = ldap.NewConn(connect, false)
-		l.Start()
-		err = l.StartTLS(tlsConfig)
-
-		// if all of that failed go plain LDAP
+		krbClient, err := client.NewFromCCache(ccache, krb5Conf)
 		if err != nil {
-			logger.Warnf("Failed to set up STARTTLS on %s, trying plain LDAP", dialLDAP)
-			connect, err = dialer.Dial("tcp", dialLDAP)
-			if err != nil {
-				return nil, err
-			}
-			l = ldap.NewConn(connect, false)
-			l.Start()
+			return nil, fmt.Errorf("gssapi: ccache client: %w", err)
 		}
+		return &gssapi.Client{Client: krbClient}, nil
 	}
-
-	conn := &LDAPConnection{connection: l}
-
-	// LDAP authentication
-
-	// --- Bind: Kerberos -> NTLM hash -> simple ---
-	if kerberos {
-		if dcHostname == "" {
-			_ = l.Close()
-			return nil, fmt.Errorf("dcHostname is required for Kerberos (used as KDC and SPN host)")
-		}
-
-		// build krb5 config in memory — no temp files
-		realm := strings.ToUpper(domain)
-		krb5Conf, err := newKrb5Config(realm, host.String())
-		if err != nil {
-			_ = l.Close()
-			return nil, fmt.Errorf("krb5 config: %w", err)
-		}
-
-		var gc *gssapi.Client
-
-		// try ccache first (KRB5CCNAME), fall back to password-based TGT
-		ccachePath, ccErr := ccachePathFromEnv()
-		if ccErr == nil {
-			ccache, err := credentials.LoadCCache(ccachePath)
-			if err != nil {
-				_ = l.Close()
-				return nil, fmt.Errorf("gssapi: load ccache file: %w", err)
-			}
-			krbClient, err := client.NewFromCCache(ccache, krb5Conf)
-			if err != nil {
-				_ = l.Close()
-				return nil, fmt.Errorf("gssapi: ccache client: %w", err)
-			}
-			gc = &gssapi.Client{Client: krbClient}
-		} else if password != "" {
-			krbClient := client.NewWithPassword(username, realm, password, krb5Conf)
-			gc = &gssapi.Client{Client: krbClient}
-		} else {
-			_ = l.Close()
-			return nil, fmt.Errorf("kerberos requires either KRB5CCNAME ccache or -p password")
-		}
-		conn.gssClient = gc
-
-		// SPN must be host-based ldap/<fqdn>
-		servicePrincipal := fmt.Sprintf("ldap/%s", strings.ToLower(dcHostname))
-
-		// SASL GSSAPI bind
-		if err := l.GSSAPIBind(gc, servicePrincipal, ""); err != nil {
-			// GSSAPI bind failed — fall back to simple bind
-			_ = gc.Close()
-			conn.gssClient = nil
-			logger.Warnf("Kerberos GSSAPI bind failed, falling back to simple bind for LDAP")
-			if bindErr := l.Bind(username+"@"+domain, password); bindErr != nil {
-				_ = l.Close()
-				return nil, fmt.Errorf("LDAP bind failed: kerberos: %w, simple: %v", err, bindErr)
-			}
-		}
-
-		return conn, nil
+	if o.Password != "" {
+		return &gssapi.Client{Client: client.NewWithPassword(o.Username, realm, o.Password, krb5Conf)}, nil
 	}
-
-	// Non-Kerberos paths
-	if len(hash) > 0 {
-		// NTLM bind with hash (domain\user semantics vary by function; this uses go-ldap extension)
-		if err := l.NTLMBindWithHash(domain, username, hash); err != nil {
-			_ = l.Close()
-			return nil, fmt.Errorf("NTLM bind failed: %w", err)
-		}
-		return conn, nil
-	} else {
-		// Simple bind with UPN (user@domain)
-		if err := l.Bind(username+"@"+domain, password); err != nil {
-			_ = l.Close()
-			return nil, fmt.Errorf("simple bind failed: %w", err)
-		}
-		return conn, nil
-	}
+	return nil, fmt.Errorf("kerberos requires either KRB5CCNAME ccache or -p password")
 }
 
 func (c *LDAPConnection) Close() error {

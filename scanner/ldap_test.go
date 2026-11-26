@@ -1,11 +1,136 @@
 package scanner
 
 import (
+	"errors"
 	"fmt"
+	"net"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/go-ldap/ldap/v3"
 )
+
+// fakeBinder records the bind calls bindLDAP makes.
+type fakeBinder struct {
+	gssErr, ntlmErr, bindErr error
+	calls                    []string
+}
+
+func (f *fakeBinder) GSSAPIBind(c ldap.GSSAPIClient, spn, authzid string) error {
+	f.calls = append(f.calls, "gssapi:"+spn)
+	return f.gssErr
+}
+
+func (f *fakeBinder) NTLMBindWithHash(domain, user, hash string) error {
+	f.calls = append(f.calls, "ntlm:"+domain+`\`+user)
+	return f.ntlmErr
+}
+
+func (f *fakeBinder) Bind(user, password string) error {
+	f.calls = append(f.calls, "simple:"+user)
+	return f.bindErr
+}
+
+func (f *fakeBinder) NTLMBind(domain, user, password string) error {
+	f.calls = append(f.calls, "ntlm-password:"+domain+`\`+user)
+	return f.ntlmErr
+}
+
+func TestChooseBind(t *testing.T) {
+	kerberos := LDAPOptions{Kerberos: true, Username: "u", Password: "p"}
+	hash := LDAPOptions{Username: "u", Hash: "31d6cfe0d16ae931b73c59d7e0c089c0"}
+	password := LDAPOptions{Username: "u", Password: "p"}
+	allowed := LDAPOptions{Username: "u", Password: "p", AllowPlaintext: true}
+
+	tests := []struct {
+		name    string
+		o       LDAPOptions
+		t       ldapTransport
+		want    bindMethod
+		wantErr bool
+	}{
+		{"kerberos over LDAPS", kerberos, transportLDAPS, bindGSSAPI, false},
+		{"kerberos over plain", kerberos, transportPlain, bindGSSAPI, false},
+		{"hash over plain", hash, transportPlain, bindNTLMHash, false},
+		{"password over LDAPS", password, transportLDAPS, bindSimple, false},
+		{"password over StartTLS", password, transportStartTLS, bindSimple, false},
+		{"password over plain uses NTLM", password, transportPlain, bindNTLMPassword, false},
+		{"password over plain, simple bind allowed", allowed, transportPlain, bindSimple, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := chooseBind(tt.o, tt.t)
+			if tt.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "--allow-plaintext-ldap") {
+					t.Fatalf("expected an error naming --allow-plaintext-ldap, got %v", err)
+				}
+				return
+			}
+			if err != nil || got != tt.want {
+				t.Fatalf("chooseBind = %v, %v; want %v", got, err, tt.want)
+			}
+		})
+	}
+}
+
+func TestBindLDAP_KerberosFailureNoFallback(t *testing.T) {
+	gssErr := errors.New("KDC_ERR_PREAUTH_FAILED")
+	b := &fakeBinder{gssErr: gssErr}
+	o := LDAPOptions{Kerberos: true, DCHostname: "DC01.corp.local", Username: "u", Password: "p", Domain: "corp.local"}
+	err := bindLDAP(b, o, transportLDAPS, nil)
+	if !errors.Is(err, gssErr) {
+		t.Fatalf("bindLDAP returned %v, want the Kerberos error", err)
+	}
+	if !reflect.DeepEqual(b.calls, []string{"gssapi:ldap/dc01.corp.local"}) {
+		t.Fatalf("a failed Kerberos bind must not fall back, calls: %v", b.calls)
+	}
+}
+
+func TestBindLDAP_PasswordOverPlainUsesNTLM(t *testing.T) {
+	b := &fakeBinder{}
+	o := LDAPOptions{Host: net.ParseIP("10.0.0.1"), Username: "u", Password: "p", Domain: "corp.local"}
+	if err := bindLDAP(b, o, transportPlain, nil); err != nil {
+		t.Fatal(err)
+	}
+	// no simple bind: the password never crosses plain LDAP in clear text
+	if !reflect.DeepEqual(b.calls, []string{`ntlm-password:corp.local\u`}) {
+		t.Fatalf("calls: %v", b.calls)
+	}
+}
+
+func TestBindLDAP_SimpleOverPlainOnlyWhenAllowed(t *testing.T) {
+	b := &fakeBinder{}
+	o := LDAPOptions{Host: net.ParseIP("10.0.0.1"), Username: "u", Password: "p", Domain: "corp.local", AllowPlaintext: true}
+	if err := bindLDAP(b, o, transportPlain, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(b.calls, []string{"simple:u@corp.local"}) {
+		t.Fatalf("calls: %v", b.calls)
+	}
+}
+
+func TestBindLDAP_SimpleUsesUPN(t *testing.T) {
+	b := &fakeBinder{}
+	o := LDAPOptions{Username: "jdoe", Password: "p", Domain: "corp.local"}
+	if err := bindLDAP(b, o, transportStartTLS, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(b.calls, []string{"simple:jdoe@corp.local"}) {
+		t.Fatalf("calls: %v", b.calls)
+	}
+}
+
+func TestBindLDAP_HashOverPlain(t *testing.T) {
+	b := &fakeBinder{}
+	o := LDAPOptions{Username: "jdoe", Hash: "31d6cfe0d16ae931b73c59d7e0c089c0", Domain: "corp.local"}
+	if err := bindLDAP(b, o, transportPlain, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(b.calls, []string{`ntlm:corp.local\jdoe`}) {
+		t.Fatalf("calls: %v", b.calls)
+	}
+}
 
 func TestIsLDAPReferral(t *testing.T) {
 	if isLDAPReferral(nil) {

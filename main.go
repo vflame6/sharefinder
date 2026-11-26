@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
+	"os"
+	"os/signal"
+	"sync/atomic"
+	"syscall"
+	"time"
+
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/vflame6/sharefinder/cmd"
 	"github.com/vflame6/sharefinder/logger"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 )
 
 // program options
@@ -28,15 +31,22 @@ var (
 	outputHTMLFlag = app.Flag("html", "Generate HTML report (requires XML output)").Default("false").Bool()
 
 	// connection flags
-	threadsFlag = app.Flag("threads", "Number of threads").Default("10").Int()
-	timeoutFlag = app.Flag("timeout", "Seconds to wait for connection").Default("5s").Duration()
-	smbPortFlag = app.Flag("smb-port", "Target port of SMB service").Default("445").Int()
-	proxyFlag   = app.Flag("proxy", "SOCKS-proxy address to use for connection in format IP:PORT").Default("").String()
+	threadsFlag         = app.Flag("threads", "Number of threads").Default("10").Int()
+	timeoutFlag         = app.Flag("timeout", "Seconds to wait for connection").Default("5s").Duration()
+	ioTimeoutFlag       = app.Flag("io-timeout", "Abort an SMB or LDAP operation when the server sends nothing for this long").Default("30s").Duration()
+	smbPortFlag         = app.Flag("smb-port", "Target port of SMB service").Default("445").Int()
+	proxyFlag           = app.Flag("proxy", "SOCKS-proxy address to use for connection in format IP:PORT").Default("").String()
+	maxAuthFailuresFlag = app.Flag("max-auth-failures", "Stop the scan after this many rejected logons; 0 disables the guard").Default("1").Int()
 
 	// SMB interaction flags
-	excludeFlag = app.Flag("exclude", "Exclude list").Short('e').Default("IPC$,NETLOGON,ADMIN$,print$,C$").String()
-	listFlag    = app.Flag("list", "List readable shares").Default("false").Bool()
-	recurseFlag = app.Flag("recurse", "List readable shares recursively").Default("false").Bool()
+	excludeFlag      = app.Flag("exclude", "Exclude list").Short('e').Default("IPC$,NETLOGON,ADMIN$,print$,C$").String()
+	excludeHostsFlag = app.Flag("exclude-hosts", "Skip these targets: IPs, CIDRs, ranges, hostnames (comma-separated) or a file").Default("").String()
+	listFlag         = app.Flag("list", "List readable shares").Default("false").Bool()
+	recurseFlag      = app.Flag("recurse", "List readable shares recursively").Default("false").Bool()
+	depthFlag        = app.Flag("depth", "Maximum directory depth below the share root for --recurse (0 lists the root only)").Default("5").Int()
+	followLinksFlag  = app.Flag("follow-links", "Descend into directory symlinks and junctions during --recurse").Bool()
+	maxFilesFlag     = app.Flag("max-files", "Stop listing a share after this many entries (0 = no limit)").Default("0").Int()
+	writeCheckFlag   = app.Flag("write-check", "How to test write access: mask (open the share root with write rights, creates nothing), file (create and delete a temporary file) or off").Default("file").Enum("mask", "file", "off")
 
 	// null command
 	// find null sessions shares and permissions
@@ -72,6 +82,7 @@ var (
 	huntForestFlag     = huntCommand.Flag("forest", "Search all available domains in the current forest").Default("false").Bool()
 	huntKerberosFlag   = huntCommand.Flag("kerberos", "Use Kerberos authentication").Short('k').Bool()
 	huntDcHostnameFlag = huntCommand.Flag("dc-hostname", "Hostname of domain controller for Kerberos authentication").String()
+	huntAllowPlainFlag = huntCommand.Flag("allow-plaintext-ldap", "Allow a simple bind, which sends the password, over LDAP without TLS when LDAPS and StartTLS fail").Bool()
 )
 
 func main() {
@@ -96,49 +107,71 @@ func main() {
 	}
 
 	// set up a scanner
-	scanner, err := cmd.CreateScanner(
-		cmd.VERSION,
-		os.Args[1:],
-		time.Now(),
-		*outputRawFlag,
-		*outputXMLFlag,
-		*outputAllFlag,
-		*outputHTMLFlag,
-		*threadsFlag,
-		*timeoutFlag,
-		*excludeFlag,
-		*listFlag,
-		*recurseFlag,
-		*smbPortFlag,
-		*proxyFlag,
-	)
+	scanner, err := cmd.CreateScanner(cmd.Config{
+		Version:         cmd.VERSION,
+		CommandLine:     os.Args[1:],
+		TimeStart:       time.Now(),
+		OutputRaw:       *outputRawFlag,
+		OutputXML:       *outputXMLFlag,
+		OutputAll:       *outputAllFlag,
+		OutputHTML:      *outputHTMLFlag,
+		Threads:         *threadsFlag,
+		Timeout:         *timeoutFlag,
+		IOTimeout:       *ioTimeoutFlag,
+		SmbPort:         *smbPortFlag,
+		Proxy:           *proxyFlag,
+		MaxAuthFailures: *maxAuthFailuresFlag,
+		WriteCheck:      *writeCheckFlag,
+		Exclude:         *excludeFlag,
+		ExcludeHosts:    *excludeHostsFlag,
+		List:            *listFlag,
+		Recurse:         *recurseFlag,
+		Depth:           *depthFlag,
+		FollowLinks:     *followLinksFlag,
+		MaxFiles:        *maxFilesFlag,
+	})
 	if err != nil {
 		logger.Fatal(err)
 	}
 
-	// set up graceful shutdown on Ctrl+C
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	// Ctrl+C or SIGTERM cancels ctx: every open connection is closed, workers
+	// stop, and the outputs are terminated below. After the first signal the
+	// default handler is restored, so a second Ctrl+C exits immediately.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	var finished atomic.Bool
 	go func() {
-		<-sigChan
-		logger.Warn("Interrupt received, shutting down...")
-		scanner.Shutdown()
-		scanner.CloseOutputter()
-		os.Exit(1)
+		<-ctx.Done()
+		if finished.Load() {
+			return
+		}
+		stop()
+		logger.Warn("Interrupt received: stopping and writing partial results (press Ctrl+C again to exit immediately)")
 	}()
+	// Unblock any phase (LDAP, DNS, SMB) that is waiting on the network.
+	context.AfterFunc(ctx, scanner.Options.Dialer.CloseAll)
 
 	// execute specified command
 	if command == nullCommand.FullCommand() {
-		err = cmd.ExecuteNull(scanner, *nullTargetArg)
+		err = cmd.ExecuteNull(ctx, scanner, *nullTargetArg)
 	}
 	if command == guestCommand.FullCommand() {
-		err = cmd.ExecuteGuest(scanner, *guestTargetArg, *guestUsernameFlag)
+		err = cmd.ExecuteGuest(ctx, scanner, *guestTargetArg, *guestUsernameFlag)
 	}
 	if command == authCommand.FullCommand() {
-		err = cmd.ExecuteAuth(scanner, *authTargetArg, *authUsernameFlag, *authPasswordFlag, *authHashFlag, *authLocalAuthFlag, *authKerberosFlag, *authDcHostnameFlag, *authDcIPFlag)
+		err = cmd.ExecuteAuth(ctx, scanner, *authTargetArg, *authUsernameFlag, *authPasswordFlag, *authHashFlag, *authLocalAuthFlag, *authKerberosFlag, *authDcHostnameFlag, *authDcIPFlag)
 	}
 	if command == huntCommand.FullCommand() {
-		err = cmd.ExecuteHunt(scanner, *huntUsernameFlag, *huntPasswordFlag, *huntHashFlag, *huntDcArg, *huntResolverFlag, *huntForestFlag, *huntKerberosFlag, *huntDcHostnameFlag)
+		err = cmd.ExecuteHunt(ctx, scanner, *huntUsernameFlag, *huntPasswordFlag, *huntHashFlag, *huntDcArg, *huntResolverFlag, *huntForestFlag, *huntKerberosFlag, *huntDcHostnameFlag, *huntAllowPlainFlag)
+	}
+	interrupted := ctx.Err() != nil
+	finished.Store(true)
+	stop()
+
+	// terminate and close every output file, also after an interrupt
+	scanner.CloseOutputter()
+
+	if interrupted {
+		os.Exit(130)
 	}
 	if err != nil {
 		logger.Fatal(err)

@@ -1,7 +1,6 @@
 package scanner
 
 import (
-	"golang.org/x/net/proxy"
 	"net"
 	"os"
 	"time"
@@ -9,30 +8,38 @@ import (
 
 // Options is a struct to store scanner's configuration
 type Options struct {
-	CustomResolver     net.IP // --resolver
+	AllowPlaintextLDAP bool       // --allow-plaintext-ldap (hunt)
+	AuthGuard          *AuthGuard // --max-auth-failures
+	CustomResolver     net.IP     // --resolver
 	DCHostname         string
-	Domain             string // part of --username
+	Dialer             *Dialer // --proxy, --timeout, --io-timeout
+	Domain             string  // part of --username
+	Depth              int     // --depth
 	DomainController   net.IP
-	Exclude            []string // --exclude
+	Exclude            []string   // --exclude
+	ExcludeHosts       *TargetSet // --exclude-hosts
 	FileTXT            *os.File
 	FileXML            *os.File
-	Forest             bool   // --forest (hunt only)
-	Hash               string // --hashes
-	HashBytes          []byte // --hashes
+	FollowLinks        bool          // --follow-links
+	Forest             bool          // --forest (hunt only)
+	Hash               string        // --hashes
+	HashBytes          []byte        // --hashes
+	IOTimeout          time.Duration // --io-timeout
 	Kerberos           bool
 	List               bool // --list
+	MaxFiles           int  // --max-files
 	LocalAuth          bool // --local-auth
+	Mode               AuthMode
 	NullSession        bool
 	OutputRawFileName  string
 	OutputXMLFileName  string
 	OutputHTML         bool // --html
 	OutputHTMLFileName string
-	Password           string       // --password
-	ProxyDialer        proxy.Dialer // --proxy
-	Recurse            bool         // --recurse
-	SmbPort            int          // --smb-port
-	Target             chan DNHost
-	Timeout            time.Duration // --timeout
-	Username           string        // part of --username
+	Password           string         // --password
+	Recurse            bool           // --recurse
+	SmbPort            int            // --smb-port
+	Timeout            time.Duration  // --timeout
+	Username           string         // part of --username
+	WriteCheck         WriteCheckMode // --write-check
 	Writer             *OutputWriter
 }

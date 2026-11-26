@@ -2,172 +2,11 @@ package scanner
 
 import (
 	"encoding/xml"
-	"net"
-	"os"
-	"path/filepath"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 )
-
-// ---------------------------------------------------------------------------
-// ParseIPOrCIDR
-// ---------------------------------------------------------------------------
-
-func TestParseIPOrCIDR(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   string
-		want    []string
-		wantErr bool
-	}{
-		{
-			name:  "single IPv4",
-			input: "192.168.1.1",
-			want:  []string{"192.168.1.1"},
-		},
-		{
-			name:  "CIDR /30 excludes network and broadcast",
-			input: "10.0.0.0/30",
-			want:  []string{"10.0.0.1", "10.0.0.2"},
-		},
-		{
-			name:  "CIDR /32 single host",
-			input: "10.0.0.5/32",
-			want:  nil, // /32 → IP is both network and broadcast, so excluded
-		},
-		{
-			name:  "IP range",
-			input: "192.168.1.1-5",
-			want:  []string{"192.168.1.1", "192.168.1.2", "192.168.1.3", "192.168.1.4", "192.168.1.5"},
-		},
-		{
-			name:    "invalid input",
-			input:   "not-an-ip",
-			wantErr: true,
-		},
-		{
-			name:    "invalid range end < start",
-			input:   "192.168.1.10-5",
-			wantErr: true,
-		},
-		{
-			name:  "IPv6 loopback",
-			input: "::1",
-			want:  []string{"::1"},
-		},
-		{
-			name:  "CIDR /24 count",
-			input: "10.0.0.0/24",
-			want:  nil, // just check length
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParseIPOrCIDR(tt.input)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("expected error for input %q, got nil", tt.input)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-
-			// Special case: /24 — just check count
-			if tt.name == "CIDR /24 count" {
-				if len(got) != 254 {
-					t.Fatalf("expected 254 hosts for /24, got %d", len(got))
-				}
-				return
-			}
-
-			if tt.want == nil {
-				if len(got) != 0 {
-					t.Fatalf("expected empty result, got %v", got)
-				}
-				return
-			}
-
-			if len(got) != len(tt.want) {
-				t.Fatalf("expected %d IPs, got %d: %v", len(tt.want), len(got), got)
-			}
-			for i, ip := range got {
-				if ip != tt.want[i] {
-					t.Errorf("index %d: expected %s, got %s", i, tt.want[i], ip)
-				}
-			}
-		})
-	}
-}
-
-// ---------------------------------------------------------------------------
-// incrementIP
-// ---------------------------------------------------------------------------
-
-func TestIncrementIP(t *testing.T) {
-	tests := []struct {
-		name string
-		ip   net.IP
-		want string
-	}{
-		{
-			name: "simple increment",
-			ip:   net.ParseIP("192.168.1.1").To4(),
-			want: "192.168.1.2",
-		},
-		{
-			name: "octet rollover",
-			ip:   net.ParseIP("192.168.1.255").To4(),
-			want: "192.168.2.0",
-		},
-		{
-			name: "multiple rollover",
-			ip:   net.ParseIP("192.168.255.255").To4(),
-			want: "192.169.0.0",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			incrementIP(tt.ip)
-			if tt.ip.String() != tt.want {
-				t.Errorf("expected %s, got %s", tt.want, tt.ip.String())
-			}
-		})
-	}
-}
-
-// ---------------------------------------------------------------------------
-// isNetworkOrBroadcast
-// ---------------------------------------------------------------------------
-
-func TestIsNetworkOrBroadcast(t *testing.T) {
-	_, ipNet, _ := net.ParseCIDR("10.0.0.0/24")
-
-	tests := []struct {
-		name string
-		ip   string
-		want bool
-	}{
-		{"network address", "10.0.0.0", true},
-		{"broadcast address", "10.0.0.255", true},
-		{"normal host", "10.0.0.1", false},
-		{"mid host", "10.0.0.128", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := net.ParseIP(tt.ip).To4()
-			got := isNetworkOrBroadcast(ip, ipNet)
-			if got != tt.want {
-				t.Errorf("isNetworkOrBroadcast(%s) = %v, want %v", tt.ip, got, tt.want)
-			}
-		})
-	}
-}
 
 // ---------------------------------------------------------------------------
 // ParseSharefinderRun (XML)
@@ -255,29 +94,38 @@ func TestParseSharefinderRun_Malformed(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// SPrintHostInfo
+// SprintHostLine
 // ---------------------------------------------------------------------------
 
-func TestSPrintHostInfo(t *testing.T) {
-	adminTrue := true
-	got := SPrintHostInfoWithAdmin("10.0.0.1", "SMB2", "DC01", "test.local", true, &adminTrue)
-	expected := "[+] 10.0.0.1: SMB2 (name:DC01) (domain:test.local) (signing:true) (admin:true)"
-	if got != expected {
-		t.Errorf("expected %q, got %q", expected, got)
+func TestSprintHostLine(t *testing.T) {
+	adminTrue, adminFalse := true, false
+	tests := []struct {
+		name string
+		host Host
+		want string
+	}{
+		{
+			name: "all facts",
+			host: Host{IP: "10.0.0.1", Version: "SMB2", Hostname: "DC01", Domain: "test.local", Signing: true, Session: "user", Admin: &adminTrue},
+			want: "[+] 10.0.0.1: SMB2 (name:DC01) (domain:test.local) (signing:true) (session:user) (admin:true)",
+		},
+		{
+			name: "guest session, not admin",
+			host: Host{IP: "192.168.1.5", Version: "SMB3", Hostname: "SRV01", Domain: "corp.local", Session: "guest", Admin: &adminFalse},
+			want: "[+] 192.168.1.5: SMB3 (name:SRV01) (domain:corp.local) (signing:false) (session:guest) (admin:false)",
+		},
+		{
+			name: "unknown session and admin status omitted",
+			host: Host{IP: "192.168.1.6", Version: "SMB3", Hostname: "SRV02", Domain: "corp.local"},
+			want: "[+] 192.168.1.6: SMB3 (name:SRV02) (domain:corp.local) (signing:false)",
+		},
 	}
-
-	adminFalse := false
-	got2 := SPrintHostInfoWithAdmin("192.168.1.5", "SMB3", "SRV01", "corp.local", false, &adminFalse)
-	if !strings.Contains(got2, "(signing:false)") {
-		t.Errorf("expected signing:false in output, got %q", got2)
-	}
-	if !strings.Contains(got2, "(admin:false)") {
-		t.Errorf("expected admin:false in output, got %q", got2)
-	}
-
-	got3 := SPrintHostInfoWithAdmin("192.168.1.6", "SMB3", "SRV02", "corp.local", false, nil)
-	if strings.Contains(got3, "admin:") {
-		t.Errorf("did not expect admin marker when status is unknown, got %q", got3)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SprintHostLine(tt.host); got != tt.want {
+				t.Fatalf("SprintHostLine() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -386,9 +234,7 @@ func TestSprintFiles(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestNewScanner(t *testing.T) {
-	opts := &Options{
-		Target: make(chan DNHost),
-	}
+	opts := &Options{}
 	cmdLine := []string{"sharefinder", "auth", "-t", "10.0.0.1"}
 	ts := time.Now()
 
@@ -406,134 +252,29 @@ func TestNewScanner(t *testing.T) {
 	if !s.TimeStart.Equal(ts) {
 		t.Errorf("TimeStart mismatch")
 	}
-	if s.Stop == nil {
-		t.Error("Stop channel not initialized")
-	}
-
-	// Verify Stop channel is usable (non-nil, unbuffered)
-	go func() { s.Stop <- true }()
-	<-s.Stop
 }
 
 // ---------------------------------------------------------------------------
-// ParseTargets
+// Listing headers
 // ---------------------------------------------------------------------------
 
-func TestParseTargets_IPString(t *testing.T) {
-	opts := &Options{
-		Target: make(chan DNHost, 10),
-	}
-	s := NewScanner(opts, nil, time.Now(), 1)
-
-	err := s.ParseTargets("192.168.1.1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var hosts []DNHost
-	for h := range opts.Target {
-		hosts = append(hosts, h)
-	}
-	if len(hosts) != 1 {
-		t.Fatalf("expected 1 host, got %d", len(hosts))
-	}
-	if hosts[0].IP.String() != "192.168.1.1" {
-		t.Errorf("expected 192.168.1.1, got %s", hosts[0].IP.String())
-	}
-	if hosts[0].Hostname != "" {
-		t.Errorf("expected empty hostname, got %s", hosts[0].Hostname)
-	}
-}
-
-func TestParseTargets_FromFile(t *testing.T) {
-	dir := t.TempDir()
-	fpath := filepath.Join(dir, "targets.txt")
-	content := "10.0.0.1\n10.0.0.2\n10.0.0.3\n"
-	if err := os.WriteFile(fpath, []byte(content), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	opts := &Options{
-		Target: make(chan DNHost, 10),
-	}
-	s := NewScanner(opts, nil, time.Now(), 1)
-
-	err := s.ParseTargets(fpath)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var hosts []DNHost
-	for h := range opts.Target {
-		hosts = append(hosts, h)
-	}
-	if len(hosts) != 3 {
-		t.Fatalf("expected 3 hosts, got %d", len(hosts))
-	}
-}
-
-func TestParseTargets_FileWithEmptyLines(t *testing.T) {
-	dir := t.TempDir()
-	fpath := filepath.Join(dir, "targets.txt")
-	content := "10.0.0.1\n\n\n10.0.0.2\n  \n10.0.0.3\n"
-	if err := os.WriteFile(fpath, []byte(content), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	opts := &Options{
-		Target: make(chan DNHost, 10),
-	}
-	s := NewScanner(opts, nil, time.Now(), 1)
-
-	err := s.ParseTargets(fpath)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var hosts []DNHost
-	for h := range opts.Target {
-		hosts = append(hosts, h)
-	}
-	if len(hosts) != 3 {
-		t.Fatalf("expected 3 hosts (empty lines skipped), got %d", len(hosts))
-	}
-}
-
-func TestParseTargets_NonexistentFileInvalidIP(t *testing.T) {
-	opts := &Options{
-		Target: make(chan DNHost, 10),
-	}
-	s := NewScanner(opts, nil, time.Now(), 1)
-
-	err := s.ParseTargets("not-a-real-file-or-ip")
-	if err == nil {
-		t.Fatal("expected error for nonexistent file + invalid IP")
-	}
-}
-
-func TestParseTargets_CIDRFromFile(t *testing.T) {
-	dir := t.TempDir()
-	fpath := filepath.Join(dir, "targets.txt")
-	content := "10.0.0.0/30\n"
-	if err := os.WriteFile(fpath, []byte(content), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	opts := &Options{
-		Target: make(chan DNHost, 10),
-	}
-	s := NewScanner(opts, nil, time.Now(), 1)
-
-	err := s.ParseTargets(fpath)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var hosts []DNHost
-	for h := range opts.Target {
-		hosts = append(hosts, h)
-	}
-	if len(hosts) != 2 {
-		t.Fatalf("expected 2 hosts from /30 CIDR, got %d", len(hosts))
+func TestListingHeaders_NameColumn(t *testing.T) {
+	wantHeader := fmt.Sprintf("%-4s  %8s  %-16s  %s", "Type", "Size", "LastWriteTime", "Name")
+	h := Host{IP: "10.0.0.1", Shares: []Share{{
+		ShareName:      "Data",
+		ReadPermission: true,
+		Files:          []File{{Type: "file", Name: "a.txt"}},
+		Directories:    []Directory{{Name: "IT", Files: []File{{Type: "file", Name: "b.txt"}}}},
+	}}}
+	for name, out := range map[string]string{
+		"SprintShares":      SprintShares(h, nil),
+		"SprintDirectories": SprintDirectories(h.IP, "Data", h.Shares[0].Directories),
+	} {
+		if strings.Contains(out, "ShareName") {
+			t.Errorf("%s labels the file name column ShareName:\n%s", name, out)
+		}
+		if !strings.Contains(out, wantHeader+"\n") {
+			t.Errorf("%s lacks the header %q:\n%s", name, wantHeader, out)
+		}
 	}
 }

@@ -2,12 +2,12 @@ package scanner
 
 import (
 	"fmt"
-	"github.com/vflame6/sharefinder/utils"
-	"net"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/vflame6/sharefinder/utils"
 )
 
 var (
@@ -15,14 +15,15 @@ var (
 	dateTimeSecondsFormat = "02/01/2006 15:04:05"
 )
 
-func SPrintHostInfo(host, version, hostname, domain string, signing bool) string {
-	return SPrintHostInfoWithAdmin(host, version, hostname, domain, signing, nil)
-}
-
-func SPrintHostInfoWithAdmin(host, version, hostname, domain string, signing bool, admin *bool) string {
-	result := fmt.Sprintf("[+] %s: %s (name:%s) (domain:%s) (signing:%v)", host, version, hostname, domain, signing)
-	if admin != nil {
-		result += fmt.Sprintf(" (admin:%v)", *admin)
+// SprintHostLine formats the one-line summary of a scanned host. The session
+// type and admin status are left out when unknown.
+func SprintHostLine(h Host) string {
+	result := fmt.Sprintf("[+] %s: %s (name:%s) (domain:%s) (signing:%v)", h.IP, h.Version, h.Hostname, h.Domain, h.Signing)
+	if h.Session != "" {
+		result += fmt.Sprintf(" (session:%s)", h.Session)
+	}
+	if h.Admin != nil {
+		result += fmt.Sprintf(" (admin:%v)", *h.Admin)
 	}
 	return result
 }
@@ -49,7 +50,7 @@ func SprintDirectories(ip, share string, dirs []Directory) string {
 	if len(dirs) > 0 {
 		for _, dir := range dirs {
 			shareListResult += fmt.Sprintf("Listing directory %s\\%s\\%s\n", ip, share, dir.Name)
-			shareListResult += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "Type", "Size", "LastWriteTime", "ShareName")
+			shareListResult += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "Type", "Size", "LastWriteTime", "Name")
 			shareListResult += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "----", "----", "-------------", "----")
 			for _, file := range dir.Files {
 				lastWrite := time.Time.Format(file.LastModified, dateTimeFormat)
@@ -62,26 +63,41 @@ func SprintDirectories(ip, share string, dirs []Directory) string {
 	return shareListResult
 }
 
+// sharePermissions renders a share's access as READ plus its write labels.
+func sharePermissions(share Share) string {
+	var permissions []string
+	if share.ReadPermission {
+		permissions = append(permissions, "READ")
+	}
+	switch {
+	case share.WriteAccess != "":
+		permissions = append(permissions, share.WriteAccess)
+	case share.WritePermission:
+		permissions = append(permissions, WriteLabel)
+	}
+	return strings.Join(permissions, ",")
+}
+
 func SprintHost(h Host, exclude []string) string {
 	var result string
 
-	result += fmt.Sprintf("\n%-16s %-16s %-16s\n", "Share", "Permissions", "Description")
-	result += fmt.Sprintf("%-16s %-16s %-16s\n", strings.Repeat("-", 5), strings.Repeat("-", 11), strings.Repeat("-", 10))
+	// widen the permissions column for labels such as WRITE (SUBDIR)
+	width := 16
+	for _, share := range h.Shares {
+		if n := len(sharePermissions(share)); n > width {
+			width = n
+		}
+	}
+	row := "%-16s %-" + strconv.Itoa(width) + "s %-16s\n"
+
+	result += fmt.Sprintf("\n"+row, "Share", "Permissions", "Description")
+	result += fmt.Sprintf(row, strings.Repeat("-", 5), strings.Repeat("-", 11), strings.Repeat("-", 10))
 
 	for _, share := range h.Shares {
 		if slices.Contains(exclude, share.ShareName) {
 			continue
 		}
-
-		var permissions []string
-		if share.ReadPermission {
-			permissions = append(permissions, "READ")
-		}
-		if share.WritePermission {
-			permissions = append(permissions, "WRITE")
-		}
-
-		result += fmt.Sprintf("%-16s %-16s %-16s\n", share.ShareName, strings.Join(permissions, ","), share.Description)
+		result += fmt.Sprintf(row, share.ShareName, sharePermissions(share), share.Description)
 	}
 	result += "\n"
 
@@ -100,7 +116,7 @@ func SprintShares(h Host, exclude []string) string {
 		}
 
 		result += fmt.Sprintf("Listing share %s\\%s\n", h.IP, share.ShareName)
-		result += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "Type", "Size", "LastWriteTime", "ShareName")
+		result += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "Type", "Size", "LastWriteTime", "Name")
 		result += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "----", "----", "-------------", "----")
 		result += SprintFiles(share.Files)
 		result += "\n"
@@ -108,100 +124,4 @@ func SprintShares(h Host, exclude []string) string {
 	}
 
 	return result
-}
-
-// ParseIPOrCIDR parses a string input and returns an array of valid IP addresses.
-func ParseIPOrCIDR(input string) ([]string, error) {
-	if strings.Contains(input, "-") {
-		return parseIPRange(input)
-	}
-
-	ip := net.ParseIP(input)
-	if ip != nil {
-		return []string{ip.String()}, nil
-	}
-
-	_, ipNet, err := net.ParseCIDR(input)
-	if err != nil {
-		return nil, fmt.Errorf("invalid IP, CIDR, or range format: %s", input)
-	}
-
-	var ips []string
-	for ip := ipNet.IP.Mask(ipNet.Mask); ipNet.Contains(ip); incrementIP(ip) {
-		if isNetworkOrBroadcast(ip, ipNet) {
-			continue
-		}
-		ips = append(ips, ip.String())
-	}
-
-	return ips, nil
-}
-
-// parseIPRange handles IP range inputs like "192.168.0.1-10"
-func parseIPRange(input string) ([]string, error) {
-	parts := strings.Split(input, "-")
-	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid range format: %s", input)
-	}
-
-	baseIP := net.ParseIP(parts[0])
-	if baseIP == nil {
-		return nil, fmt.Errorf("invalid IP address in range: %s", parts[0])
-	}
-
-	lastOctet, err := strconv.Atoi(parts[1])
-	if err != nil {
-		return nil, fmt.Errorf("invalid range end: %s", parts[1])
-	}
-
-	octets := strings.Split(parts[0], ".")
-	if len(octets) != 4 {
-		return nil, fmt.Errorf("invalid IPv4 format: %s", parts[0])
-	}
-
-	startOctet, err := strconv.Atoi(octets[3])
-	if err != nil {
-		return nil, fmt.Errorf("invalid start octet: %s", octets[3])
-	}
-
-	if lastOctet < startOctet || lastOctet > 255 {
-		return nil, fmt.Errorf("invalid range: %d-%d", startOctet, lastOctet)
-	}
-
-	var ips []string
-	for i := startOctet; i <= lastOctet; i++ {
-		octets[3] = strconv.Itoa(i)
-		ips = append(ips, strings.Join(octets, "."))
-	}
-
-	return ips, nil
-}
-
-// incrementIP increases the IP address by one.
-func incrementIP(ip net.IP) {
-	for j := len(ip) - 1; j >= 0; j-- {
-		ip[j]++
-		if ip[j] != 0 {
-			break
-		}
-	}
-}
-
-// isNetworkOrBroadcast checks if an IP is a network or broadcast address.
-func isNetworkOrBroadcast(ip net.IP, ipNet *net.IPNet) bool {
-	if ip.Equal(ipNet.IP) {
-		return true // Network address
-	}
-
-	broadcast := make(net.IP, len(ip))
-	copy(broadcast, ipNet.IP)
-	for i := range broadcast {
-		broadcast[i] |= ^ipNet.Mask[i]
-	}
-
-	if ip.Equal(broadcast) {
-		return true // Broadcast address
-	}
-
-	return false
 }

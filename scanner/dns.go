@@ -5,26 +5,25 @@ import (
 	"fmt"
 	"net"
 	"time"
-
-	"golang.org/x/net/proxy"
 )
 
 type Resolver struct {
 	resolver *net.Resolver
 }
 
-// NewResolver creates a DNS resolver that uses a specified protocol with optional proxy support
-func NewResolver(protocol string, resolverIP net.IP, timeout time.Duration, proxyDialer proxy.Dialer) *Resolver {
+// NewResolver creates a DNS resolver that queries resolverIP over the given
+// protocol. When the dialer goes through a SOCKS proxy, queries are tunnelled
+// through it (use "tcp"); otherwise they are sent directly.
+func NewResolver(protocol string, resolverIP net.IP, timeout time.Duration, dialer *Dialer) *Resolver {
+	server := net.JoinHostPort(resolverIP.String(), "53")
 	r := &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-			// If proxyDialer is provided, use it
-			if proxyDialer != nil {
-				return proxyDialer.Dial(protocol, net.JoinHostPort(resolverIP.String(), "53"))
+			if dialer.Proxied() {
+				return dialer.DialContext(ctx, protocol, server)
 			}
-			// Otherwise fall back to direct net.Dialer
 			d := net.Dialer{Timeout: timeout}
-			return d.DialContext(ctx, protocol, net.JoinHostPort(resolverIP.String(), "53"))
+			return d.DialContext(ctx, protocol, server)
 		},
 	}
 
@@ -32,8 +31,8 @@ func NewResolver(protocol string, resolverIP net.IP, timeout time.Duration, prox
 }
 
 // LookupHost resolves a hostname to its first valid IP
-func (r *Resolver) LookupHost(host string) (net.IP, error) {
-	ips, err := r.resolver.LookupHost(context.Background(), host)
+func (r *Resolver) LookupHost(ctx context.Context, host string) (net.IP, error) {
+	ips, err := r.resolver.LookupHost(ctx, host)
 	if err != nil {
 		return nil, err
 	}

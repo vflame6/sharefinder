@@ -31,6 +31,7 @@ type Host struct {
 	Hostname string    `xml:"hostname,attr"`
 	Domain   string    `xml:"domain,attr"`
 	Signing  bool      `xml:"signing,attr"`
+	Session  string    `xml:"session,attr,omitempty"`
 	Admin    *bool     `xml:"admin,attr,omitempty"`
 	Shares   []Share   `xml:"share"`
 }
@@ -98,6 +99,9 @@ type Share struct {
 	Description     string      `xml:"description,attr"`
 	ReadPermission  bool        `xml:"read_permission,attr"`
 	WritePermission bool        `xml:"write_permission,attr"`
+	Truncated       bool        `xml:"truncated,attr,omitempty"`
+	WriteAccess     string      `xml:"write_access,attr,omitempty"`
+	TypeID          uint32      `xml:"-"`
 	Directories     []Directory `xml:"directory"`
 	Files           []File      `xml:"file"`
 }

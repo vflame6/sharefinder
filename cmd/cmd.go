@@ -1,50 +1,90 @@
 package cmd
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"net"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/vflame6/sharefinder/logger"
 	"github.com/vflame6/sharefinder/scanner"
 	"github.com/vflame6/sharefinder/utils"
-	"golang.org/x/net/proxy"
-	"net"
-	"net/url"
-	"os"
-	"strings"
-	"sync"
-	"time"
 )
 
-func CreateScanner(version string, commandLine []string, timeStart time.Time, outputRaw, outputXML, outputAll string, outputHTML bool, threads int, timeout time.Duration, exclude string, list, recurse bool, smbPort int, proxyStr string) (*scanner.Scanner, error) {
+// CreateScanner validates the global options, opens the requested output
+// files and returns a scanner without credentials; commands add those.
+func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 	var outputRawFileName string
 	var outputXMLFileName string
 	var outputHTMLFileName string
-	var outputWriter *scanner.OutputWriter
 	var file *os.File
 	var fileXML *os.File
 	var err error
-	var proxyDialer proxy.Dialer
+
+	outputHTML := cfg.OutputHTML
 
 	// HTML output is available only if basic output is specified
 	// it is done like that because HTML file is generated based on generated XML
-	if outputHTML && outputXML == "" {
+	if outputHTML && cfg.OutputXML == "" {
 		return nil, errors.New("cannot use --html without --output-xml")
 	}
 
-	if (outputXML != "" || outputRaw != "" || outputHTML) && outputAll != "" {
+	if (cfg.OutputXML != "" || cfg.OutputRaw != "" || outputHTML) && cfg.OutputAll != "" {
 		return nil, errors.New("cannot use --output-all with --output-raw, --output-xml or --html")
 	}
 
 	// recursive output is available only if the list option is specified
 	// it is done like that just to make the execution clear and avoid user mistakes
-	if recurse && !list {
+	if cfg.Recurse && !cfg.List {
 		return nil, errors.New("cannot use --recurse without --list")
 	}
 
-	outputWriter = scanner.NewOutputWriter()
-	if outputRaw != "" {
-		// trim suffix of output filename if it matches with txt/xml/html
-		outputRawFileName = outputRaw + ".txt"
+	if cfg.Timeout <= 0 {
+		return nil, errors.New("--timeout must be greater than 0")
+	}
+	if cfg.IOTimeout < 0 {
+		return nil, errors.New("--io-timeout must be 0 (no limit) or more")
+	}
+	if cfg.MaxAuthFailures < 0 {
+		return nil, errors.New("--max-auth-failures must be 0 (no limit) or more")
+	}
+	if cfg.Depth < 0 {
+		return nil, errors.New("--depth must be 0 (share root only) or more")
+	}
+	if cfg.MaxFiles < 0 {
+		return nil, errors.New("--max-files must be 0 (no limit) or more")
+	}
+
+	writeCheck, err := scanner.ParseWriteCheckMode(cfg.WriteCheck)
+	if err != nil {
+		return nil, err
+	}
+
+	// every SMB, LDAP and proxied DNS connection goes through this dialer: it
+	// applies the connect and I/O timeouts and can close everything on Ctrl+C
+	dialer, err := scanner.NewDialer(cfg.Proxy, cfg.Timeout, cfg.IOTimeout)
+	if err != nil {
+		return nil, err
+	}
+
+	// scope control: these targets are never scanned, also when a hostname
+	// or a hunt result resolves into them
+	var excludeHosts *scanner.TargetSet
+	if cfg.ExcludeHosts != "" {
+		excludeHosts, err = scanner.ParseExcludeSpec(cfg.ExcludeHosts)
+		if err != nil {
+			return nil, fmt.Errorf("--exclude-hosts: %w", err)
+		}
+		excludeHostsSummary(excludeHosts, dialer, cfg.Timeout)
+	}
+
+	outputWriter := scanner.NewOutputWriter()
+	if cfg.OutputRaw != "" {
+		outputRawFileName = cfg.OutputRaw + ".txt"
 		logger.Debugf("Output in Raw format option is specified. Output file name: %s", outputRawFileName)
 
 		// create raw text output file
@@ -54,9 +94,8 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 		}
 	}
 
-	if outputXML != "" {
-		// trim suffix of output filename if it matches with txt/xml/html
-		outputXMLFileName = outputXML + ".xml"
+	if cfg.OutputXML != "" {
+		outputXMLFileName = cfg.OutputXML + ".xml"
 		logger.Debugf("Output in XML format option is specified. Output file name: %s", outputXMLFileName)
 
 		// create XML output file and write an XML header line to it
@@ -64,25 +103,24 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 		if err != nil {
 			return nil, err
 		}
-		err = outputWriter.WriteXMLHeader(version, commandLine, timeStart, fileXML)
+		err = outputWriter.WriteXMLHeader(cfg.Version, cfg.CommandLine, cfg.TimeStart, fileXML)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	if outputHTML {
-		outputHTMLFileName = outputXML + ".html"
+		outputHTMLFileName = cfg.OutputXML + ".html"
 	}
 
-	if outputAll != "" {
-		logger.Debugf("Output all formats option is specified. Output file name: %s", outputAll)
+	if cfg.OutputAll != "" {
+		logger.Debugf("Output all formats option is specified. Output file name: %s", cfg.OutputAll)
 
 		// set HTML output variable to true in case of --output-all
 		outputHTML = true
-		outputHTMLFileName = outputAll + ".html"
+		outputHTMLFileName = cfg.OutputAll + ".html"
 
-		// trim suffix of output filename if it matches with txt/xml/html
-		outputRawFileName = outputAll + ".txt"
+		outputRawFileName = cfg.OutputAll + ".txt"
 
 		// create raw text output file
 		file, err = outputWriter.CreateFile(outputRawFileName, false)
@@ -90,48 +128,42 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 			return nil, err
 		}
 
-		outputXMLFileName = outputAll + ".xml"
+		outputXMLFileName = cfg.OutputAll + ".xml"
 		// create XML output file and write an XML header line to it
 		fileXML, err = outputWriter.CreateFile(outputXMLFileName, false)
 		if err != nil {
 			return nil, err
 		}
-		err = outputWriter.WriteXMLHeader(version, commandLine, timeStart, fileXML)
+		err = outputWriter.WriteXMLHeader(cfg.Version, cfg.CommandLine, cfg.TimeStart, fileXML)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	// excludeList is created from string of words divided by ","
-	excludeList := strings.Split(exclude, ",")
-
-	// parse proxyStr string in a format IP:PORT
-	if proxyStr != "" {
-		proxyURL, err := url.Parse("socks5://" + proxyStr)
-		if err != nil {
-			return nil, errors.New("invalid proxy setting, try IP:PORT")
-		}
-		proxyDialer, err = proxy.SOCKS5("tcp", proxyURL.Host, nil, proxy.Direct)
-		if err != nil {
-			return nil, errors.New("invalid proxy setting, try IP:PORT")
-		}
-	} else {
-		proxyDialer = nil
-	}
+	excludeList := strings.Split(cfg.Exclude, ",")
 
 	// scanner options are created without credentials just to specify global flags
 	// the credentials will be specified on execution of authenticated modules
 	options := &scanner.Options{
 		DCHostname:         "",
+		Dialer:             dialer,
 		Domain:             "",
 		DomainController:   net.IPv4zero,
 		Exclude:            excludeList,
+		ExcludeHosts:       excludeHosts,
+		AuthGuard:          scanner.NewAuthGuard(cfg.MaxAuthFailures),
+		WriteCheck:         writeCheck,
+		Depth:              cfg.Depth,
+		FollowLinks:        cfg.FollowLinks,
+		MaxFiles:           cfg.MaxFiles,
 		FileTXT:            file,
 		FileXML:            fileXML,
 		Hash:               "",
 		HashBytes:          []byte{},
+		IOTimeout:          cfg.IOTimeout,
 		Kerberos:           false,
-		List:               list,
+		List:               cfg.List,
 		LocalAuth:          false,
 		NullSession:        false,
 		OutputHTML:         outputHTML,
@@ -139,42 +171,90 @@ func CreateScanner(version string, commandLine []string, timeStart time.Time, ou
 		OutputRawFileName:  outputRawFileName,
 		OutputXMLFileName:  outputXMLFileName,
 		Password:           "",
-		ProxyDialer:        proxyDialer,
-		Recurse:            recurse,
-		SmbPort:            smbPort,
-		Target:             make(chan scanner.DNHost, 256),
-		Timeout:            timeout,
+		Recurse:            cfg.Recurse,
+		SmbPort:            cfg.SmbPort,
+		Timeout:            cfg.Timeout,
 		Username:           "",
 		Writer:             outputWriter,
 	}
 
 	// create and return a scanner object
-	s := scanner.NewScanner(options, commandLine, timeStart, threads)
+	s := scanner.NewScanner(options, cfg.CommandLine, cfg.TimeStart, cfg.Threads)
 	return s, nil
 }
 
-func ExecuteNull(s *scanner.Scanner, target string) error {
+// runScan enumerates the hosts produce sends and logs how the module ended.
+func runScan(ctx context.Context, s *scanner.Scanner, module string, produce scanner.Producer) error {
+	err := s.Run(ctx, produce)
+	s.TimeEnd = time.Now()
+	if ctx.Err() != nil || err != nil {
+		logger.Warnf("Stopped %s module at %s", module, s.TimeEnd.Format("02/01/2006 15:04:05"))
+		return err
+	}
+	logger.Warnf("Finished executing %s module at %s", module, s.TimeEnd.Format("02/01/2006 15:04:05"))
+	return err
+}
+
+// excludeHostsSummary resolves excluded hostnames, so that they also exclude
+// targets given as IP addresses, and reports what is excluded.
+func excludeHostsSummary(ex *scanner.TargetSet, dialer *scanner.Dialer, timeout time.Duration) {
+	if dialer.Proxied() {
+		if _, names := ex.Counts(); names > 0 {
+			logger.Warn("--exclude-hosts: with --proxy, excluded hostnames are matched by name only; exclude their IP addresses too")
+		}
+	} else {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		unresolved := ex.ResolveNames(ctx, scanner.SystemLookup)
+		cancel()
+		for _, name := range unresolved {
+			logger.Warnf("--exclude-hosts: cannot resolve %s; it is excluded by name only", name)
+		}
+	}
+	addrs, names := ex.Counts()
+	logger.Warnf("Excluding %d addresses and %d hostnames (--exclude-hosts)", addrs, names)
+}
+
+// loadTargets parses the target argument, removes --exclude-hosts and returns
+// a producer for what is left.
+func loadTargets(s *scanner.Scanner, target string) (scanner.Producer, error) {
+	set, err := scanner.ParseTargetSpec(target)
+	if err != nil {
+		return nil, err
+	}
+	total := set.Len()
+	if ex := s.Options.ExcludeHosts; ex != nil && s.Options.Dialer.Proxied() {
+		_, targetNames := set.Counts()
+		if exAddrs, _ := ex.Counts(); targetNames > 0 && exAddrs > 0 {
+			logger.Warn("--proxy resolves hostname targets remotely, so excluded addresses cannot be checked against them; exclude those hostnames by name")
+		}
+	}
+	set.Subtract(s.Options.ExcludeHosts)
+	if set.Len() == 0 {
+		return nil, errors.New("no targets left after --exclude-hosts")
+	}
+	if excluded := total - set.Len(); excluded > 0 {
+		logger.Warnf("Loaded %d targets (%d excluded by --exclude-hosts)", set.Len(), excluded)
+	} else {
+		logger.Debugf("Loaded %d targets", set.Len())
+	}
+	return scanner.TargetsProducer(set), nil
+}
+
+func ExecuteNull(ctx context.Context, s *scanner.Scanner, target string) error {
 	logger.Warn("Executing null module")
 
 	// configure options to use null session
 	s.Options.NullSession = true
+	s.Options.Mode = scanner.AuthNull
 
-	var wg sync.WaitGroup
-	s.RunSMBEnumeration(&wg)
-	err := s.ParseTargets(target)
+	produce, err := loadTargets(s, target)
 	if err != nil {
 		return err
 	}
-	wg.Wait()
-
-	// finish the execution
-	s.TimeEnd = time.Now()
-	logger.Warnf("Finished executing null module at %s", s.TimeEnd.Format("02/01/2006 15:04:05"))
-	s.CloseOutputter()
-	return nil
+	return runScan(ctx, s, "null", produce)
 }
 
-func ExecuteGuest(s *scanner.Scanner, target, username string) error {
+func ExecuteGuest(ctx context.Context, s *scanner.Scanner, target, username string) error {
 	logger.Warn("Executing guest module")
 
 	if username != "" {
@@ -185,23 +265,16 @@ func ExecuteGuest(s *scanner.Scanner, target, username string) error {
 		s.Options.Username = "anonymous_" + utils.RandSeq(8)
 	}
 	logger.Warnf("Using username for Guest access: %s", s.Options.Username)
+	s.Options.Mode = scanner.AuthGuest
 
-	var wg sync.WaitGroup
-	s.RunSMBEnumeration(&wg)
-	err := s.ParseTargets(target)
+	produce, err := loadTargets(s, target)
 	if err != nil {
 		return err
 	}
-	wg.Wait()
-
-	// finish the execution
-	s.TimeEnd = time.Now()
-	logger.Warnf("Finished executing anon module at %s", s.TimeEnd.Format("02/01/2006 15:04:05"))
-	s.CloseOutputter()
-	return nil
+	return runScan(ctx, s, "guest", produce)
 }
 
-func ExecuteAuth(s *scanner.Scanner, target, username, password, hash string, localAuth, kerberos bool, dcHostname string, dcIP net.IP) error {
+func ExecuteAuth(ctx context.Context, s *scanner.Scanner, target, username, password, hash string, localAuth, kerberos bool, dcHostname string, dcIP net.IP) error {
 	var targetDomain string
 	var targetUsername string
 	var err error
@@ -253,25 +326,14 @@ func ExecuteAuth(s *scanner.Scanner, target, username, password, hash string, lo
 		s.Options.DomainController = dcIP
 	}
 
-	var wg sync.WaitGroup
-
-	// run the enumeration threads
-	s.RunSMBEnumeration(&wg)
-	// parse targets and send them to targets channel
-	err = s.ParseTargets(target)
+	produce, err := loadTargets(s, target)
 	if err != nil {
 		return err
 	}
-	wg.Wait()
-
-	// finish the execution
-	s.TimeEnd = time.Now()
-	logger.Warnf("Finished executing auth module at %s", s.TimeEnd.Format("02/01/2006 15:04:05"))
-	s.CloseOutputter()
-	return nil
+	return runScan(ctx, s, "auth", produce)
 }
 
-func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolver net.IP, forest, kerberos bool, dcHostname string) error {
+func ExecuteHunt(ctx context.Context, s *scanner.Scanner, username, password, hash string, dc, resolver net.IP, forest, kerberos bool, dcHostname string, allowPlaintextLDAP bool) error {
 	var targetDomain string
 	var targetUsername string
 	var err error
@@ -317,8 +379,7 @@ func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolv
 	s.Options.DCHostname = dcHostname
 	s.Options.CustomResolver = resolver
 	s.Options.Forest = forest
-
-	var wg sync.WaitGroup
+	s.Options.AllowPlaintextLDAP = allowPlaintextLDAP
 
 	if s.Options.Forest {
 		logger.Warnf("Starting forest-wide enumeration from %s", s.Options.Domain)
@@ -327,22 +388,12 @@ func ExecuteHunt(s *scanner.Scanner, username, password, hash string, dc, resolv
 	}
 
 	// enumerate possible targets via domain controller
-	possibleTargets, err := s.RunEnumerateDomainComputers()
+	possibleTargets, err := s.RunEnumerateDomainComputers(ctx)
 	if err != nil {
 		return err
 	}
 
 	logger.Warnf("Found %d domain computers. Starting SMB shares enumeration...", len(possibleTargets))
 
-	// check for shares and permissions on identified targets
-	s.RunSMBEnumeration(&wg)
-	// send identified targets for processing channel
-	s.ParseTargetsInMemory(possibleTargets)
-	wg.Wait()
-
-	// finish the execution
-	s.TimeEnd = time.Now()
-	logger.Warnf("Finished executing hunt module at %s", s.TimeEnd.Format("02/01/2006 15:04:05"))
-	s.CloseOutputter()
-	return nil
+	return runScan(ctx, s, "hunt", scanner.TargetsFromList(possibleTargets))
 }

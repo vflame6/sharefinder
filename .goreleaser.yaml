@@ -1,3 +1,48 @@
+version: 2
+
+project_name: sharefinder
+
 builds:
-  - ldflags:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - "386"
+      - amd64
+      - arm64
+    ignore:
+      - goos: darwin
+        goarch: "386"
+    flags:
+      - -trimpath
+    ldflags:
       - -s -w -X github.com/vflame6/sharefinder/cmd.VERSION={{.Tag}}
+
+# Archive and checksum names stay as in earlier releases
+# (sharefinder_<version>_<os>_<arch>.tar.gz, sharefinder_<version>_checksums.txt)
+# so download scripts keep working.
+archives:
+  - formats: [tar.gz]
+
+# Release notes are written by hand in CHANGELOG.md and passed with
+# --release-notes by the release workflow.
+changelog:
+  disable: true
+
+dockers_v2:
+  - images:
+      - ghcr.io/vflame6/sharefinder
+    tags:
+      - "{{ .Version }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    dockerfile: Dockerfile.release
+    labels:
+      org.opencontainers.image.source: https://github.com/vflame6/sharefinder
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.licenses: MIT

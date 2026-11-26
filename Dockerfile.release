@@ -1,0 +1,10 @@
+# Image published by GoReleaser (dockers_v2): it copies the binary GoReleaser
+# already built for the target platform. Use Dockerfile to build from source.
+FROM alpine:latest
+RUN apk upgrade --no-cache \
+    && apk add --no-cache bind-tools ca-certificates
+RUN adduser -D -u 1000 -s /sbin/nologin app
+ARG TARGETPLATFORM
+COPY $TARGETPLATFORM/sharefinder /usr/local/bin/sharefinder
+USER app
+ENTRYPOINT ["sharefinder"]

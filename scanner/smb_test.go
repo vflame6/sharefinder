@@ -1,9 +1,38 @@
 package scanner
 
 import (
+	"context"
 	"errors"
+	"net"
+	"strconv"
 	"testing"
+	"time"
 )
+
+func TestNewSMBConnection_SilentHostTimesOut(t *testing.T) {
+	addr := silentListener(t)
+	_, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, _ := strconv.Atoi(portStr)
+
+	d, err := NewDialer("", time.Second, 500*time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := &Options{Dialer: d, SmbPort: port, NullSession: true, Timeout: time.Second}
+
+	start := time.Now()
+	conn, err := NewSMBConnection(context.Background(), DNHost{IP: net.ParseIP("127.0.0.1")}, o)
+	if err == nil {
+		conn.Close()
+		t.Fatal("expected an error from a host that never replies")
+	}
+	if elapsed := time.Since(start); elapsed > 3*time.Second {
+		t.Fatalf("NewSMBConnection returned after %v, want under 3s", elapsed)
+	}
+}
 
 func TestIsExpectedSMBWriteDeniedError(t *testing.T) {
 	tests := []struct {

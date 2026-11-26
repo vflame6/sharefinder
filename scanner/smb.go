@@ -1,7 +1,12 @@
 package scanner
 
 import (
+	"context"
 	"fmt"
+	"net"
+	"strings"
+	"time"
+
 	"github.com/jfjallid/go-smb/dcerpc"
 	"github.com/jfjallid/go-smb/dcerpc/msrrp"
 	"github.com/jfjallid/go-smb/dcerpc/msscmr"
@@ -10,17 +15,13 @@ import (
 	"github.com/jfjallid/go-smb/smb"
 	"github.com/jfjallid/go-smb/spnego"
 	"github.com/vflame6/sharefinder/logger"
-	"github.com/vflame6/sharefinder/utils"
-	"golang.org/x/net/proxy"
-	"io"
-	"net"
-	"strings"
-	"time"
 )
 
 type Connection struct {
 	host    string
 	session *smb.Connection
+	// SessionType is "user", "guest" or "null": what the server granted.
+	SessionType string
 }
 
 func logCloseError(action string, err error) {
@@ -29,71 +30,105 @@ func logCloseError(action string, err error) {
 	}
 }
 
-func NewSMBConnection(host DNHost, username, password string, hashes []byte, kerberos, localAuth bool, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer, dcIP net.IP, nullSession bool, dcHostname string) (*Connection, error) {
-	options := GetSMBOptions(host, username, password, hashes, kerberos, localAuth, domain, timeout, smbPort, proxyDialer, dcIP, nullSession, dcHostname)
+// NewSMBConnection dials host through o.Dialer, negotiates SMB and
+// authenticates with the credentials in o. With real credentials the session
+// setup, the only step that sends them, runs under o.AuthGuard so a wrong
+// password cannot reach every target. Errors are *StageError values.
+func NewSMBConnection(ctx context.Context, host DNHost, o *Options) (*Connection, error) {
+	options := GetSMBOptions(ctx, host, o)
+	options.ManualLogin = true
 
-	// establish the connection
-	session, err := smb.NewConnection(options)
+	// dial and negotiate; no credentials are sent yet
+	negotiate := func() (sessionConn, error) {
+		session, err := smb.NewConnection(options)
+		if err != nil {
+			if session != nil {
+				// go-smb hands back a half-open connection on error
+				session.Close()
+			}
+			return nil, err
+		}
+		return smbSession{session}, nil
+	}
+	first, err := negotiate()
 	if err != nil {
+		return nil, &StageError{Stage: StageConnect, Host: host.Address(), Err: err}
+	}
+
+	// a connection that waits at the auth guard for half the I/O timeout may
+	// be closed by its read deadline: negotiate again before logging on
+	session := &freshSession{conn: first, ready: time.Now(), maxIdle: o.IOTimeout / 2, redial: negotiate, host: host.Address()}
+	sessionType, err := establishSession(ctx, session, o.Mode, o.AuthGuard, host.Address(), accountScope{Domain: o.Domain, LocalAuth: o.LocalAuth})
+	if err != nil {
+		session.Close()
 		return nil, err
 	}
+
 	conn := &Connection{
-		host:    host.IP.String(),
-		session: session,
+		host:        host.Address(),
+		session:     session.conn.(smbSession).Connection,
+		SessionType: sessionType,
 	}
 	return conn, nil
 }
 
-func GetSMBOptions(host DNHost, username, password string, hashes []byte, kerberos, localAuth bool, domain string, timeout time.Duration, smbPort int, proxyDialer proxy.Dialer, dcIP net.IP, nullSession bool, dcHostname string) smb.Options {
+// GetSMBOptions builds the go-smb options for host from the scanner options.
+// Every connection goes through o.Dialer so that it carries the I/O timeout
+// and can be closed when the scan is cancelled.
+func GetSMBOptions(ctx context.Context, host DNHost, o *Options) smb.Options {
 	smbOptions := smb.Options{
-		Host:                  host.IP.String(),
-		Port:                  smbPort,
+		Host:                  host.Address(),
+		Port:                  o.SmbPort,
 		RequireMessageSigning: false,
 		ForceSMB2:             false,
-		DialTimeout:           timeout,
-		ProxyDialer:           proxyDialer,
+		DialTimeout:           o.Timeout,
+		ProxyDialer:           o.Dialer,
 	}
 
-	if kerberos {
+	if o.Kerberos {
 		hostname := host.Hostname
 		if hostname == "" {
 			// Kerberos requires a hostname for SPN — attempt reverse DNS lookup
-			names, err := net.LookupAddr(host.IP.String())
+			names, err := net.DefaultResolver.LookupAddr(ctx, host.Address())
 			if err == nil && len(names) > 0 {
 				hostname = strings.TrimSuffix(names[0], ".")
-				logger.Debugf("Resolved %s to %s for Kerberos SPN", host.IP.String(), hostname)
-			} else if dcHostname != "" && domain != "" {
+				logger.Debugf("Resolved %s to %s for Kerberos SPN", host.Address(), hostname)
+			} else if o.DCHostname != "" && o.Domain != "" {
 				// construct FQDN from dc-hostname + domain when target is the DC itself
-				hostname = dcHostname + "." + domain
+				hostname = o.DCHostname + "." + o.Domain
 				logger.Debugf("Using DC hostname for SPN: %s", hostname)
 			} else {
-				logger.Warnf("Kerberos requires a hostname for SPN but target %s has no hostname — use hunt command or specify target as hostname", host.IP.String())
+				logger.Warnf("Kerberos requires a hostname for SPN but target %s has no hostname — use hunt command or specify target as hostname", host.Address())
 			}
 		}
 		var dcIPStr string
-		if dcIP != nil && !dcIP.Equal(net.IPv4zero) {
-			dcIPStr = dcIP.String()
+		if o.DomainController != nil && !o.DomainController.Equal(net.IPv4zero) {
+			dcIPStr = o.DomainController.String()
 		}
-		smbOptions.Initiator = &spnego.KRB5Initiator{
-			Domain:      domain,
-			User:        username,
-			Password:    password,
-			Hash:        hashes,
+		initiator := &spnego.KRB5Initiator{
+			Domain:      o.Domain,
+			User:        o.Username,
+			Password:    o.Password,
+			Hash:        o.HashBytes,
 			AESKey:      nil,
 			SPN:         "cifs/" + hostname,
 			DCIP:        dcIPStr,
-			DialTimeout: timeout,
-			ProxyDialer: proxyDialer,
+			DialTimeout: o.Timeout,
 			Host:        hostname,
 		}
+		// The KDC is reached through the SOCKS proxy only when one is set.
+		if o.Dialer.Proxied() {
+			initiator.ProxyDialer = o.Dialer
+		}
+		smbOptions.Initiator = initiator
 	} else {
 		smbOptions.Initiator = &spnego.NTLMInitiator{
-			Domain:      domain,
-			User:        username,
-			Password:    password,
-			Hash:        hashes,
-			LocalUser:   localAuth,
-			NullSession: nullSession,
+			Domain:      o.Domain,
+			User:        o.Username,
+			Password:    o.Password,
+			Hash:        o.HashBytes,
+			LocalUser:   o.LocalAuth,
+			NullSession: o.NullSession,
 		}
 	}
 
@@ -292,40 +327,6 @@ func (conn *Connection) CheckReadAccess(share string) error {
 	return err
 }
 
-func (conn *Connection) CheckWriteAccess(share string) bool {
-	if err := conn.session.TreeConnect(share); err != nil {
-		return false
-	}
-	defer func() {
-		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
-	}()
-
-	tempFile := utils.RandSeq(16) + ".txt"
-	tempData := utils.RandSeq(32)
-	dataSent := false
-	err := conn.session.PutFile(share, tempFile, 0, func(buffer []byte) (int, error) {
-		if dataSent {
-			return 0, io.EOF
-		}
-		copy(buffer, tempData)
-		dataSent = true
-		return len(tempData), nil
-	})
-	if err == nil {
-		if delErr := conn.session.DeleteFile(share, tempFile); delErr != nil {
-			logger.Error(fmt.Errorf("failed to delete created file %s on share %s\\%s: %w", tempFile, conn.host, share, delErr))
-		}
-		return true
-	}
-	if isExpectedSMBWriteDeniedError(err) {
-		logger.Debugf("write probe denied on share %s\\%s: %v", conn.host, share, err)
-	} else {
-		logger.Debugf("write probe failed on share %s\\%s: %v", conn.host, share, err)
-	}
-
-	return false
-}
-
 func isExpectedSMBWriteDeniedError(err error) bool {
 	if err == nil {
 		return false
@@ -339,95 +340,16 @@ func isExpectedSMBWriteDeniedError(err error) bool {
 		strings.Contains(msg, "access denied")
 }
 
-func (conn *Connection) ListShare(share string) ([]smb.SharedFile, error) {
-	// Connect to share
-	err := conn.session.TreeConnect(share)
-	if err != nil {
-		return nil, err
+// WalkShare connects to share and lists it within lim; see walkShare.
+func (conn *Connection) WalkShare(ctx context.Context, share string, lim ListLimits, recurse bool,
+	emit func(dir smb.SharedFile, depth int, entries []smb.SharedFile),
+	onErr func(dir string, err error)) (walkStats, error) {
+
+	if err := conn.session.TreeConnect(share); err != nil {
+		return walkStats{}, err
 	}
 	defer func() {
 		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
 	}()
-
-	files, err := conn.session.ListDirectory(share, "", "")
-	if err != nil {
-		return nil, err
-	}
-	return files, nil
-}
-
-func (conn *Connection) ListDirectoryRecursively(share string, dir smb.SharedFile) ([]Directory, error) {
-	err := conn.session.TreeConnect(share)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
-	}()
-
-	return conn.listDirectoryRecursivelyInternal(share, dir)
-}
-
-func (conn *Connection) listDirectoryRecursivelyInternal(share string, dir smb.SharedFile) ([]Directory, error) {
-	var result []Directory
-	var currentFiles []File
-
-	lastWriteTime := utils.ConvertToUnixTimestamp(dir.LastWriteTime)
-	currentDir := NewDirectory(
-		dir.FullPath,
-		dir.Size,
-		lastWriteTime,
-		currentFiles,
-	)
-
-	// process current directory
-	files, err := conn.session.ListDirectory(share, dir.FullPath, "*")
-	if err != nil {
-		return nil, err
-	}
-
-	// loop over all files 2 times to process directories at first
-	// it is done like that to make directories in the top of the output
-	for _, file := range files {
-		if file.IsDir {
-			lastWriteTime = utils.ConvertToUnixTimestamp(file.LastWriteTime)
-
-			fileType := "dir"
-			singleFile := NewFile(fileType, file.Name, utils.GetFilePath(file.FullPath), file.Size, lastWriteTime)
-			currentDir.Files = append(currentDir.Files, *singleFile)
-		} else {
-			continue
-		}
-	}
-	// process files
-	for _, file := range files {
-		if !file.IsDir {
-			lastWriteTime = utils.ConvertToUnixTimestamp(file.LastWriteTime)
-			fileType := "file"
-			if file.IsJunction {
-				fileType = "link"
-			}
-			singleFile := NewFile(fileType, file.Name, utils.GetFilePath(file.FullPath), file.Size, lastWriteTime)
-			currentDir.Files = append(currentDir.Files, *singleFile)
-		} else {
-			continue
-		}
-	}
-
-	result = append(result, *currentDir)
-
-	// loop over all files to list all nested directories recursively
-	for _, file := range files {
-		if file.IsDir {
-			recurseDirectory, err := conn.listDirectoryRecursivelyInternal(share, file)
-			if err != nil {
-				logger.Error(fmt.Errorf("failed to list directory %s\\%s\\%s: %w", conn.host, share, file.Name, err))
-			}
-			result = append(result, recurseDirectory...)
-		} else {
-			continue
-		}
-	}
-
-	return result, nil
+	return walkShare(ctx, conn.session, share, lim, recurse, emit, onErr)
 }
