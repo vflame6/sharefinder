@@ -244,7 +244,7 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		WriteCheck:         writeCheck,
 		Depth:              cfg.Depth,
 		Discovery:          discovery,
-		FollowLinks:        cfg.FollowLinks,
+		FollowLinks:        !cfg.DisableFollowLinks,
 		MaxFiles:           cfg.MaxFiles,
 		MaxConnsPerHost:    cfg.MaxConnsPerHost,
 		FileTXT:            file,

@@ -29,6 +29,9 @@ type ScanRecord struct {
 	Version  string    `json:"version,omitempty"`
 	Command  string    `json:"command,omitempty"`
 	Identity string    `json:"identity"`
+	// FollowLinks says --recurse descended into symlinks and junctions;
+	// scans before it was recorded did only with --follow-links
+	FollowLinks bool `json:"follow_links,omitempty"`
 }
 
 // HostRecord describes a host that accepted the scan's identity.

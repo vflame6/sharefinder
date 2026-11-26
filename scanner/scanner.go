@@ -86,11 +86,12 @@ func (s *Scanner) StartOutputs() {
 		sinks = append(sinks, ResumeJSONLSink(o.FileJSON, o.Resume, o.Identity()))
 	} else if o.FileJSON != nil {
 		sinks = append(sinks, NewJSONLSink(o.FileJSON, ScanRecord{
-			ScanID:   NewScanID(),
-			Time:     s.TimeStart,
-			Version:  s.Version,
-			Command:  strings.Join(MaskCredentials(s.CommandLine), " "),
-			Identity: o.Identity(),
+			ScanID:      NewScanID(),
+			Time:        s.TimeStart,
+			Version:     s.Version,
+			Command:     strings.Join(MaskCredentials(s.CommandLine), " "),
+			Identity:    o.Identity(),
+			FollowLinks: o.FollowLinks,
 		}))
 	}
 	if o.FileCSV != nil {

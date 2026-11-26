@@ -97,8 +97,9 @@ Flags:
       --[no-]recurse           List readable shares recursively
       --depth=5                Maximum directory depth below the share root for
                                --recurse (0 lists the root only)
-      --[no-]follow-links      Descend into directory symlinks and junctions
-                               during --recurse
+      --[no-]disable-follow-links
+                               Do not descend into directory symlinks and
+                               junctions during --recurse
       --max-files=0            Stop listing a share after this many entries (0 =
                                no limit)
       --max-conns-per-host=2   Connections that list the shares of one host in
@@ -243,8 +244,10 @@ without their operating system, and `--active-within` does not filter them.
   with write access rights and leaves nothing behind; `--write-check off` skips
   the check.
 - **Recursion:** `--recurse` stops 5 levels below the share root (`--depth`),
-  does not follow directory symlinks or junctions (`--follow-links`) and can be
-  capped per share with `--max-files`.
+  which also bounds a junction that points back up the tree, and can be capped
+  per share with `--max-files`. It descends into directory symlinks and
+  junctions, such as the domain folder in SYSVOL; `--disable-follow-links`
+  skips them.
 - **Hung hosts and Ctrl+C:** every read and write is bounded by `--io-timeout`.
   Ctrl+C stops the scan within seconds and still writes the partial results;
   a second Ctrl+C exits at once.

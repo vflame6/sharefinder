@@ -36,12 +36,12 @@ type Config struct {
 	MaxAuthFailures int    // --max-auth-failures
 	WriteCheck      string // --write-check
 
-	Exclude         string // --exclude
-	ExcludeHosts    string // --exclude-hosts
-	List            bool   // --list
-	Recurse         bool   // --recurse
-	Depth           int    // --depth
-	FollowLinks     bool   // --follow-links
-	MaxFiles        int    // --max-files
-	MaxConnsPerHost int    // --max-conns-per-host
+	Exclude            string // --exclude
+	ExcludeHosts       string // --exclude-hosts
+	List               bool   // --list
+	Recurse            bool   // --recurse
+	Depth              int    // --depth
+	DisableFollowLinks bool   // --disable-follow-links: do not descend into symlinks and junctions
+	MaxFiles           int    // --max-files
+	MaxConnsPerHost    int    // --max-conns-per-host
 }

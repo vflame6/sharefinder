@@ -26,7 +26,7 @@ type Options struct {
 	FileUNC            *os.File // --output-unc
 	FileRelay          *os.File // --output-relay-list
 	FileXML            *os.File
-	FollowLinks        bool          // --follow-links
+	FollowLinks        bool          // unless --disable-follow-links
 	Forest             bool          // --forest (hunt only)
 	IncludeDisabled    bool          // --include-disabled (hunt)
 	ActiveWithin       time.Duration // --active-within (hunt): computers that logged on within

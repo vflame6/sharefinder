@@ -155,9 +155,10 @@
     var listingLimit = 5000;
     var smallScan = files.length <= 2000;
     var hostsOpen = hosts.length <= 50;
-    // --recurse lists symlinks and junctions (type link) without descending
-    // into them unless --follow-links: SYSVOL's domain folder is one
-    var linksFollowed = /(^|\s)--follow-links(\s|=|$)/.test(summary.command || '');
+    // --recurse descends into symlinks and junctions (type link), such as
+    // SYSVOL's domain folder, unless --disable-follow-links; the scan record
+    // says so, and scans before it did only with --follow-links
+    var linksFollowed = summary.follow_links === true || /(^|\s)--follow-links(\s|=|$)/.test(summary.command || '');
 
     function el(tag, className, value) {
         var node = document.createElement(tag);
@@ -274,7 +275,7 @@
             return r[6] === 'link';
         })) {
             container.appendChild(el('p', 'text-muted small', 'Links and junctions (type link) were not followed: ' +
-                'scan with --follow-links to list what they point to.'));
+                'scan without --disable-follow-links to list what they point to.'));
         }
     }
 

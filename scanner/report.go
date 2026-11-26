@@ -62,7 +62,8 @@ type reportSummary struct {
 	End         string `json:"end"`
 	Complete    bool   `json:"complete"` // the end record was written
 	Interrupted bool   `json:"interrupted"`
-	Skipped     int    `json:"skipped"` // unreadable lines
+	Skipped     int    `json:"skipped"`      // unreadable lines
+	FollowLinks bool   `json:"follow_links"` // --recurse descended into links
 
 	Targets       int `json:"targets"`
 	Reachable     int `json:"reachable"`
@@ -97,6 +98,7 @@ func (rep *report) collect(typ string, raw []byte) error {
 		if rep.scans == 1 {
 			s := &rep.summary
 			s.Version, s.Command, s.Identity, s.ScanID, s.Start = rec.Version, rec.Command, rec.Identity, rec.ScanID, isoTime(rec.Time)
+			s.FollowLinks = rec.FollowLinks
 		}
 	case RecordHost:
 		var rec HostRecord

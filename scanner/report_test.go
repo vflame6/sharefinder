@@ -215,6 +215,39 @@ func TestReport_ListingByHost(t *testing.T) {
 	}
 }
 
+// The scan record says whether --recurse descended into links, so the report
+// can tell a link it did not enter from an empty one; scans before
+// follow_links existed did not.
+func TestReport_FollowLinks(t *testing.T) {
+	for _, follow := range []bool{true, false} {
+		var buf bytes.Buffer
+		buf.WriteString(jsonLine(t, ScanRecord{Type: RecordScan, ScanID: "01J", Identity: "tester", FollowLinks: follow}))
+		var summary struct {
+			FollowLinks bool `json:"follow_links"`
+		}
+		jsonBlock(t, renderReport(t, buf.Bytes()), "sf-summary", &summary)
+		if summary.FollowLinks != follow {
+			t.Errorf("a scan with follow_links %v reports %v", follow, summary.FollowLinks)
+		}
+	}
+
+	f, err := os.Create(filepath.Join(t.TempDir(), "scan.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewScanner(&Options{FileJSON: f, FollowLinks: true}, []string{"auth"}, sinkTime, 1)
+	s.StartOutputs()
+	s.CloseOutputter()
+	data, err := os.ReadFile(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rec ScanRecord
+	if err := json.Unmarshal(bytes.SplitN(data, []byte("\n"), 2)[0], &rec); err != nil || rec.Type != RecordScan || !rec.FollowLinks {
+		t.Fatalf("scan record %s (%v): follow_links must be recorded", bytes.SplitN(data, []byte("\n"), 2)[0], err)
+	}
+}
+
 // The report's own script builds the page with textContent and DataTables'
 // text renderer: no data can become markup. The list holds the calls the
 // script must not make; nothing here is run.

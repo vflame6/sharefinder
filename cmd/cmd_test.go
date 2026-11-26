@@ -143,6 +143,26 @@ func TestCreateScanner_CSVAndUNCOutputs(t *testing.T) {
 	}
 }
 
+// --recurse descends into directory symlinks and junctions unless
+// --disable-follow-links: the domain folder in SYSVOL is one.
+func TestCreateScanner_FollowsLinksByDefault(t *testing.T) {
+	s, err := CreateScanner(validConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.Options.FollowLinks {
+		t.Error("links are not followed by default")
+	}
+	cfg := validConfig()
+	cfg.DisableFollowLinks = true
+	if s, err = CreateScanner(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if s.Options.FollowLinks {
+		t.Error("--disable-follow-links still follows links")
+	}
+}
+
 // --output-html names the report like every other output, and needs no
 // other output: without --output-json the report is rendered from a
 // temporary JSONL file.

@@ -104,11 +104,11 @@ func TestWalkShare_SkipsJunctionUnlessFollow(t *testing.T) {
 	}
 	dirs, _ := walkDirs(t, treeLister(tree), ListLimits{MaxDepth: 5})
 	if !reflect.DeepEqual(dirs, []string{"", "d"}) {
-		t.Fatalf("listed %v, want the junction skipped", dirs)
+		t.Fatalf("listed %v, want the junction skipped with --disable-follow-links", dirs)
 	}
 	dirs, _ = walkDirs(t, treeLister(tree), ListLimits{MaxDepth: 5, FollowLinks: true})
 	if !reflect.DeepEqual(dirs, []string{"", "j", "d"}) {
-		t.Fatalf("listed %v, want the junction followed with --follow-links", dirs)
+		t.Fatalf("listed %v, want the junction followed", dirs)
 	}
 }
 
