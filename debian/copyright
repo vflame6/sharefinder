@@ -19,6 +19,12 @@ Files: debian/*
 Copyright: 2026 vflame6
 License: MIT
 
+Files: scanner/ldapkrb.go
+Copyright: 2011-2015 Michael Mitton
+           2015-2024 go-ldap Authors
+           2026 vflame6
+License: MIT
+
 Files: vendor/github.com/alecthomas/kingpin/*
        vendor/github.com/alecthomas/units/*
 Copyright: 2014 Alec Thomas
@@ -45,9 +51,7 @@ Files: vendor/github.com/jfjallid/golog/*
 Copyright: 2022 Jimmy Fjällid
 License: MIT
 
-Files: vendor/github.com/alexbrainman/sspi/*
-       vendor/github.com/jcmturner/gofork/*
-       vendor/github.com/jfjallid/gofork/*
+Files: vendor/github.com/jfjallid/gofork/*
        vendor/github.com/xhit/go-str2duration/*
        vendor/golang.org/x/*
 Copyright: 2009-2012 The Go Authors
@@ -61,20 +65,15 @@ Files: vendor/software.sslmate.com/src/go-pkcs12/*
 Copyright: 2015, 2018, 2019 Opsmate, Inc.
 License: BSD-3-clause
 
-Files: vendor/github.com/jcmturner/aescts/*
-       vendor/github.com/jcmturner/dnsutils/*
-       vendor/github.com/jcmturner/goidentity/*
-       vendor/github.com/jcmturner/gokrb5/*
-       vendor/github.com/jcmturner/rpc/*
-       vendor/github.com/jfjallid/gokrb5/*
+Files: vendor/github.com/jfjallid/gokrb5/*
        vendor/github.com/jfjallid/mstypes/*
        vendor/github.com/jfjallid/ndr/*
 Copyright: Jonathan Turner and contributors
            Jimmy Fjällid
 License: Apache-2.0
 
-Files: vendor/github.com/hashicorp/go-uuid/*
-Copyright: 2015-2022 HashiCorp, Inc.
+Files: vendor/github.com/jfjallid/gokrb5/v9/imported/go-uuid/*
+Copyright: 2015 HashiCorp, Inc.
 License: MPL-2.0
 
 License: MIT

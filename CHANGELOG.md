@@ -84,6 +84,9 @@ from the section of the released version.
   devices, other services) are reported and counted as reachable and failed.
 - go-smb v0.12.0; Go 1.26 is required to build. Dependabot opens one grouped
   pull request a week.
+- The Kerberos LDAP bind uses the gokrb5 fork that go-smb uses, so
+  jcmturner/gokrb5 and seven modules only it needed are no longer
+  dependencies.
 
 ### Fixed
 
@@ -96,6 +99,23 @@ from the section of the released version.
 - `--threads 0` hung; it is refused.
 - Null and guest scans reported `signing:false` for every host; the signing
   requirement now comes from the negotiation, for every session type.
+- `hunt --forest` read every domain from the Global Catalog, which holds
+  neither the operating system nor, for other domains, the last logon time:
+  their computers came without an OS and `--active-within` dropped them all.
+  The search of the forest root also returned the computers of its child
+  domains, which were then counted and scanned twice. Each domain is now asked
+  on one of its own DCs; the Global Catalog is used, with a warning, only for a
+  domain none of whose DCs answers, or with `-k`, whose tickets are for the
+  user's own realm, and only that domain's own computers are taken from it.
+- `hunt -k` was refused by Active Directory ("AcceptSecurityContext error,
+  data 57"): the Kerberos request asked for mutual authentication without
+  requiring it.
+- `hunt -k --proxy` sent the Kerberos exchanges of the LDAP bind straight to
+  the KDC instead of through the proxy; they now go through it, over TCP.
+- A Kerberos reply from the LDAP server with a truncated encrypted part
+  crashed `hunt -k`; it is refused.
+- `--debug` reported "failed to disconnect tree" for every share that go-smb
+  had already disconnected.
 
 ## [1.4.1] - 2026-11-26
 

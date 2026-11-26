@@ -108,7 +108,7 @@ func (conn *Connection) checkWriteMask(share string) []string {
 		return nil
 	}
 	defer func() {
-		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
+		conn.disconnectTree(share)
 	}()
 
 	var granted []string
@@ -138,7 +138,7 @@ func (conn *Connection) checkWriteFile(share string) bool {
 		return false
 	}
 	defer func() {
-		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
+		conn.disconnectTree(share)
 	}()
 
 	return probeWriteFile(conn.session, conn.host, share, utils.RandSeq(16)+".txt")

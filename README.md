@@ -207,7 +207,8 @@ with Kerberos (`-k`), an AES key (`--aes-key`, 32 or 64 hex characters) or a
 of the process list and the shell history. Without a terminal (cron, scripts)
 and without any of these, sharefinder stops instead of trying an empty
 password, which would count a failed logon against the account; `-p ''`
-tests an empty password on purpose.
+tests an empty password on purpose. Through `--proxy`, the Kerberos exchanges
+with the KDC go through the proxy too.
 
 ### Hunting a domain
 
@@ -217,7 +218,9 @@ are skipped unless `--include-disabled`; `--active-within 90d` keeps the
 computers that logged on in the last 90 days. The servers that DFS links point
 to are added when they belong to a hunted domain; the others are named and
 left out of scope. The operating system recorded in AD is shown when the
-registry cannot be read. `--ldap-only` prints the computers and stops.
+registry cannot be read. `--ldap-only` prints the computers and stops. With
+`-k`, the other domains of the forest are read from the Global Catalog:
+without their operating system, and `--active-within` does not filter them.
 
 ### Safe defaults
 
