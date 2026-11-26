@@ -234,6 +234,22 @@ func computerEntry(name, os string) *ldap.Entry {
 	return ldap.NewEntry("CN="+name, map[string][]string{"dNSHostName": {name}, "operatingSystem": {os}})
 }
 
+// domainComputer is a computer entry as a directory holds it: its DN lies in
+// the domain its DNS name names.
+func domainComputer(fqdn, os string) *ldap.Entry {
+	short, domain, _ := strings.Cut(fqdn, ".")
+	dn := "CN=" + strings.ToUpper(short) + ",CN=Computers," + GetBaseDN(domain)
+	return ldap.NewEntry(dn, map[string][]string{"dNSHostName": {fqdn}, "operatingSystem": {os}})
+}
+
+func hostList(hosts []DNHost) string {
+	var names []string
+	for _, h := range hosts {
+		names = append(names, h.Hostname+"="+h.OS)
+	}
+	return strings.Join(names, ",")
+}
+
 var goadForest = []DomainPartition{
 	{Name: "north.sevenkingdoms.local", BaseDN: "DC=north,DC=sevenkingdoms,DC=local"},
 	{Name: "sevenkingdoms.local", BaseDN: "DC=sevenkingdoms,DC=local"},
@@ -277,8 +293,8 @@ func TestListDomainComputers_AsksEachDomainsDC(t *testing.T) {
 }
 
 func TestListDomainComputers_GlobalCatalogLastResort(t *testing.T) {
-	own := &fakeDirectory{domains: map[string][]*ldap.Entry{"DC=north,DC=sevenkingdoms,DC=local": {computerEntry("winterfell.north.sevenkingdoms.local", "")}}}
-	gc := &fakeDirectory{domains: map[string][]*ldap.Entry{"DC=sevenkingdoms,DC=local": {computerEntry("kingslanding.sevenkingdoms.local", "")}}}
+	own := &fakeDirectory{domains: map[string][]*ldap.Entry{"DC=north,DC=sevenkingdoms,DC=local": {domainComputer("winterfell.north.sevenkingdoms.local", "")}}}
+	gc := &fakeDirectory{domains: map[string][]*ldap.Entry{"DC=sevenkingdoms,DC=local": {domainComputer("kingslanding.sevenkingdoms.local", "")}}}
 	src := domainSources{
 		own:   own,
 		chase: func(string) (computerDirectory, func(), error) { return nil, nil, errors.New("no DC answers") },
@@ -298,6 +314,65 @@ func TestListDomainComputers_GlobalCatalogLastResort(t *testing.T) {
 	}
 	if !strings.Contains(logs, "Global Catalog") || !strings.Contains(logs, "--active-within") {
 		t.Fatalf("the fallback must be called out: %q", logs)
+	}
+}
+
+// A subtree search of the Global Catalog under a domain also returns its
+// child domains' computers, without their OS and without the activity
+// filter. Only the domain's own computers are taken from it: a hunted child's
+// come from the child's DC, and a child that is not hunted is out of scope.
+func TestListDomainComputers_GlobalCatalogKeepsToTheDomain(t *testing.T) {
+	rootFirst := []DomainPartition{goadForest[1], goadForest[0]}
+	own := &fakeDirectory{domains: map[string][]*ldap.Entry{
+		"DC=north,DC=sevenkingdoms,DC=local": {domainComputer("winterfell.north.sevenkingdoms.local", "Windows Server 2019")},
+	}}
+	gc := &fakeDirectory{domains: map[string][]*ldap.Entry{
+		"DC=sevenkingdoms,DC=local": {
+			domainComputer("kingslanding.sevenkingdoms.local", ""),
+			domainComputer("winterfell.north.sevenkingdoms.local", ""),
+			domainComputer("oldbox.north.sevenkingdoms.local", ""), // inactive: north's DC leaves it out
+		},
+	}}
+	src := domainSources{
+		own:   own,
+		chase: func(string) (computerDirectory, func(), error) { return nil, nil, errors.New("no DC answers") },
+		gc:    func() (computerDirectory, error) { return gc, nil },
+	}
+	for _, tc := range []struct {
+		name  string
+		bases []DomainPartition
+		want  string
+	}{
+		{"the forest, root first", rootFirst, "kingslanding.sevenkingdoms.local=,winterfell.north.sevenkingdoms.local=Windows Server 2019"},
+		{"the root domain only", rootFirst[:1], "kingslanding.sevenkingdoms.local="},
+	} {
+		var got []DNHost
+		captureLog(t, func() {
+			got = listDomainComputers(context.Background(), tc.bases, false, time.Now().Add(-time.Hour), src)
+		})
+		if hostList(got) != tc.want {
+			t.Errorf("%s: computers\n%s\nwant\n%s", tc.name, hostList(got), tc.want)
+		}
+	}
+}
+
+// Kerberos tickets are for the user's own realm: no DC of another domain can
+// be logged on to. hunt does not try (each try cost a reverse DNS lookup
+// outside --proxy and a doomed logon) and reads those domains from the Global
+// Catalog.
+func TestListDomainComputers_KerberosAsksTheGlobalCatalog(t *testing.T) {
+	own := &fakeDirectory{domains: map[string][]*ldap.Entry{"DC=north,DC=sevenkingdoms,DC=local": {domainComputer("winterfell.north.sevenkingdoms.local", "Windows Server 2019")}}}
+	gc := &fakeDirectory{domains: map[string][]*ldap.Entry{"DC=sevenkingdoms,DC=local": {domainComputer("kingslanding.sevenkingdoms.local", "")}}}
+	src := domainSources{own: own, gc: func() (computerDirectory, error) { return gc, nil }} // no chase
+	var got []DNHost
+	logs := captureLog(t, func() {
+		got = listDomainComputers(context.Background(), goadForest, false, time.Time{}, src)
+	})
+	if want := "winterfell.north.sevenkingdoms.local=Windows Server 2019,kingslanding.sevenkingdoms.local="; hostList(got) != want {
+		t.Fatalf("computers\n%s\nwant\n%s", hostList(got), want)
+	}
+	if !strings.Contains(logs, "Kerberos") || strings.Contains(logs, "no DC answers") {
+		t.Errorf("the warning must give the reason: %q", logs)
 	}
 }
 

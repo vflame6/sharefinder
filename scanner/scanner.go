@@ -225,7 +225,8 @@ func (s *Scanner) EnumerateDomainComputers(ctx context.Context) ([]DNHost, *Reso
 	}
 	// each domain is asked on one of its own DCs: the Global Catalog lacks
 	// the OS and the logon time of other domains' computers, and is opened
-	// only when no DC of a domain answers
+	// only when no DC of a domain answers. With Kerberos no DC of another
+	// domain can be logged on to: the tickets are for the user's realm.
 	var gcConn *LDAPConnection
 	defer func() {
 		if gcConn != nil {
@@ -236,7 +237,17 @@ func (s *Scanner) EnumerateDomainComputers(ctx context.Context) ([]DNHost, *Reso
 	}()
 	src := domainSources{
 		own: ldapConn,
-		chase: func(domain string) (computerDirectory, func(), error) {
+		gc: func() (computerDirectory, error) {
+			conn, err := NewLDAPConnection(ctx, s.ldapOptions(s.Options.DomainController, s.Options.DCHostname, true))
+			if err != nil {
+				return nil, err
+			}
+			gcConn = conn
+			return conn, nil
+		},
+	}
+	if !s.Options.Kerberos {
+		src.chase = func(domain string) (computerDirectory, func(), error) {
 			alt, err := s.dialDCForDomain(ctx, domain, &r, resolver)
 			if err != nil {
 				return nil, nil, err
@@ -246,15 +257,7 @@ func (s *Scanner) EnumerateDomainComputers(ctx context.Context) ([]DNHost, *Reso
 					logger.Error(err)
 				}
 			}, nil
-		},
-		gc: func() (computerDirectory, error) {
-			conn, err := NewLDAPConnection(ctx, s.ldapOptions(s.Options.DomainController, s.Options.DCHostname, true))
-			if err != nil {
-				return nil, err
-			}
-			gcConn = conn
-			return conn, nil
-		},
+		}
 	}
 	names := listDomainComputers(ctx, searchBases, s.Options.IncludeDisabled, activeSince, src)
 	if ctx.Err() != nil {
@@ -278,12 +281,12 @@ func (s *Scanner) EnumerateDomainComputers(ctx context.Context) ([]DNHost, *Reso
 	return names, r, nil
 }
 
-// dialDCForDomain resolves domainName via DNS and opens a regular LDAP connection
-// to a DC of that domain. Used when the Global Catalog is unavailable and a
-// SearchComputers query against the user-specified DC returned an LDAP referral.
-// AD-integrated DNS registers the domain name itself as A records for every DC,
-// so a plain host lookup yields a usable target. The resolver pointer is updated
-// in-place if a UDP→TCP retry succeeds, mirroring the test-entry validation below.
+// dialDCForDomain resolves domainName via DNS and opens a regular LDAP
+// connection to a DC of that domain, for a domain the user-specified DC
+// referred. AD-integrated DNS registers the domain name itself as A records
+// for every DC, so a plain host lookup yields a usable target. The resolver
+// pointer is updated in-place if a UDP→TCP retry succeeds. It is not used with
+// Kerberos, whose tickets are for the DCs of the user's realm only.
 func (s *Scanner) dialDCForDomain(ctx context.Context, domainName string, r **Resolver, resolverIP net.IP) (*LDAPConnection, error) {
 	ip, err := (*r).LookupHost(ctx, domainName)
 	if err != nil && !s.Options.Dialer.Proxied() {
@@ -296,20 +299,7 @@ func (s *Scanner) dialDCForDomain(ctx context.Context, domainName string, r **Re
 	if err != nil {
 		return nil, fmt.Errorf("DNS lookup for %s: %w", domainName, err)
 	}
-
-	dcHostname := s.Options.DCHostname
-	if s.Options.Kerberos {
-		// Kerberos SPN must match the alt DC's hostname; reverse-resolve the IP.
-		// Cross-realm Kerberos may still fail downstream — the in-memory krb5 config
-		// has only the user's realm — but failing fast here gives a clearer error.
-		names, rerr := net.DefaultResolver.LookupAddr(ctx, ip.String())
-		if rerr != nil || len(names) == 0 {
-			return nil, fmt.Errorf("kerberos referral fallback to %s requires reverse-DNS for SPN: %v", ip, rerr)
-		}
-		dcHostname = strings.TrimSuffix(names[0], ".")
-	}
-
-	return NewLDAPConnection(ctx, s.ldapOptions(ip, dcHostname, false))
+	return NewLDAPConnection(ctx, s.ldapOptions(ip, s.Options.DCHostname, false))
 }
 
 // ldapOptions describes an LDAP connection to host with the scan's credentials.

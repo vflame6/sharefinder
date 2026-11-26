@@ -179,7 +179,8 @@ type computerDirectory interface {
 
 // domainSources says where the computers of a domain can be listed: own is
 // the DC hunt bound to; chase connects to a DC of another domain (and returns
-// how to close it); gc opens the Global Catalog, the last resort.
+// how to close it), and is nil with Kerberos, whose tickets are for the DCs
+// of the user's own realm only; gc opens the Global Catalog, the last resort.
 type domainSources struct {
 	own   computerDirectory
 	chase func(domain string) (computerDirectory, func(), error)
@@ -273,23 +274,58 @@ func searchDomain(base DomainPartition, filter string, includeDisabled bool, act
 		return sr, src.own, done, err
 	}
 	// another domain: ask one of its own DCs
-	logger.Debugf("Domain %s is not held by this DC: connecting to one of its DCs", printable(base.Name))
-	alt, closeAlt, chaseErr := src.chase(base.Name)
-	if chaseErr == nil {
-		sr, err = alt.SearchComputers(base.BaseDN, filter)
-		return sr, alt, closeAlt, err
+	why := "Kerberos logs on only to the DCs of the user's domain"
+	if src.chase != nil {
+		logger.Debugf("Domain %s is not held by this DC: connecting to one of its DCs", printable(base.Name))
+		alt, closeAlt, chaseErr := src.chase(base.Name)
+		if chaseErr == nil {
+			sr, err = alt.SearchComputers(base.BaseDN, filter)
+			return sr, alt, closeAlt, err
+		}
+		why = fmt.Sprintf("no DC answers (%v)", chaseErr)
 	}
 	gc, gcErr := openGC()
 	if gcErr != nil {
-		return nil, nil, done, fmt.Errorf("no DC answers (%v) and the Global Catalog is unavailable (%v)", chaseErr, gcErr)
+		return nil, nil, done, fmt.Errorf("%s and the Global Catalog is unavailable (%v)", why, gcErr)
 	}
-	warning := "Domain %s: no DC answers (%v); listing its computers through the Global Catalog, without their operating system"
+	warning := "Domain %s: %s; listing its computers through the Global Catalog, without their operating system"
 	if !activeSince.IsZero() {
 		warning += " and without --active-within, which the Global Catalog cannot evaluate for another domain"
 	}
-	logger.Warnf(warning, printable(base.Name), chaseErr)
+	logger.Warnf(warning, printable(base.Name), why)
 	sr, err = gc.SearchComputers(base.BaseDN, computerFilter(includeDisabled, time.Time{}))
-	return sr, gc, done, err
+	if err != nil {
+		return nil, nil, done, err
+	}
+	// a subtree search of the GC also returns the computers of the child
+	// domains: a hunted child lists its own, from its DC, and a child that
+	// is not hunted is out of scope
+	own := &ldap.SearchResult{}
+	for _, entry := range sr.Entries {
+		if inDomain(entry.DN, base.BaseDN) {
+			own.Entries = append(own.Entries, entry)
+		}
+	}
+	return own, gc, done, nil
+}
+
+// inDomain reports whether the entry named dn belongs to the domain whose
+// naming context is baseDN itself, not to a child domain below it: the
+// domain of an entry is the run of DC= components that ends its DN.
+func inDomain(dn, baseDN string) bool {
+	entry, err := ldap.ParseDN(dn)
+	if err != nil {
+		return false
+	}
+	base, err := ldap.ParseDN(baseDN)
+	if err != nil {
+		return false
+	}
+	i := len(entry.RDNs)
+	for i > 0 && len(entry.RDNs[i-1].Attributes) == 1 && strings.EqualFold(entry.RDNs[i-1].Attributes[0].Type, "DC") {
+		i--
+	}
+	return (&ldap.DN{RDNs: entry.RDNs[i:]}).EqualFold(base)
 }
 
 // ListComputers prints the name, address and operating system of each
