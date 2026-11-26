@@ -6,10 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-ldap/ldap/v3"
-	"github.com/go-ldap/ldap/v3/gssapi"
-	"github.com/jcmturner/gokrb5/v8/client"
-	"github.com/jcmturner/gokrb5/v8/config"
-	"github.com/jcmturner/gokrb5/v8/credentials"
+	"github.com/jfjallid/gokrb5/v9/client"
+	"github.com/jfjallid/gokrb5/v9/config"
+	"github.com/jfjallid/gokrb5/v9/credentials"
 	"github.com/vflame6/sharefinder/logger"
 	"math"
 	"net"
@@ -30,7 +29,7 @@ func isLDAPReferral(err error) bool {
 
 type LDAPConnection struct {
 	connection *ldap.Conn
-	gssClient  *gssapi.Client
+	gssClient  *gssapiClient
 }
 
 type DomainPartition struct {
@@ -235,8 +234,8 @@ func dialLDAP(ctx context.Context, o LDAPOptions) (*ldap.Conn, ldapTransport, er
 }
 
 // newGSSAPIClient builds a Kerberos client from the AES key, KRB5CCNAME or the
-// password.
-func newGSSAPIClient(o LDAPOptions) (*gssapi.Client, error) {
+// password. Its KDC exchanges go through --proxy when one is set.
+func newGSSAPIClient(o LDAPOptions) (*gssapiClient, error) {
 	if o.DCHostname == "" {
 		return nil, fmt.Errorf("dcHostname is required for Kerberos (used as KDC and SPN host)")
 	}
@@ -247,31 +246,38 @@ func newGSSAPIClient(o LDAPOptions) (*gssapi.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("krb5 config: %w", err)
 	}
+	settings := []func(*client.Settings){client.DisablePAFXFAST(true)}
+	if o.Dialer.Proxied() {
+		settings = append(settings, client.SetProxyDialer(o.Dialer))
+	}
+	if o.Dialer != nil && o.Dialer.ConnectTimeout() > 0 {
+		settings = append(settings, client.SetDialTimout(o.Dialer.ConnectTimeout()))
+	}
 
 	// an AES key given with --aes-key first, then the ccache (KRB5CCNAME),
 	// then the password
+	var krb *client.Client
 	if len(o.AESKey) > 0 {
-		kt, err := aesKeytab(o.Username, realm, o.AESKey)
-		if err != nil {
-			return nil, fmt.Errorf("gssapi: %w", err)
-		}
-		return &gssapi.Client{Client: client.NewWithKeytab(o.Username, realm, kt, krb5Conf)}, nil
-	}
-	if ccachePath, ccErr := ccachePathFromEnv(); ccErr == nil {
+		krb, err = client.NewWithKey(o.Username, realm, o.AESKey, krb5Conf, settings...)
+	} else if ccachePath, ccErr := ccachePathFromEnv(); ccErr == nil {
 		ccache, err := credentials.LoadCCache(ccachePath)
 		if err != nil {
 			return nil, fmt.Errorf("gssapi: load ccache file: %w", err)
 		}
-		krbClient, err := client.NewFromCCache(ccache, krb5Conf)
-		if err != nil {
+		// a service ticket for the DC in the ccache serves too
+		spn := []string{"ldap", strings.ToLower(o.DCHostname)}
+		if krb, err = client.NewFromCCache(ccache, spn, krb5Conf, settings...); err != nil {
 			return nil, fmt.Errorf("gssapi: ccache client: %w", err)
 		}
-		return &gssapi.Client{Client: krbClient}, nil
+	} else if o.Password != "" {
+		krb, err = client.NewWithPassword(o.Username, realm, o.Password, krb5Conf, settings...)
+	} else {
+		return nil, fmt.Errorf("kerberos requires --aes-key, a KRB5CCNAME ccache or a password")
 	}
-	if o.Password != "" {
-		return &gssapi.Client{Client: client.NewWithPassword(o.Username, realm, o.Password, krb5Conf)}, nil
+	if err != nil {
+		return nil, fmt.Errorf("gssapi: %w", err)
 	}
-	return nil, fmt.Errorf("kerberos requires --aes-key, a KRB5CCNAME ccache or a password")
+	return &gssapiClient{krb: krb}, nil
 }
 
 func (c *LDAPConnection) Close() error {
@@ -304,9 +310,11 @@ func ccachePathFromEnv() (string, error) {
 }
 
 // newKrb5Config builds a minimal krb5 config in memory for the given AD realm
-// and KDC address. With an AES key the AS exchange asks only for that key's
-// etype: the KDC lists AES256 first for accounts that have it, and an AES128
-// key would find no match.
+// and KDC address. KDC traffic goes over TCP only: UDP cannot go through the
+// SOCKS proxy, and Active Directory's replies, which carry a PAC, are too big
+// for UDP anyway. With an AES key the AS exchange asks only for that key's
+// etype: a KDC may otherwise answer with the AES256 key of an account that
+// has both, which an AES128 key cannot open.
 func newKrb5Config(realm, kdcAddr string, aesKey []byte) (*config.Config, error) {
 	var etypes string
 	switch len(aesKey) {
@@ -317,6 +325,7 @@ func newKrb5Config(realm, kdcAddr string, aesKey []byte) (*config.Config, error)
 	}
 	confStr := fmt.Sprintf(`[libdefaults]
 %s  default_realm = %s
+  udp_preference_limit = 1
   dns_lookup_kdc = false
   dns_canonicalize_hostname = false
   rdns = false
