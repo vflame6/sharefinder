@@ -9,6 +9,7 @@ require (
 	github.com/jfjallid/go-smb v0.12.0
 	github.com/jfjallid/golog v0.4.0
 	golang.org/x/net v0.63.0
+	golang.org/x/term v0.48.0
 )
 
 require (
@@ -29,5 +30,6 @@ require (
 	github.com/jfjallid/ndr v0.2.0 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
 	golang.org/x/crypto v0.59.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 	software.sslmate.com/src/go-pkcs12 v0.7.2 // indirect
 )

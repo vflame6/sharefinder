@@ -41,6 +41,11 @@ type CustomLogger struct {
 	Debug   bool
 	Quiet   bool
 	Padding string
+
+	// status draws the progress line kept at the bottom of a terminal
+	// stderr; nil when there is none
+	status      func() string
+	statusShown bool
 }
 
 // Log is a global instance of CustomLogger
@@ -108,11 +113,62 @@ func writeMessage(s string) {
 	}
 }
 
+// SetStatus keeps the line status() returns at the bottom of stderr: every
+// message and result is written above it, and RedrawStatus refreshes it.
+// Use it only when stderr is a terminal.
+func SetStatus(status func() string) {
+	Log.mutex.Lock()
+	defer Log.mutex.Unlock()
+	Log.clearStatus()
+	Log.status = status
+	Log.drawStatus()
+}
+
+// RedrawStatus redraws the status line with fresh values.
+func RedrawStatus() {
+	Log.mutex.Lock()
+	defer Log.mutex.Unlock()
+	if Log.status != nil {
+		Log.clearStatus()
+		Log.drawStatus()
+	}
+}
+
+// ClearStatus removes the status line and stops drawing it.
+func ClearStatus() {
+	Log.mutex.Lock()
+	defer Log.mutex.Unlock()
+	Log.clearStatus()
+	Log.status = nil
+}
+
+// clearStatus erases the status line; the cursor returns to its start.
+func (l *CustomLogger) clearStatus() {
+	if l.statusShown {
+		fmt.Fprint(l.Err, "\r\033[K")
+		l.statusShown = false
+	}
+}
+
+func (l *CustomLogger) drawStatus() {
+	if l.status != nil {
+		fmt.Fprint(l.Err, l.status())
+		l.statusShown = true
+	}
+}
+
+// above writes output above the status line. Callers hold the mutex.
+func above(write func()) {
+	Log.clearStatus()
+	write()
+	Log.drawStatus()
+}
+
 // Info prints a result. Results are never suppressed.
 func Info(msg string) {
 	Log.mutex.Lock()
 	defer Log.mutex.Unlock()
-	writeResult(msg)
+	above(func() { writeResult(msg) })
 }
 
 // Infof works like Info with format string parsing
@@ -127,7 +183,7 @@ func Warn(msg string) {
 	}
 	Log.mutex.Lock()
 	defer Log.mutex.Unlock()
-	writeMessage(msg)
+	above(func() { writeMessage(msg) })
 }
 
 // Warnf works like Warn with format string parsing
@@ -142,7 +198,7 @@ func Debug(msg string) {
 	}
 	Log.mutex.Lock()
 	defer Log.mutex.Unlock()
-	Log.logger.Println("[DEBUG] " + strings.TrimSpace(msg))
+	above(func() { Log.logger.Println("[DEBUG] " + strings.TrimSpace(msg)) })
 }
 
 // Debugf works like Debug with format string parsing
@@ -160,13 +216,14 @@ func Error(err error) {
 	}
 	Log.mutex.Lock()
 	defer Log.mutex.Unlock()
-	writeMessage("[ERROR] " + strings.TrimSpace(err.Error()))
+	above(func() { writeMessage("[ERROR] " + strings.TrimSpace(err.Error())) })
 }
 
 // Fatal prints an error on stderr and exits with status 1. It is never
 // suppressed.
 func Fatal(err error) {
 	Log.mutex.Lock()
+	Log.clearStatus()
 	fmt.Fprintln(Log.Err, "[FATAL] "+err.Error())
 	Log.mutex.Unlock()
 	os.Exit(1)

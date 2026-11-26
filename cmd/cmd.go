@@ -278,6 +278,7 @@ func loadTargets(s *scanner.Scanner, target string) (scanner.Producer, error) {
 	} else {
 		logger.Debugf("Loaded %d targets", set.Len())
 	}
+	s.Stats.Total.Store(int64(set.Len()))
 	return scanner.TargetsProducer(set), nil
 }
 
@@ -435,6 +436,7 @@ func ExecuteHunt(ctx context.Context, s *scanner.Scanner, username, password, ha
 	}
 
 	logger.Warnf("Found %d domain computers. Starting SMB shares enumeration...", len(possibleTargets))
+	s.Stats.Total.Store(int64(len(possibleTargets)))
 
 	return runScan(ctx, s, "hunt", scanner.TargetsFromList(possibleTargets))
 }

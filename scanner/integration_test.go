@@ -320,6 +320,21 @@ func TestIntegration_JSONL(t *testing.T) {
 	}
 }
 
+func TestIntegration_ProgressCounts(t *testing.T) {
+	srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares()})
+	o := asUser(integrationOptions(srv.Port(), 5*time.Second), testPassword)
+	o.List, o.Recurse, o.Sink = true, true, MultiSink{}
+
+	s := NewScanner(o, nil, time.Now(), 2)
+	if err := s.Run(context.Background(), TargetsFromList([]DNHost{{IP: net.ParseIP("127.0.0.1")}})); err != nil {
+		t.Fatal(err)
+	}
+	// DATA holds readme.txt and IT/web.config, PUBLIC holds notice.txt
+	if done, shares, files := s.Stats.Done.Load(), s.Stats.Shares.Load(), s.Stats.Files.Load(); done != 1 || shares != 2 || files != 3 {
+		t.Fatalf("done %d, shares %d, files %d; want 1, 2, 3", done, shares, files)
+	}
+}
+
 // A host scanned by address is named by that address in UNC paths: the DNS
 // name a server reports for itself may resolve to another host (a cloned VM,
 // a lying server), which a content scanner fed the UNC list would then hit.

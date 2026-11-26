@@ -33,6 +33,11 @@ func (s *Scanner) Run(ctx context.Context, produce Producer) error {
 		}()
 	}
 
+	if s.Options.Progress {
+		stopProgress := s.startProgress()
+		defer stopProgress()
+	}
+
 	targets := make(chan DNHost, 256)
 	var wg sync.WaitGroup
 	for i := 0; i < s.Threads; i++ {

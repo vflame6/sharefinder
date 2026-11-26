@@ -40,6 +40,7 @@ type Options struct {
 	OutputHTML         bool // --html
 	OutputHTMLFileName string
 	Password           string         // --password
+	Progress           bool           // draw a progress line: stderr is a terminal, no --quiet or --debug
 	Recurse            bool           // --recurse
 	SmbPort            int            // --smb-port
 	Timeout            time.Duration  // --timeout

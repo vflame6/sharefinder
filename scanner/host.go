@@ -3,8 +3,10 @@ package scanner
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"time"
 
+	"github.com/jfjallid/go-smb/smb"
 	"github.com/vflame6/sharefinder/logger"
 )
 
@@ -22,6 +24,7 @@ func (s *Scanner) sink() Sink {
 func (s *Scanner) processHost(ctx context.Context, target DNHost) {
 	o := s.Options
 	sink := s.sink()
+	defer s.Stats.Done.Add(1)
 
 	// resolve hostnames, apply --exclude-hosts and skip duplicates
 	host, ok, err := s.resolveTarget(ctx, target)
@@ -78,10 +81,11 @@ func (s *Scanner) processHost(ctx context.Context, target DNHost) {
 			if ctx.Err() != nil {
 				share.Partial = true
 			} else {
-				listShare(ctx, conn, sink, h, share, limits, o.Recurse)
+				listShare(ctx, conn, sink, h, share, limits, o.Recurse, &s.Stats.Files)
 			}
 		}
 		sink.ShareFinished(h, share)
+		s.Stats.Shares.Add(1)
 	}
 	sink.HostFinished(h)
 }
@@ -130,15 +134,26 @@ func describeHost(conn *Connection, host DNHost, o *Options) *Host {
 }
 
 // listShare lists a readable share within limits, sending each directory to
-// the sink as it is listed.
-func listShare(ctx context.Context, conn *Connection, sink Sink, h *Host, share *Share, limits ListLimits, recurse bool) {
+// the sink as it is listed and counting its files in files.
+func listShare(ctx context.Context, conn *Connection, sink Sink, h *Host, share *Share, limits ListLimits, recurse bool, files *atomic.Int64) {
 	share.Listed = true
 	onErr := func(dir string, err error) {
 		if ctx.Err() == nil {
 			logger.Warnf("Failed to list directory %s\\%s\\%s: %v", conn.host, share.ShareName, dir, err)
 		}
 	}
-	stats, err := conn.WalkShare(ctx, share.ShareName, limits, recurse, listingEmitter(sink, h, share), onErr)
+	emit := listingEmitter(sink, h, share)
+	counted := func(dir smb.SharedFile, depth int, entries []smb.SharedFile) {
+		n := 0
+		for _, e := range entries {
+			if !e.IsDir {
+				n++
+			}
+		}
+		files.Add(int64(n))
+		emit(dir, depth, entries)
+	}
+	stats, err := conn.WalkShare(ctx, share.ShareName, limits, recurse, counted, onErr)
 	share.FileCount, share.DirCount, share.Truncated = stats.Files, stats.Dirs, stats.Truncated
 	switch {
 	case ctx.Err() != nil:

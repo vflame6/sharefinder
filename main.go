@@ -12,6 +12,7 @@ import (
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/vflame6/sharefinder/cmd"
 	"github.com/vflame6/sharefinder/logger"
+	"golang.org/x/term"
 )
 
 // program options
@@ -158,6 +159,9 @@ func main() {
 	if err != nil {
 		logger.Fatal(err)
 	}
+	// a progress line on an interactive stderr; --debug output is too busy
+	// for it, and go-smb's own debug messages bypass the logger
+	scanner.Options.Progress = !*quietFlag && !*debugFlag && term.IsTerminal(int(os.Stderr.Fd()))
 
 	// Ctrl+C or SIGTERM cancels ctx: every open connection is closed, workers
 	// stop, and the outputs are terminated below. After the first signal the

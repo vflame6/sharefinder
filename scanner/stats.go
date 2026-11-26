@@ -10,6 +10,8 @@ import (
 
 // Stats counts what happened to the targets of a scan.
 type Stats struct {
+	Total         atomic.Int64 // targets expected; 0 while unknown
+	Done          atomic.Int64 // targets processed, skipped ones included
 	Targets       atomic.Int64 // targets taken up, after exclusions
 	Reachable     atomic.Int64 // answered SMB negotiation
 	Authenticated atomic.Int64 // accepted the identity

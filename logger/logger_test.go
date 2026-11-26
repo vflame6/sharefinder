@@ -3,6 +3,7 @@ package logger
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -75,5 +76,41 @@ func TestLoggerMultilineResultKeepsBlankLine(t *testing.T) {
 	Info("[+] host\nShare  Permissions\n\n")
 	if out.String() != "[+] host\nShare  Permissions\n\n" {
 		t.Errorf("stdout = %q", out.String())
+	}
+}
+
+func TestLoggerStatusRedraw(t *testing.T) {
+	// results and messages share one terminal, as they do interactively
+	var tty bytes.Buffer
+	useBuffers(t, false, false)
+	SetWriters(&tty, &tty)
+	n := 0
+	SetStatus(func() string { n++; return fmt.Sprintf("[*] status %d", n) })
+	t.Cleanup(ClearStatus)
+
+	Info("[+] result")
+	Warn("warning")
+	RedrawStatus()
+	ClearStatus()
+	Info("after")
+
+	const clear = "\r\033[K"
+	want := "[*] status 1" + clear + "[+] result\n" + "[*] status 2" +
+		clear + "warning\n" + "[*] status 3" +
+		clear + "[*] status 4" +
+		clear + "after\n"
+	if got := tty.String(); got != want {
+		t.Fatalf("terminal:\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestLoggerStatusOffWritesNoControlSequences(t *testing.T) {
+	out, errOut := useBuffers(t, false, false)
+	RedrawStatus()
+	ClearStatus()
+	Info("[+] result")
+	Warn("warning")
+	if strings.Contains(out.String()+errOut.String(), "\033") {
+		t.Fatalf("without a status line nothing but text is written: %q %q", out, errOut)
 	}
 }

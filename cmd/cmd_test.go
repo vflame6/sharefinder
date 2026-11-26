@@ -205,6 +205,21 @@ func TestExecuteReport(t *testing.T) {
 	}
 }
 
+func TestLoadTargets_SetsProgressTotal(t *testing.T) {
+	cfg := validConfig()
+	cfg.ExcludeHosts = "10.0.0.2"
+	s, err := CreateScanner(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadTargets(s, "10.0.0.1-4"); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Stats.Total.Load(); got != 3 {
+		t.Fatalf("progress total = %d, want 3 (4 targets, 1 excluded)", got)
+	}
+}
+
 func TestCreateScanner_AcceptsDisabledIOTimeout(t *testing.T) {
 	cfg := validConfig()
 	cfg.IOTimeout = 0
