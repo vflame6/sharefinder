@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"runtime/debug"
 )
 
@@ -22,7 +23,7 @@ func init() {
 	}
 }
 
-// PrintBanner is a function to print program banner
-func PrintBanner() {
-	fmt.Printf(BANNER, VERSION, AUTHOR)
+// PrintBanner prints the program banner to w (stderr: it is not a result).
+func PrintBanner(w io.Writer) {
+	fmt.Fprintf(w, BANNER, VERSION, AUTHOR)
 }

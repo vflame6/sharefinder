@@ -1,7 +1,11 @@
+// Package logger prints sharefinder's output: results go to stdout, so they
+// can be piped or redirected on their own; the banner, progress, warnings,
+// errors and debug messages go to stderr.
 package logger
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -27,9 +31,12 @@ var goSmbLogPackages = []string{
 	"github.com/jfjallid/go-smb/gss",
 }
 
-// CustomLogger provides formatted logging with multi-line indentation
+// CustomLogger writes results to Out and messages to Err.
 type CustomLogger struct {
-	logger  *log.Logger
+	Out io.Writer // results
+	Err io.Writer // banner, warnings, errors, debug
+
+	logger  *log.Logger // timestamps messages on Err in debug mode
 	mutex   sync.Mutex
 	Debug   bool
 	Quiet   bool
@@ -42,9 +49,19 @@ var Log = NewCustomLogger()
 // NewCustomLogger initializes a new logger instance
 func NewCustomLogger() *CustomLogger {
 	return &CustomLogger{
-		logger:  log.Default(),
+		Out:     os.Stdout,
+		Err:     os.Stderr,
+		logger:  log.New(os.Stderr, "", log.LstdFlags),
 		Padding: strings.Repeat(" ", 20),
 	}
+}
+
+// SetWriters routes results to out and every other message to errOut.
+func SetWriters(out, errOut io.Writer) {
+	Log.mutex.Lock()
+	defer Log.mutex.Unlock()
+	Log.Out, Log.Err = out, errOut
+	Log.logger = log.New(errOut, "", log.LstdFlags)
 }
 
 // SetLoggerOptions configures debug and quiet parameters
@@ -61,133 +78,96 @@ func SetLoggerOptions(debug, quiet bool) error {
 		libLevel = golog.LevelNone
 	}
 	for _, name := range goSmbLogPackages {
-		golog.Get(name).SetLogLevel(libLevel)
+		// go-smb's own messages are diagnostics, never results
+		golog.Get(name).SetLogLevel(libLevel).SetOutput(Log.Err)
 	}
 
 	return nil
 }
 
-// LogString is a function to make basic logs
-func LogString(s string) {
-	if Log.Debug {
-		// split lines to determine if several lines are needed
-		lines := strings.Split(strings.TrimSpace(s), "\n")
-		if len(lines) > 1 {
-			// print the first one with timestamp and the others with padding
-			firstLine := lines[0]
-			Log.logger.Println(firstLine)
-			for _, line := range lines[1:] {
-				fmt.Print(Log.Padding + line + "\n")
-			}
-			fmt.Println()
-		} else {
-			Log.logger.Println(s)
-		}
+// writeResult prints a result on Out, ending it with exactly one newline
+// unless it already ends with a blank line.
+func writeResult(s string) {
+	if strings.HasSuffix(s, "\n\n") {
+		fmt.Fprint(Log.Out, s)
 	} else {
-		if s[len(s)-2:] == "\n\n" {
-			fmt.Print(s)
-		} else {
-			fmt.Println(s)
-		}
+		fmt.Fprintln(Log.Out, strings.TrimSuffix(s, "\n"))
 	}
 }
 
-// LogDebugString is a function to make debug logs
-func LogDebugString(s string) {
-	Log.logger.Println("[DEBUG] " + strings.TrimSpace(s))
-}
-
-// LogErrorString is a function to make debug logs
-func LogErrorString(s string) {
-	errorString := "[ERROR] " + strings.TrimSpace(s)
-	if Log.Debug {
-		Log.logger.Println(errorString)
-	} else {
-		fmt.Println(errorString)
+// writeMessage prints a message on Err, timestamped in debug mode.
+func writeMessage(s string) {
+	if !Log.Debug {
+		fmt.Fprintln(Log.Err, strings.TrimSuffix(s, "\n"))
+		return
+	}
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	Log.logger.Println(lines[0])
+	for _, line := range lines[1:] {
+		fmt.Fprintln(Log.Err, Log.Padding+line)
 	}
 }
 
-// Info logs a formatted multi-line message
-// Info logs are used to print necessary results
+// Info prints a result. Results are never suppressed.
 func Info(msg string) {
 	Log.mutex.Lock()
 	defer Log.mutex.Unlock()
-
-	LogString(msg)
+	writeResult(msg)
 }
 
 // Infof works like Info with format string parsing
-// Infof logs are used to print necessary results
-func Infof(format string, args ...interface{}) {
-	Log.mutex.Lock()
-	defer Log.mutex.Unlock()
-
-	msg := fmt.Sprintf(format, args...)
-	LogString(msg)
+func Infof(format string, args ...any) {
+	Info(fmt.Sprintf(format, args...))
 }
 
-// Warn logs a formatted multi-line WARN message
-// Warn logs could be suppressed with --quiet option
+// Warn prints a status message on stderr; --quiet suppresses it.
 func Warn(msg string) {
-	if !Log.Quiet {
-		Log.mutex.Lock()
-		defer Log.mutex.Unlock()
-
-		LogString(msg)
+	if Log.Quiet {
+		return
 	}
+	Log.mutex.Lock()
+	defer Log.mutex.Unlock()
+	writeMessage(msg)
 }
 
 // Warnf works like Warn with format string parsing
-// Warnf logs could be suppressed with --quiet option
-func Warnf(format string, args ...interface{}) {
-	if !Log.Quiet {
-		Log.mutex.Lock()
-		defer Log.mutex.Unlock()
-
-		msg := fmt.Sprintf(format, args...)
-		LogString(msg)
-	}
+func Warnf(format string, args ...any) {
+	Warn(fmt.Sprintf(format, args...))
 }
 
-// Debug logs a formatted debug message
-// Debug logs are suppressed if the --debug option is not specified
+// Debug prints a debug message on stderr when --debug is set.
 func Debug(msg string) {
-	if Log.Debug {
-		Log.mutex.Lock()
-		defer Log.mutex.Unlock()
-
-		LogDebugString(msg)
+	if !Log.Debug {
+		return
 	}
+	Log.mutex.Lock()
+	defer Log.mutex.Unlock()
+	Log.logger.Println("[DEBUG] " + strings.TrimSpace(msg))
 }
 
 // Debugf works like Debug with format string parsing
-// Debugf logs are suppressed if the --debug option is not specified
-func Debugf(format string, args ...interface{}) {
+func Debugf(format string, args ...any) {
 	if Log.Debug {
-		Log.mutex.Lock()
-		defer Log.mutex.Unlock()
-		msg := fmt.Sprintf(format, args...)
-		LogDebugString(msg)
+		Debug(fmt.Sprintf(format, args...))
 	}
 }
 
-// Error logs a formatted error message and the program execution continues
-// Error logs could be suppressed with --quiet option
+// Error prints an error on stderr and the program continues; --quiet
+// suppresses it.
 func Error(err error) {
-	if !Log.Quiet {
-		Log.mutex.Lock()
-		defer Log.mutex.Unlock()
-		LogErrorString(err.Error())
+	if Log.Quiet {
+		return
 	}
+	Log.mutex.Lock()
+	defer Log.mutex.Unlock()
+	writeMessage("[ERROR] " + strings.TrimSpace(err.Error()))
 }
 
-// Fatal logs a formatted fatal errors and shuts the program down
-// Fatal logs are critical and could not be suppressed
+// Fatal prints an error on stderr and exits with status 1. It is never
+// suppressed.
 func Fatal(err error) {
-	if Log.Debug {
-		Log.logger.Fatal(err)
-	} else {
-		fmt.Println("[FATAL] " + err.Error())
-		os.Exit(1)
-	}
+	Log.mutex.Lock()
+	fmt.Fprintln(Log.Err, "[FATAL] "+err.Error())
+	Log.mutex.Unlock()
+	os.Exit(1)
 }

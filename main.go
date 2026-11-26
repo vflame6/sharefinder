@@ -97,7 +97,7 @@ func main() {
 
 	// print program banner
 	if !*quietFlag {
-		cmd.PrintBanner()
+		cmd.PrintBanner(os.Stderr)
 	}
 
 	// set up a logger
