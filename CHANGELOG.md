@@ -14,9 +14,19 @@ from the section of the released version.
   removed. `sharefinder report` takes `--output-html` too.
 - `--recurse` descends into directory symlinks and junctions again, so the
   domain folder in SYSVOL, a junction, is listed with its policies and
-  scripts; `--depth` bounds one that points back up the tree.
-  `--disable-follow-links` skips them; `--follow-links` is removed. The JSONL
-  scan record says whether links were followed (`follow_links`).
+  scripts. `--disable-follow-links` skips them; `--follow-links` is removed.
+  The JSONL scan record says whether links were followed (`follow_links`).
+- `--depth` counts the levels listed, the share root being 1, and `0`, the
+  default, lists every level: `--depth 5` meant 5 levels below the root, and
+  5 was the default. A directory that lists exactly what a directory above
+  it listed, which a link back up the tree does, is not listed again, so the
+  walk ends without a depth limit; the scan warns when it cuts such a loop.
+- The discovery sweep runs 50 probes at a time with a 2 s timeout
+  (`--discovery-threads`, `--connect-timeout`), through `--proxy` too; it ran
+  500 at a time with 1 s, and 50 with `--timeout` through `--proxy`.
+  `--disable-discovery` replaces `--no-discovery`.
+- `hunt --resolver` says in its help what it does: the DNS server that
+  resolves the computer names, the DC by default.
 
 ### Fixed
 

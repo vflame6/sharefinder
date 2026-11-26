@@ -24,11 +24,10 @@ func validConfig() Config {
 		IOTimeout:  time.Second,
 		SmbPort:    445,
 		WriteCheck: "file",
-		Depth:      5,
+		Depth:      0,
 
-		Discovery:        true,
-		DiscoveryThreads: 500,
-		ConnectTimeout:   time.Second,
+		DiscoveryThreads: 50,
+		ConnectTimeout:   2 * time.Second,
 		MaxConnsPerHost:  2,
 	}
 }
@@ -309,29 +308,27 @@ func TestExecuteDiff(t *testing.T) {
 	}
 }
 
+// The sweep is on unless --disable-discovery and runs as --discovery-threads
+// and --connect-timeout say, through --proxy too: no other values there.
 func TestCreateScanner_DiscoveryDefaults(t *testing.T) {
 	s, err := CreateScanner(validConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := s.Options.Discovery, (scanner.SweepConfig{Enabled: true, Threads: 500, Timeout: time.Second}); got != want {
+	if got, want := s.Options.Discovery, (scanner.SweepConfig{Enabled: true, Threads: 50, Timeout: 2 * time.Second}); got != want {
 		t.Fatalf("discovery = %+v, want %+v", got, want)
 	}
 
-	// through a proxy every probe is a SOCKS request: fewer at once, and the
-	// connect timeout of the SMB stage, so slow tunnels do not hide hosts
 	proxied := validConfig()
 	proxied.Proxy, proxied.Timeout = "127.0.0.1:1080", 7*time.Second
 	if s, err = CreateScanner(proxied); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := s.Options.Discovery, (scanner.SweepConfig{Enabled: true, Threads: 50, Timeout: 7 * time.Second}); got != want {
+	if got, want := s.Options.Discovery, (scanner.SweepConfig{Enabled: true, Threads: 50, Timeout: 2 * time.Second}); got != want {
 		t.Fatalf("proxied discovery = %+v, want %+v", got, want)
 	}
 
-	// values the user set are kept
-	proxied.DiscoveryThreadsSet, proxied.DiscoveryThreads = true, 200
-	proxied.ConnectTimeoutSet, proxied.ConnectTimeout = true, 3*time.Second
+	proxied.DiscoveryThreads, proxied.ConnectTimeout = 200, 3*time.Second
 	if s, err = CreateScanner(proxied); err != nil {
 		t.Fatal(err)
 	}
@@ -350,9 +347,9 @@ func TestCreateScanner_DiscoveryDefaults(t *testing.T) {
 		}
 	}
 	off := validConfig()
-	off.Discovery, off.DiscoveryThreads = false, 0
+	off.DisableDiscovery, off.DiscoveryThreads = true, 0
 	if s, err = CreateScanner(off); err != nil || s.Options.Discovery.Enabled {
-		t.Fatalf("--no-discovery: %+v, %v", s.Options.Discovery, err)
+		t.Fatalf("--disable-discovery: %+v, %v", s.Options.Discovery, err)
 	}
 }
 
@@ -370,7 +367,7 @@ func TestCreateScanner_Resume(t *testing.T) {
 
 	cfg := validConfig()
 	cfg.Resume = path
-	cfg.CommandLine = []string{"--resume", path, "--threads=50", "--no-discovery", "-o", "notes", "--output-json", "scan", "auth", "10.0.0.0/30", "-u", "tester", "-p", "secret"}
+	cfg.CommandLine = []string{"--resume", path, "--threads=50", "--disable-discovery", "-o", "notes", "--output-json", "scan", "auth", "10.0.0.0/30", "-u", "tester", "-p", "secret"}
 	s, err := CreateScanner(cfg)
 	if err != nil {
 		t.Fatalf("--resume continues an existing file without --force: %v", err)

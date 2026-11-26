@@ -77,7 +77,7 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		return nil, errors.New("--max-auth-failures must be 0 (no limit) or more")
 	}
 	if cfg.Depth < 0 {
-		return nil, errors.New("--depth must be 0 (share root only) or more")
+		return nil, errors.New("--depth must be 0 (no limit) or more")
 	}
 	if cfg.MaxFiles < 0 {
 		return nil, errors.New("--max-files must be 0 (no limit) or more")
@@ -280,22 +280,13 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 	return s, nil
 }
 
-// discoveryConfig validates the sweep flags. Through --proxy every probe is a
-// SOCKS request, so unless the user chose otherwise the sweep runs 50 probes
-// at once and waits as long as the SMB stage (--timeout): a short timeout over
-// a slow tunnel would drop live hosts without a trace.
+// discoveryConfig validates the sweep flags: the sweep runs unless
+// --disable-discovery, as --discovery-threads and --connect-timeout say,
+// through --proxy too.
 func discoveryConfig(cfg Config) (scanner.SweepConfig, error) {
-	sweep := scanner.SweepConfig{Enabled: cfg.Discovery, Threads: cfg.DiscoveryThreads, Timeout: cfg.ConnectTimeout}
+	sweep := scanner.SweepConfig{Enabled: !cfg.DisableDiscovery, Threads: cfg.DiscoveryThreads, Timeout: cfg.ConnectTimeout}
 	if !sweep.Enabled {
 		return sweep, nil
-	}
-	if cfg.Proxy != "" {
-		if !cfg.DiscoveryThreadsSet {
-			sweep.Threads = 50
-		}
-		if !cfg.ConnectTimeoutSet {
-			sweep.Timeout = cfg.Timeout
-		}
 	}
 	if sweep.Threads < 1 {
 		return sweep, errors.New("--discovery-threads must be at least 1")
@@ -312,7 +303,7 @@ var resumeIgnored = map[string]bool{
 	"--resume": true, "-o": true, "--output": true, "--output-xml": true, "--output-json": true,
 	"--output-csv": true, "--output-unc": true, "--output-relay-list": true, "--output-html": true,
 	"--output-all": true, "--threads": true, "--discovery-threads": true, "--connect-timeout": true,
-	"--max-conns-per-host": true, "--quiet": false, "--debug": false, "--force": false, "--discovery": false,
+	"--max-conns-per-host": true, "--quiet": false, "--debug": false, "--force": false, "--disable-discovery": false,
 }
 
 // resumeCommand is a command line as --resume compares it: credentials

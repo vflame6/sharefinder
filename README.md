@@ -53,61 +53,59 @@ sharefinder is a network share discovery tool that enumerates shares,
 permissions and files in networks and domains.
 
 Flags:
-  -h, --[no-]help              Show context-sensitive help (also try --help-long
-                               and --help-man).
-      --[no-]debug             Enable debug mode, print debug messages
-      --[no-]quiet             Enable quiet mode, print only results
-  -o, --output=""              Filename to write output in raw format
-      --output-xml=""          Filename to write XML formatted output
-      --output-json=""         Filename to write JSONL output: one record per
-                               line, written as results arrive
-      --output-csv=""          Filename to write CSV output: one row per share
-      --output-unc=""          Filename to write the readable shares as
-                               //host/share lines, for content scanners
-      --output-relay-list=""   Filename to write the hosts that do not require
-                               SMB signing, one address per line, for NTLM relay
-                               tools
-      --output-all=""          Filename to write output in all formats
-      --output-html=""         Filename to write the HTML report, rendered from
-                               the JSONL output
-      --[no-]force             Overwrite existing output files
-      --resume=SCAN.jsonl      Continue the interrupted scan in this
-                               --output-json file: finished hosts and shares are
-                               skipped
-      --threads=10             Number of threads
-      --timeout=5s             Seconds to wait for connection
-      --io-timeout=30s         Abort an SMB or LDAP operation when the server
-                               sends nothing for this long
-      --smb-port=445           Target port of SMB service
-      --proxy=""               SOCKS-proxy address to use for connection in
-                               format IP:PORT
-      --[no-]discovery         Probe the SMB port of every target first and
-                               enumerate only the hosts that answer
-      --discovery-threads=500  Number of concurrent port probes (50 by default
-                               with --proxy)
-      --connect-timeout=1s     Time to wait for the SMB port to answer a probe
-                               (--timeout by default with --proxy)
-      --max-auth-failures=1    Stop the scan after this many rejected logons;
-                               0 disables the guard
+  -h, --[no-]help               Show context-sensitive help (also try
+                                --help-long and --help-man).
+      --[no-]debug              Enable debug mode, print debug messages
+      --[no-]quiet              Enable quiet mode, print only results
+  -o, --output=""               Filename to write output in raw format
+      --output-xml=""           Filename to write XML formatted output
+      --output-json=""          Filename to write JSONL output: one record per
+                                line, written as results arrive
+      --output-csv=""           Filename to write CSV output: one row per share
+      --output-unc=""           Filename to write the readable shares as
+                                //host/share lines, for content scanners
+      --output-relay-list=""    Filename to write the hosts that do not require
+                                SMB signing, one address per line, for NTLM
+                                relay tools
+      --output-all=""           Filename to write output in all formats
+      --output-html=""          Filename to write the HTML report, rendered from
+                                the JSONL output
+      --[no-]force              Overwrite existing output files
+      --resume=SCAN.jsonl       Continue the interrupted scan in this
+                                --output-json file: finished hosts and shares
+                                are skipped
+      --threads=10              Number of threads
+      --timeout=5s              Seconds to wait for connection
+      --io-timeout=30s          Abort an SMB or LDAP operation when the server
+                                sends nothing for this long
+      --smb-port=445            Target port of SMB service
+      --proxy=""                SOCKS-proxy address to use for connection in
+                                format IP:PORT
+      --[no-]disable-discovery  Do not probe the SMB port of every target first:
+                                enumerate every target
+      --discovery-threads=50    Number of concurrent port probes
+      --connect-timeout=2s      Time to wait for the SMB port to answer a probe
+      --max-auth-failures=1     Stop the scan after this many rejected logons;
+                                0 disables the guard
   -e, --exclude="IPC$,NETLOGON,ADMIN$,print$,C$"
-                               Exclude list
-      --exclude-hosts=""       Skip these targets: IPs, CIDRs, ranges, hostnames
-                               (comma-separated) or a file
-      --[no-]list              List readable shares
-      --[no-]recurse           List readable shares recursively
-      --depth=5                Maximum directory depth below the share root for
-                               --recurse (0 lists the root only)
+                                Exclude list
+      --exclude-hosts=""        Skip these targets: IPs, CIDRs, ranges,
+                                hostnames (comma-separated) or a file
+      --[no-]list               List readable shares
+      --[no-]recurse            List readable shares recursively
+      --depth=0                 Directory levels to list with --recurse,
+                                the share root being 1 (0 = no limit)
       --[no-]disable-follow-links
-                               Do not descend into directory symlinks and
-                               junctions during --recurse
-      --max-files=0            Stop listing a share after this many entries (0 =
-                               no limit)
-      --max-conns-per-host=2   Connections that list the shares of one host in
-                               parallel, while --threads allows
-      --write-check=file       How to test write access: mask (open the share
-                               root with write rights, creates nothing),
-                               file (create and delete a temporary file) or off
-      --[no-]version           Show application version.
+                                Do not descend into directory symlinks and
+                                junctions during --recurse
+      --max-files=0             Stop listing a share after this many entries (0
+                                = no limit)
+      --max-conns-per-host=2    Connections that list the shares of one host in
+                                parallel, while --threads allows
+      --write-check=file        How to test write access: mask (open the share
+                                root with write rights, creates nothing),
+                                file (create and delete a temporary file) or off
+      --[no-]version            Show application version.
 
 Commands:
   help [<command>...]
@@ -164,11 +162,12 @@ sharefinder diff q3.jsonl q4.jsonl
 
 ### Large networks
 
-- **Discovery:** a TCP probe of the SMB port goes first, 500 at a time with a
-  1 s timeout (`--discovery-threads`, `--connect-timeout`), and only hosts
-  that answer wait for an SMB worker, so a mostly empty /16 sweeps in minutes.
-  Through `--proxy` the probe runs 50 at a time with the `--timeout`;
-  `--no-discovery` sends every target straight to SMB.
+- **Discovery:** a TCP probe of the SMB port goes first, 50 at a time with a
+  2 s timeout (`--discovery-threads`, `--connect-timeout`), also through
+  `--proxy`, and only hosts that answer wait for an SMB worker. A mostly
+  empty /24 sweeps in about 10 seconds; for a /16, `--discovery-threads 500`
+  takes about 4 minutes instead of 45. `--disable-discovery` sends every
+  target straight to SMB.
 - **Shares in parallel:** a host's shares are listed over up to
   `--max-conns-per-host` connections (default 2) while `--threads` allows.
 - **hunt** resolves computer names 32 at a time while the scan runs.
@@ -221,7 +220,9 @@ only: on macOS and Windows the SMB logons need `-p`, `-H` or `--aes-key` (with
 ### Hunting a domain
 
 `hunt` lists the domain's computers over LDAP (`--forest` for every domain of
-the forest) and scans them as their names resolve. Disabled computer accounts
+the forest) and scans them as their names resolve: the DC resolves them, or
+the DNS server given with `--resolver`, asked over TCP through `--proxy`.
+Disabled computer accounts
 are skipped unless `--include-disabled`; `--active-within 90d` keeps the
 computers that logged on in the last 90 days. The servers that DFS links point
 to are added when they belong to a hunted domain; the others are named and
@@ -243,11 +244,12 @@ without their operating system, and `--active-within` does not filter them.
   file in each disk share root. `--write-check mask` only opens the share root
   with write access rights and leaves nothing behind; `--write-check off` skips
   the check.
-- **Recursion:** `--recurse` stops 5 levels below the share root (`--depth`),
-  which also bounds a junction that points back up the tree, and can be capped
-  per share with `--max-files`. It descends into directory symlinks and
-  junctions, such as the domain folder in SYSVOL; `--disable-follow-links`
-  skips them.
+- **Recursion:** `--recurse` lists every level (`--depth 2` lists the share
+  root and one level below it) and can be capped per share with
+  `--max-files`. It descends into directory symlinks and junctions, such as
+  the domain folder in SYSVOL; `--disable-follow-links` skips them. A link
+  back up the tree is not followed round: a directory that lists exactly what
+  a directory above it listed is not listed again.
 - **Hung hosts and Ctrl+C:** every read and write is bounded by `--io-timeout`.
   Ctrl+C stops the scan within seconds and still writes the partial results;
   a second Ctrl+C exits at once.

@@ -219,4 +219,7 @@ func listShare(ctx context.Context, conn shareConn, sink Sink, h *Host, share *S
 	if stats.DepthLimited {
 		logger.Warnf("\\\\%s\\%s: directories deeper than --depth %d were not listed", h.IP, printable(share.ShareName), limits.MaxDepth)
 	}
+	if stats.Loops > 0 {
+		logger.Warnf("\\\\%s\\%s: %d link(s) lead back to a directory above them; their content is listed there", h.IP, printable(share.ShareName), stats.Loops)
+	}
 }
