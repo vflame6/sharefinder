@@ -210,6 +210,13 @@ password, which would count a failed logon against the account; `-p ''`
 tests an empty password on purpose. Through `--proxy`, the Kerberos exchanges
 with the KDC go through the proxy too.
 
+A ticket cache from impacket's getTGT serves both the LDAP bind of `hunt` and
+the SMB logons. With service tickets only (getST), `--dc-hostname` must be the
+host name in the `ldap/` ticket (usually the FQDN), and each host needs its
+own `cifs/` (or `host/`) ticket. go-smb reads a ticket cache for SMB on Linux
+only: on macOS and Windows the SMB logons need a password, a hash or an AES
+key.
+
 ### Hunting a domain
 
 `hunt` lists the domain's computers over LDAP (`--forest` for every domain of
