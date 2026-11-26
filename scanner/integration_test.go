@@ -481,7 +481,9 @@ func TestIntegration_SigningDialectAndRelayList(t *testing.T) {
 			o.NullSession, o.Mode = true, AuthNull
 		}
 		var jsonl, relay bytes.Buffer
-		o.Sink = MultiSink{NewJSONLSink(&jsonl, ScanRecord{ScanID: "01J"}), NewRelaySink(&relay)}
+		relaySink := NewRelaySink(&relay)
+		o.Sink = MultiSink{NewJSONLSink(&jsonl, ScanRecord{ScanID: "01J"}), relaySink}
+		o.OnNegotiated = relaySink.Negotiated
 
 		s := NewScanner(o, nil, time.Now(), 1)
 		if err := s.Run(context.Background(), TargetsFromList([]DNHost{{IP: net.ParseIP("127.0.0.1")}})); err != nil {
@@ -504,6 +506,31 @@ func TestIntegration_SigningDialectAndRelayList(t *testing.T) {
 		if listed := relay.String() == "127.0.0.1\n"; listed == tc.required {
 			t.Errorf("%s: relay list %q", tc.name, relay.String())
 		}
+	}
+}
+
+// The relay list comes from the negotiation: before any credentials work, a
+// host that refuses the null session is still a relay target.
+func TestIntegration_RelayListWithoutALogon(t *testing.T) {
+	srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares()}) // no anonymous logons
+	o := integrationOptions(srv.Port(), 5*time.Second)
+	o.NullSession, o.Mode = true, AuthNull
+	var relay bytes.Buffer
+	relaySink := NewRelaySink(&relay)
+	o.Sink, o.OnNegotiated = relaySink, relaySink.Negotiated
+
+	s := NewScanner(o, nil, time.Now(), 1)
+	_ = captureLog(t, func() {
+		if err := s.Run(context.Background(), TargetsFromList([]DNHost{{IP: net.ParseIP("127.0.0.1")}})); err != nil {
+			t.Error(err)
+		}
+	})
+	s.CloseOutputter()
+	if s.Stats.Authenticated.Load() != 0 {
+		t.Fatal("the null session must be refused for this test")
+	}
+	if relay.String() != "127.0.0.1\n" {
+		t.Fatalf("relay list = %q, want the host that does not require signing", relay.String())
 	}
 }
 

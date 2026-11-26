@@ -34,11 +34,12 @@ type Options struct {
 	HashBytes          []byte        // --hashes
 	IOTimeout          time.Duration // --io-timeout
 	Kerberos           bool
-	List               bool       // --list
-	MaxFiles           int        // --max-files
-	MaxConnsPerHost    int        // --max-conns-per-host: connections that list one host's shares
-	Matrix             []Identity // matrix: the identities tested on every host
-	LocalAuth          bool       // --local-auth
+	List               bool                                    // --list
+	MaxFiles           int                                     // --max-files
+	MaxConnsPerHost    int                                     // --max-conns-per-host: connections that list one host's shares
+	Matrix             []Identity                              // matrix: the identities tested on every host
+	OnNegotiated       func(host string, signingRequired bool) // told after each SMB negotiation (--output-relay-list)
+	LocalAuth          bool                                    // --local-auth
 	Mode               AuthMode
 	NullSession        bool
 	OutputRawFileName  string

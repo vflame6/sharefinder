@@ -38,15 +38,11 @@ func TestSprintHostLine_Dialect(t *testing.T) {
 func TestRelaySink(t *testing.T) {
 	var buf bytes.Buffer
 	sink := NewRelaySink(&buf)
-	for _, h := range []*Host{
-		{IP: "10.0.0.5", Signing: false},
-		{IP: "10.0.0.6", Signing: true},
-		{IP: "10.0.0.7", Signing: false, Session: "null"},
-		{IP: "10.0.0.5", Signing: false}, // the same host again
-	} {
-		sink.HostEnumerated(h)
-		sink.HostFinished(h)
-	}
+	// fed by the negotiation, whatever the logon gives afterwards
+	sink.Negotiated("10.0.0.5", false)
+	sink.Negotiated("10.0.0.6", true)
+	sink.Negotiated("10.0.0.7", false)
+	sink.Negotiated("10.0.0.5", false) // the same host again (another identity, a redial)
 	if err := sink.Close(EndRecord{}); err != nil {
 		t.Fatal(err)
 	}

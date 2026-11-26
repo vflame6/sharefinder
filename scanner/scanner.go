@@ -100,7 +100,9 @@ func (s *Scanner) StartOutputs() {
 		sinks = append(sinks, NewUNCSink(o.FileUNC))
 	}
 	if o.FileRelay != nil {
-		sinks = append(sinks, NewRelaySink(o.FileRelay))
+		relay := NewRelaySink(o.FileRelay)
+		sinks = append(sinks, relay)
+		o.OnNegotiated = relay.Negotiated
 	}
 	o.Sink = sinks
 }

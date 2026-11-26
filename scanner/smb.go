@@ -66,6 +66,9 @@ func NewSMBConnection(ctx context.Context, host DNHost, o *Options) (*Connection
 		}
 		// before the logon, this is the server's SecurityMode
 		signingRequired = session.IsSigningRequired()
+		if o.OnNegotiated != nil {
+			o.OnNegotiated(host.Address(), signingRequired)
+		}
 		return smbSession{session}, nil
 	}
 	first, err := negotiate()
