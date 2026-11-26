@@ -14,9 +14,9 @@ type Stats struct {
 	Done          atomic.Int64 // targets processed, skipped ones included
 	Resumed       atomic.Int64 // hosts skipped: done in the resumed scan
 	Targets       atomic.Int64 // targets taken up, after exclusions
-	Reachable     atomic.Int64 // answered SMB negotiation
+	Reachable     atomic.Int64 // accepted a TCP connection on the SMB port
 	Authenticated atomic.Int64 // accepted the identity
-	Failed        atomic.Int64 // reachable, but authentication or enumeration failed
+	Failed        atomic.Int64 // reachable, but negotiation, authentication or enumeration failed
 	Shares        atomic.Int64 // shares finished
 	Files         atomic.Int64 // entries listed
 }
@@ -59,12 +59,10 @@ func reportHostError(host string, err error) {
 	if errors.As(err, &stageErr) {
 		reason = stageErr.Err
 	}
-	switch classify(err) {
+	switch stage := classify(err); stage {
 	case StageConnect:
 		logger.Debugf("[-] %s: connection failed: %v", host, reason)
-	case StageAuth:
-		logger.Warnf("[-] %s: authentication failed: %v", host, reason)
 	default:
-		logger.Warnf("[-] %s: enumeration failed: %v", host, reason)
+		logger.Warnf("[-] %s: %s failed: %v", host, stage, reason)
 	}
 }

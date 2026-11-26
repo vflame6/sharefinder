@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/jfjallid/go-smb/dcerpc"
@@ -39,21 +40,31 @@ func NewSMBConnection(ctx context.Context, host DNHost, o *Options) (*Connection
 	options := GetSMBOptions(ctx, host, o)
 	options.ManualLogin = true
 
-	// dial and negotiate; no credentials are sent yet
+	// dial and negotiate; no credentials are sent yet. A host whose port
+	// answers but does not negotiate SMB2 is reported, not taken for
+	// unreachable.
 	negotiate := func() (sessionConn, error) {
-		session, err := smb.NewConnection(options)
+		opts, dialer := options, &dialRecorder{Dialer: o.Dialer}
+		if o.Dialer != nil {
+			opts.ProxyDialer = dialer
+		}
+		session, err := smb.NewConnection(opts)
 		if err != nil {
 			if session != nil {
 				// go-smb hands back a half-open connection on error
 				session.Close()
 			}
-			return nil, err
+			stage := StageConnect
+			if dialer.connected.Load() {
+				stage = StageNegotiate
+			}
+			return nil, &StageError{Stage: stage, Host: host.Address(), Err: err}
 		}
 		return smbSession{session}, nil
 	}
 	first, err := negotiate()
 	if err != nil {
-		return nil, &StageError{Stage: StageConnect, Host: host.Address(), Err: err}
+		return nil, err
 	}
 
 	// a connection that waits at the auth guard for half the I/O timeout may
@@ -71,6 +82,26 @@ func NewSMBConnection(ctx context.Context, host DNHost, o *Options) (*Connection
 		SessionType: sessionType,
 	}
 	return conn, nil
+}
+
+// dialRecorder notes that the TCP connection was made, so a failure after it
+// (the port answered, SMB negotiation failed) is told apart from an
+// unreachable host.
+type dialRecorder struct {
+	*Dialer
+	connected atomic.Bool
+}
+
+func (d *dialRecorder) Dial(network, address string) (net.Conn, error) {
+	return d.DialContext(context.Background(), network, address)
+}
+
+func (d *dialRecorder) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	conn, err := d.Dialer.DialContext(ctx, network, address)
+	if err == nil {
+		d.connected.Store(true)
+	}
+	return conn, err
 }
 
 // GetSMBOptions builds the go-smb options for host from the scanner options.

@@ -72,6 +72,43 @@ func TestReportHostError(t *testing.T) {
 	}
 }
 
+// A host whose port 445 answers but does not speak SMB2 (an SMB1-only
+// device, another service) is a finding, not an unreachable host.
+func TestRun_NegotiationFailureIsReported(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			_, _ = c.Write([]byte("220 not an SMB server\r\n"))
+			_ = c.Close()
+		}
+	}()
+	d, err := NewDialer("", time.Second, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := &Options{Dialer: d, Timeout: time.Second, SmbPort: ln.Addr().(*net.TCPAddr).Port, NullSession: true, Mode: AuthNull, Writer: NewOutputWriter()}
+	s := NewScanner(o, nil, time.Now(), 1)
+	out := captureLog(t, func() {
+		if err := s.Run(context.Background(), TargetsFromList([]DNHost{{IP: net.ParseIP("127.0.0.1")}})); err != nil {
+			t.Error(err)
+		}
+	})
+	if !strings.Contains(out, "[-] 127.0.0.1: SMB negotiation failed") {
+		t.Errorf("the host must be shown without --debug: %q", out)
+	}
+	if got, want := s.Stats.SummaryLine(), "Summary: 1 targets, 1 reachable, 0 authenticated, 1 failed"; got != want {
+		t.Fatalf("%s, want %s", got, want)
+	}
+}
+
 func TestRun_UnreachableTargetsAreQuiet(t *testing.T) {
 	d, err := NewDialer("", 300*time.Millisecond, time.Second)
 	if err != nil {

@@ -21,15 +21,18 @@ const (
 type Stage int
 
 const (
-	StageConnect   Stage = iota // TCP connect and SMB negotiation
+	StageConnect   Stage = iota // TCP connect
 	StageAuth                   // session setup
 	StageEnumerate              // share listing and checks
+	StageNegotiate              // SMB negotiation: the port answered, SMB2 did not
 )
 
 func (s Stage) String() string {
 	switch s {
 	case StageConnect:
 		return "connection"
+	case StageNegotiate:
+		return "SMB negotiation"
 	case StageAuth:
 		return "authentication"
 	default:
