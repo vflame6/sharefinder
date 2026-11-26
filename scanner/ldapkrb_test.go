@@ -308,6 +308,30 @@ func TestAPRepSubkey(t *testing.T) {
 	}
 }
 
+// A hostile server's AP-REP with a short encrypted part is refused instead of
+// crashing sharefinder: gokrb5 slices the checksum off without a length check.
+func TestAPRepSubkey_ShortCipher(t *testing.T) {
+	key := testKey(7)
+	for n := 0; n < 64; n++ {
+		enc := types.EncryptedData{EType: key.KeyType, Cipher: bytes.Repeat([]byte{0xAA}, n)}
+		rep, err := asn1.Marshal(messages.APRep{PVNO: 5, MsgType: msgtype.KRB_AP_REP, EncPart: enc})
+		if err != nil {
+			t.Fatal(err)
+		}
+		token := krb5Token(t, []byte{2, 0}, asn1tools.AddASNAppTag(rep, asnAppTag.APREP))
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("%d-byte encrypted part: panic: %v", n, r)
+				}
+			}()
+			if _, err := apRepSubkey(token, key); err == nil {
+				t.Errorf("%d-byte encrypted part of junk was accepted", n)
+			}
+		}()
+	}
+}
+
 // serverWrapToken is the server's last bind token (RFC 4752 section 3.1): a
 // wrap token offering the security layers in offer, its payload and checksum
 // rotated right by rrc as Windows sends them.

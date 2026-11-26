@@ -229,6 +229,15 @@ func apRepSubkey(token []byte, key types.EncryptionKey) (types.EncryptionKey, er
 		if err := rep.Unmarshal(msg); err != nil {
 			return none, err
 		}
+		// gokrb5 cuts the checksum and confounder off without a length
+		// check: a shorter encrypted part would panic it
+		etype, err := crypto.GetEtype(key.KeyType)
+		if err != nil {
+			return none, err
+		}
+		if n, least := len(rep.EncPart.Cipher), etype.GetConfounderByteSize()+etype.GetHMACBitLength()/8; n < least {
+			return none, fmt.Errorf("the server's AP-REP is %d bytes, too short for its checksum", n)
+		}
 		plain, err := crypto.DecryptEncPart(rep.EncPart, key, keyusage.AP_REP_ENCPART)
 		if err != nil {
 			return none, fmt.Errorf("the server's AP-REP: %w", err)
