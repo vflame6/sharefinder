@@ -194,6 +194,78 @@ func TestTargetSet_ContainsName(t *testing.T) {
 	}
 }
 
+func TestTargetSet_ResolveNames(t *testing.T) {
+	ex, err := ParseExcludeSpec("fs01.corp.local,ghost.corp.local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lookup := func(_ context.Context, name string) ([]net.IP, error) {
+		if name == "fs01.corp.local" {
+			return []net.IP{net.ParseIP("10.0.0.5"), net.ParseIP("fd00::5")}, nil
+		}
+		return nil, fmt.Errorf("no such host %s", name)
+	}
+	unresolved := ex.ResolveNames(context.Background(), lookup)
+	if !reflect.DeepEqual(unresolved, []string{"ghost.corp.local"}) {
+		t.Fatalf("unresolved = %v, want [ghost.corp.local]", unresolved)
+	}
+	for _, ip := range []string{"10.0.0.5", "fd00::5"} {
+		if !ex.ContainsIP(net.ParseIP(ip)) {
+			t.Errorf("an excluded name must exclude its address %s", ip)
+		}
+	}
+	if !ex.MatchesName("fs01.corp.local") {
+		t.Error("the name itself must stay excluded")
+	}
+}
+
+func TestTargetSet_MatchesName(t *testing.T) {
+	ex, err := ParseExcludeSpec("fs01,web.corp.local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{"fs01", true},
+		{"FS01.corp.local", true}, // a short name covers its FQDNs
+		{"fs011.corp.local", false},
+		{"fs01-backup.corp.local", false},
+		{"web.corp.local", true},
+		{"web.other.local", false}, // an FQDN matches exactly
+		{"web", false},
+	}
+	for _, tt := range tests {
+		if got := ex.MatchesName(tt.name); got != tt.want {
+			t.Errorf("MatchesName(%q) = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestResolveTarget_ExcludedNameCoversItsAddresses(t *testing.T) {
+	s := newResolveScanner(t, "", "localhost")
+	s.Options.ExcludeHosts.ResolveNames(context.Background(), SystemLookup)
+	_, ok, err := s.resolveTarget(context.Background(), DNHost{IP: net.ParseIP("127.0.0.1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("127.0.0.1 must be skipped when localhost is excluded")
+	}
+}
+
+func TestResolveTarget_ShortNameExcludesFQDN(t *testing.T) {
+	s := newResolveScanner(t, "127.0.0.1:1080", "fs01")
+	_, ok, err := s.resolveTarget(context.Background(), DNHost{Hostname: "fs01.corp.local"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("fs01.corp.local must be skipped when fs01 is excluded")
+	}
+}
+
 func newResolveScanner(t *testing.T, proxy string, exclude string) *Scanner {
 	t.Helper()
 	d, err := NewDialer(proxy, time.Second, time.Second)

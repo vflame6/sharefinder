@@ -73,6 +73,7 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		if err != nil {
 			return nil, fmt.Errorf("--exclude-hosts: %w", err)
 		}
+		excludeHostsSummary(excludeHosts, dialer, cfg.Timeout)
 	}
 
 	outputWriter := scanner.NewOutputWriter()
@@ -188,6 +189,25 @@ func runScan(ctx context.Context, s *scanner.Scanner, module string, produce sca
 	return err
 }
 
+// excludeHostsSummary resolves excluded hostnames, so that they also exclude
+// targets given as IP addresses, and reports what is excluded.
+func excludeHostsSummary(ex *scanner.TargetSet, dialer *scanner.Dialer, timeout time.Duration) {
+	if dialer.Proxied() {
+		if _, names := ex.Counts(); names > 0 {
+			logger.Warn("--exclude-hosts: with --proxy, excluded hostnames are matched by name only; exclude their IP addresses too")
+		}
+	} else {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		unresolved := ex.ResolveNames(ctx, scanner.SystemLookup)
+		cancel()
+		for _, name := range unresolved {
+			logger.Warnf("--exclude-hosts: cannot resolve %s; it is excluded by name only", name)
+		}
+	}
+	addrs, names := ex.Counts()
+	logger.Warnf("Excluding %d addresses and %d hostnames (--exclude-hosts)", addrs, names)
+}
+
 // loadTargets parses the target argument, removes --exclude-hosts and returns
 // a producer for what is left.
 func loadTargets(s *scanner.Scanner, target string) (scanner.Producer, error) {
@@ -196,6 +216,12 @@ func loadTargets(s *scanner.Scanner, target string) (scanner.Producer, error) {
 		return nil, err
 	}
 	total := set.Len()
+	if ex := s.Options.ExcludeHosts; ex != nil && s.Options.Dialer.Proxied() {
+		_, targetNames := set.Counts()
+		if exAddrs, _ := ex.Counts(); targetNames > 0 && exAddrs > 0 {
+			logger.Warn("--proxy resolves hostname targets remotely, so excluded addresses cannot be checked against them; exclude those hostnames by name")
+		}
+	}
 	set.Subtract(s.Options.ExcludeHosts)
 	if set.Len() == 0 {
 		return nil, errors.New("no targets left after --exclude-hosts")

@@ -404,6 +404,61 @@ func (t *TargetSet) ContainsName(name string) bool {
 	return ok
 }
 
+// MatchesName reports whether name is excluded by the set: an exact,
+// case-insensitive match, or a short name (no dot) in the set equal to the
+// first label of name, so excluding fs01 also excludes fs01.corp.local.
+func (t *TargetSet) MatchesName(name string) bool {
+	name = strings.ToLower(strings.TrimSuffix(name, "."))
+	if _, ok := t.nameSet[name]; ok {
+		return true
+	}
+	if first, _, found := strings.Cut(name, "."); found {
+		if _, ok := t.nameSet[first]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// SystemLookup resolves a name with the system resolver.
+func SystemLookup(ctx context.Context, name string) ([]net.IP, error) {
+	addrs, err := net.DefaultResolver.LookupIPAddr(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	ips := make([]net.IP, 0, len(addrs))
+	for _, a := range addrs {
+		ips = append(ips, a.IP)
+	}
+	return ips, nil
+}
+
+// ResolveNames adds every address of the set's hostnames to the set, so an
+// excluded name also excludes targets given as its IP address. It returns the
+// names that could not be resolved; those stay excluded by name only.
+func (t *TargetSet) ResolveNames(ctx context.Context, lookup func(context.Context, string) ([]net.IP, error)) []string {
+	var unresolved []string
+	for _, name := range t.names {
+		ips, err := lookup(ctx, name)
+		if err != nil || len(ips) == 0 {
+			unresolved = append(unresolved, name)
+			continue
+		}
+		for _, ip := range ips {
+			if addr, ok := netip.AddrFromSlice(ip); ok {
+				t.addAddr(addr.Unmap())
+			}
+		}
+	}
+	t.normalize()
+	return unresolved
+}
+
+// Counts returns how many addresses and hostnames the set holds.
+func (t *TargetSet) Counts() (addrs, names int) {
+	return t.Len() - len(t.names), len(t.names)
+}
+
 // TargetsProducer returns a Producer that sends every target of the set.
 func TargetsProducer(t *TargetSet) Producer {
 	return func(ctx context.Context, out chan<- DNHost) error {
@@ -440,7 +495,7 @@ func (h DNHost) Address() string {
 // were already scanned. ok is false when the target must be skipped.
 func (s *Scanner) resolveTarget(ctx context.Context, h DNHost) (DNHost, bool, error) {
 	ex := s.Options.ExcludeHosts
-	if h.Hostname != "" && ex != nil && ex.ContainsName(h.Hostname) {
+	if h.Hostname != "" && ex != nil && ex.MatchesName(h.Hostname) {
 		return h, false, nil
 	}
 	if h.IP == nil && h.Hostname != "" && !s.Options.Dialer.Proxied() {
