@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -79,14 +78,22 @@ func parseSpec(spec string, wholeBlocks bool) (*TargetSet, error) {
 	return set, nil
 }
 
-// specLines returns the lines of spec when it names an existing file, or spec
-// itself as the only line.
+// specLines returns the lines of spec when it names an existing regular file,
+// or spec itself as the only line. A spec that looks like a file name but does
+// not exist is an error rather than a hostname: a mistyped exclusion file must
+// not silently exclude nothing.
 func specLines(spec string) ([]string, error) {
-	if _, err := os.Stat(spec); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return []string{spec}, nil
+	info, err := os.Stat(spec)
+	switch {
+	case err == nil && info.IsDir():
+		return nil, fmt.Errorf("%s is a directory, not a target file", spec)
+	case err != nil || !info.Mode().IsRegular():
+		// Not a file: a list longer than a file name may be, or with
+		// characters Windows rejects in paths, ends up here too.
+		if looksLikeFile(spec) {
+			return nil, fmt.Errorf("target file %s does not exist", spec)
 		}
-		return nil, err
+		return []string{spec}, nil
 	}
 	file, err := os.Open(spec)
 	if err != nil {
@@ -99,6 +106,33 @@ func specLines(spec string) ([]string, error) {
 		lines = append(lines, scanner.Text())
 	}
 	return lines, scanner.Err()
+}
+
+// fileExtensions are suffixes that name target files, not hosts: none of them
+// is a DNS top-level domain.
+var fileExtensions = []string{".txt", ".lst", ".list", ".csv", ".conf", ".cfg", ".ips", ".hosts", ".targets", ".in"}
+
+// looksLikeFile reports whether a single-entry spec is meant as a file path:
+// it has a path prefix or a backslash, or ends in a target-file extension.
+func looksLikeFile(spec string) bool {
+	if strings.ContainsAny(spec, targetSeparator) {
+		return false
+	}
+	for _, prefix := range []string{"/", "./", "../", "~/"} {
+		if strings.HasPrefix(spec, prefix) {
+			return true
+		}
+	}
+	if strings.Contains(spec, `\`) {
+		return true
+	}
+	lower := strings.ToLower(spec)
+	for _, ext := range fileExtensions {
+		if strings.HasSuffix(lower, ext) {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *TargetSet) addEntry(entry string, wholeBlocks bool) error {

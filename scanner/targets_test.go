@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -101,6 +102,38 @@ func TestParseTargetSpec_File(t *testing.T) {
 	want := []string{"10.0.0.1", "10.0.0.2", "fs01"}
 	if got := collect(set); !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestParseTargetSpec_LongList(t *testing.T) {
+	// longer than any file name may be: must not be mistaken for a file path
+	var parts []string
+	for i := 0; i < 2000; i++ {
+		parts = append(parts, fmt.Sprintf("10.%d.%d.1", i/250, i%250))
+	}
+	set, err := ParseTargetSpec(strings.Join(parts, ","))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if set.Len() != 2000 {
+		t.Fatalf("Len() = %d, want 2000", set.Len())
+	}
+}
+
+func TestParseTargetSpec_MissingFileFailsClosed(t *testing.T) {
+	for _, spec := range []string{"scope.txt", "out-of-scope.txt", "./targets", "lists/scope.lst", `C:\scope\hosts`, "targets.csv", "/no/such/dir/hosts"} {
+		if _, err := ParseExcludeSpec(spec); err == nil {
+			t.Errorf("ParseExcludeSpec(%q) must fail: a mistyped exclusion file would exclude nothing", spec)
+		}
+		if _, err := ParseTargetSpec(spec); err == nil {
+			t.Errorf("ParseTargetSpec(%q) must fail: it names a file that does not exist", spec)
+		}
+	}
+}
+
+func TestParseTargetSpec_DirectoryIsNotATargetFile(t *testing.T) {
+	if _, err := ParseTargetSpec(t.TempDir()); err == nil {
+		t.Fatal("a directory is neither a target file nor a target")
 	}
 }
 
