@@ -51,46 +51,57 @@ sharefinder is a network share discovery tool that enumerates shares,
 permissions and files in networks and domains.
 
 Flags:
-  -h, --[no-]help            Show context-sensitive help (also try --help-long
-                             and --help-man).
-      --[no-]debug           Enable debug mode, print debug messages
-      --[no-]quiet           Enable quiet mode, print only results
-  -o, --output=""            Filename to write output in raw format
-      --output-xml=""        Filename to write XML formatted output
-      --output-json=""       Filename to write JSONL output: one record per
-                             line, written as results arrive
-      --output-csv=""        Filename to write CSV output: one row per share
-      --output-unc=""        Filename to write the readable shares as
-                             //host/share lines, for content scanners
-      --output-all=""        Filename to write output in all formats
-      --[no-]html            Write an HTML report named after --output-json or
-                             --output-xml
-      --[no-]force           Overwrite existing output files
-      --threads=10           Number of threads
-      --timeout=5s           Seconds to wait for connection
-      --io-timeout=30s       Abort an SMB or LDAP operation when the server
-                             sends nothing for this long
-      --smb-port=445         Target port of SMB service
-      --proxy=""             SOCKS-proxy address to use for connection in format
-                             IP:PORT
-      --max-auth-failures=1  Stop the scan after this many rejected logons;
-                             0 disables the guard
+  -h, --[no-]help              Show context-sensitive help (also try --help-long
+                               and --help-man).
+      --[no-]debug             Enable debug mode, print debug messages
+      --[no-]quiet             Enable quiet mode, print only results
+  -o, --output=""              Filename to write output in raw format
+      --output-xml=""          Filename to write XML formatted output
+      --output-json=""         Filename to write JSONL output: one record per
+                               line, written as results arrive
+      --output-csv=""          Filename to write CSV output: one row per share
+      --output-unc=""          Filename to write the readable shares as
+                               //host/share lines, for content scanners
+      --output-all=""          Filename to write output in all formats
+      --[no-]html              Write an HTML report named after --output-json or
+                               --output-xml
+      --[no-]force             Overwrite existing output files
+      --resume=SCAN.jsonl      Continue the interrupted scan in this
+                               --output-json file: finished hosts and shares are
+                               skipped
+      --threads=10             Number of threads
+      --timeout=5s             Seconds to wait for connection
+      --io-timeout=30s         Abort an SMB or LDAP operation when the server
+                               sends nothing for this long
+      --smb-port=445           Target port of SMB service
+      --proxy=""               SOCKS-proxy address to use for connection in
+                               format IP:PORT
+      --[no-]discovery         Probe the SMB port of every target first and
+                               enumerate only the hosts that answer
+      --discovery-threads=500  Number of concurrent port probes (50 by default
+                               with --proxy)
+      --connect-timeout=1s     Time to wait for the SMB port to answer a probe
+                               (--timeout by default with --proxy)
+      --max-auth-failures=1    Stop the scan after this many rejected logons;
+                               0 disables the guard
   -e, --exclude="IPC$,NETLOGON,ADMIN$,print$,C$"
-                             Exclude list
-      --exclude-hosts=""     Skip these targets: IPs, CIDRs, ranges, hostnames
-                             (comma-separated) or a file
-      --[no-]list            List readable shares
-      --[no-]recurse         List readable shares recursively
-      --depth=5              Maximum directory depth below the share root for
-                             --recurse (0 lists the root only)
-      --[no-]follow-links    Descend into directory symlinks and junctions
-                             during --recurse
-      --max-files=0          Stop listing a share after this many entries (0 =
-                             no limit)
-      --write-check=file     How to test write access: mask (open the share root
-                             with write rights, creates nothing), file (create
-                             and delete a temporary file) or off
-      --[no-]version         Show application version.
+                               Exclude list
+      --exclude-hosts=""       Skip these targets: IPs, CIDRs, ranges, hostnames
+                               (comma-separated) or a file
+      --[no-]list              List readable shares
+      --[no-]recurse           List readable shares recursively
+      --depth=5                Maximum directory depth below the share root for
+                               --recurse (0 lists the root only)
+      --[no-]follow-links      Descend into directory symlinks and junctions
+                               during --recurse
+      --max-files=0            Stop listing a share after this many entries (0 =
+                               no limit)
+      --max-conns-per-host=2   Connections that list the shares of one host in
+                               parallel, while --threads allows
+      --write-check=file       How to test write access: mask (open the share
+                               root with write rights, creates nothing),
+                               file (create and delete a temporary file) or off
+      --[no-]version           Show application version.
 
 Commands:
   help [<command>...]
@@ -142,6 +153,21 @@ sharefinder report scan.jsonl -o client
 # what changed since the last scan
 sharefinder diff q3.jsonl q4.jsonl
 ```
+
+### Large networks
+
+- **Discovery:** a TCP probe of the SMB port goes first, 500 at a time with a
+  1 s timeout (`--discovery-threads`, `--connect-timeout`), and only hosts
+  that answer wait for an SMB worker, so a mostly empty /16 sweeps in minutes.
+  Through `--proxy` the probe runs 50 at a time with the `--timeout`;
+  `--no-discovery` sends every target straight to SMB.
+- **Shares in parallel:** a host's shares are listed over up to
+  `--max-conns-per-host` connections (default 2) while `--threads` allows.
+- **hunt** resolves computer names 32 at a time while the scan runs.
+- **Resume:** `--resume scan.jsonl` continues a scan that was interrupted or
+  killed: hosts it finished are not contacted again, shares it finished are
+  neither checked nor listed again, and the new results are appended to the
+  same file. Records of shares that were not finished are removed first.
 
 ### Safe defaults
 

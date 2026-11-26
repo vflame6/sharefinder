@@ -29,6 +29,16 @@ from the section of the released version.
 - A closing summary: `Summary: 254 targets, 12 reachable, 10 authenticated,
   2 failed`.
 - `--force` to overwrite existing output files.
+- A discovery sweep: a TCP probe of the SMB port, 500 at a time with a 1 s
+  timeout, so only hosts that answer wait for an SMB worker. 40 silent targets
+  at `--timeout 2s` took 8 s and now take 1 s. `--discovery-threads`,
+  `--connect-timeout` and `--no-discovery` control it; through `--proxy` it
+  runs 50 at a time with the `--timeout`.
+- `--max-conns-per-host` (default 2) lists the shares of one host over several
+  connections, within `--threads`.
+- `--resume scan.jsonl` continues an interrupted `--output-json` scan: finished
+  hosts are not contacted again and finished shares are neither checked nor
+  listed again.
 
 ### Changed
 
@@ -47,6 +57,8 @@ from the section of the released version.
   never by the DNS name the server reports for itself.
 - Host and share names, remarks and file names with control characters are
   escaped in the console output.
+- `hunt` resolves computer names 32 at a time and scans each host as soon as
+  its name resolves; computers without a DNS record are counted in a warning.
 - go-smb v0.12.0; Go 1.26 is required to build. Dependabot opens one grouped
   pull request a week.
 

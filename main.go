@@ -38,7 +38,7 @@ var (
 	outputAllFlag  = app.Flag("output-all", "Filename to write output in all formats").Default("").String()
 	outputHTMLFlag = app.Flag("html", "Write an HTML report named after --output-json or --output-xml").Default("false").Bool()
 	forceFlag      = app.Flag("force", "Overwrite existing output files").Bool()
-	resumeFlag     = app.Flag("resume", "Continue the interrupted scan in this --output-json file: finished hosts and shares are skipped").String()
+	resumeFlag     = app.Flag("resume", "Continue the interrupted scan in this --output-json file: finished hosts and shares are skipped").PlaceHolder("SCAN.jsonl").String()
 
 	// connection flags
 	threadsFlag          = app.Flag("threads", "Number of threads").Default("10").Int()
