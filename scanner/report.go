@@ -207,6 +207,8 @@ func WriteReport(jsonlPath string, w io.Writer) error {
 		fmt.Fprintf(bw, "<script type=\"application/json\" id=\"%s\">%s</script>\n", block.id, data)
 	}
 
+	// the entries of every listing, directories included: the files table
+	// shows the files, and each share's listing shows both
 	_, _ = bw.WriteString(`<script type="application/json" id="sf-files">[`)
 	rows := 0
 	if _, err := readRecordsFile(jsonlPath, func(typ string, raw []byte) error {
@@ -214,10 +216,10 @@ func WriteReport(jsonlPath string, w io.Writer) error {
 			return nil
 		}
 		var rec FileRecord
-		if json.Unmarshal(raw, &rec) != nil || rec.Kind == "dir" {
+		if json.Unmarshal(raw, &rec) != nil {
 			return nil
 		}
-		row, err := json.Marshal([]any{rec.Host, rec.Share, uncPath(rec.UNC), rec.Size, isoTime(rec.Modified), strings.Join(rec.Tags, ", ")})
+		row, err := json.Marshal([]any{rec.Host, rec.Share, uncPath(rec.UNC), rec.Size, isoTime(rec.Modified), strings.Join(rec.Tags, ", "), rec.Kind})
 		if err != nil {
 			return err
 		}

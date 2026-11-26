@@ -7,6 +7,24 @@ from the section of the released version.
 
 ## [Unreleased]
 
+### Changed
+
+- `--output-html NAME` replaces `--html`: the report is named like every
+  other output and needs no `--output-json` or `--output-xml`. `--html` is
+  removed. `sharefinder report` takes `--output-html` too.
+
+### Fixed
+
+- The HTML report of 1.5.0 lost what earlier reports showed for each host:
+  its details, its shares and the listing of each share, directory by
+  directory. It is back, under "By host". A listing is drawn when it is
+  opened (at once in a small scan) and shows at most 5,000 entries, so large
+  scans stay fast; the Files table has every file. A listing says when links
+  and junctions, such as the domain folder in SYSVOL, were not followed:
+  `--follow-links` lists what they point to.
+- `--resume` warned of a different command when the scan used
+  `--output-relay-list`.
+
 ## [1.5.0] - 2026-11-26
 
 ### Added
