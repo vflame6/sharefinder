@@ -29,6 +29,17 @@ type Connection struct {
 	SigningRequired bool
 }
 
+// disconnectTree disconnects share's tree. go-smb's file helpers disconnect
+// it themselves, and its TreeConnect does nothing for a tree that is already
+// connected, so a tree that is gone by now is not an error.
+func (conn *Connection) disconnectTree(share string) {
+	err := conn.session.TreeDisconnect(share)
+	if err != nil && strings.Contains(err.Error(), "unable to find tree path") {
+		return
+	}
+	logCloseError("failed to disconnect tree "+share, err)
+}
+
 func logCloseError(action string, err error) {
 	if err != nil {
 		logger.Debugf("%s: %v", action, err)
@@ -192,7 +203,7 @@ func (conn *Connection) GetSharesList() ([]mssrvs.NetShare, error) {
 		return nil, err
 	}
 	defer func() {
-		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
+		conn.disconnectTree(share)
 	}()
 	f, err := conn.session.OpenFile(share, "srvsvc")
 	if err != nil {
@@ -223,7 +234,7 @@ func (conn *Connection) CheckLocalAdmin() (bool, error) {
 		return false, err
 	}
 	defer func() {
-		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
+		conn.disconnectTree(share)
 	}()
 
 	f, err := conn.session.OpenFile(share, msscmr.MSRPCSvcCtlPipe)
@@ -284,7 +295,7 @@ func (conn *Connection) DetectWindowsVersion(fallback string) (string, error) {
 		return buildWindowsVersionString("", "", "", "", "", 0, fallback), err
 	}
 	defer func() {
-		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
+		conn.disconnectTree(share)
 	}()
 
 	f, err := conn.session.OpenFile(share, msrrp.MSRRPPipe)
@@ -361,7 +372,7 @@ func (conn *Connection) CheckReadAccess(share string) error {
 		return err
 	}
 	defer func() {
-		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
+		conn.disconnectTree(share)
 	}()
 
 	_, err = conn.session.ListShare(share, "", false)
@@ -390,7 +401,7 @@ func (conn *Connection) WalkShare(ctx context.Context, share string, lim ListLim
 		return walkStats{}, err
 	}
 	defer func() {
-		logCloseError("failed to disconnect tree "+share, conn.session.TreeDisconnect(share))
+		conn.disconnectTree(share)
 	}()
 	return walkShare(ctx, conn.session, share, lim, recurse, emit, onErr)
 }

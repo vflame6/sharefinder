@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/vflame6/sharefinder/internal/smbtest"
+	"github.com/vflame6/sharefinder/logger"
 )
 
 // Integration tests: real SMB exchanges against go-smb's in-process server.
@@ -673,6 +674,27 @@ func TestIntegration_MatrixLateConnectFailure(t *testing.T) {
 	}
 	if s.Stats.Reachable.Load() != 1 {
 		t.Fatalf("reachable = %d, want 1", s.Stats.Reachable.Load())
+	}
+}
+
+// go-smb's file helpers disconnect the tree themselves (its TreeConnect does
+// nothing when the tree is connected), so the probe's own disconnect finds
+// none: that is not an error worth a --debug line per share (seen on GOAD).
+func TestIntegration_NoSpuriousTreeDisconnectErrors(t *testing.T) {
+	srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares()})
+	o := asUser(integrationOptions(srv.Port(), 5*time.Second), testPassword)
+	o.Sink = MultiSink{}
+	prev := logger.Log.Debug
+	logger.Log.Debug = true
+	defer func() { logger.Log.Debug = prev }()
+	s := NewScanner(o, nil, time.Now(), 1)
+	out := captureLog(t, func() {
+		if err := s.Run(context.Background(), TargetsFromList([]DNHost{{IP: net.ParseIP("127.0.0.1")}})); err != nil {
+			t.Error(err)
+		}
+	})
+	if strings.Contains(out, "failed to disconnect tree") {
+		t.Fatalf("--debug output reports trees go-smb already disconnected:\n%s", out)
 	}
 }
 
