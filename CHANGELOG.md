@@ -64,8 +64,20 @@ from the section of the released version.
   escaped in the console output.
 - `hunt` resolves computer names 32 at a time and scans each host as soon as
   its name resolves; computers without a DNS record are counted in a warning.
+- Hosts whose SMB port answers but that do not negotiate SMB2 (SMB1-only
+  devices, other services) are reported and counted as reachable and failed.
 - go-smb v0.12.0; Go 1.26 is required to build. Dependabot opens one grouped
   pull request a week.
+
+### Fixed
+
+- A password or hash attached to its short flag (`-pSecret`, `-Hhash`) was
+  written unmasked into the XML header (and the new JSONL scan record and HTML
+  report).
+- Control characters in share names, remarks and error texts from scanned
+  servers could reach the terminal through warnings and errors; every message
+  now shows them escaped.
+- `--threads 0` hung; it is refused.
 
 ## [1.4.1] - 2026-11-26
 

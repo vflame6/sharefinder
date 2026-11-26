@@ -167,7 +167,12 @@ sharefinder diff q3.jsonl q4.jsonl
 - **Resume:** `--resume scan.jsonl` continues a scan that was interrupted or
   killed: hosts it finished are not contacted again, shares it finished are
   neither checked nor listed again, and the new results are appended to the
-  same file. Records of shares that were not finished are removed first.
+  same file. Records of shares that were not finished are removed first. Only
+  the JSONL file is continued: add `--html`, or run `sharefinder report`
+  afterwards, for the report of the whole scan.
+- **Diff:** `sharefinder diff` lists new, removed and changed shares; shares
+  the newer scan did not check (it was stopped, or a host was not reached)
+  are listed apart and never as removed.
 
 ### Safe defaults
 
