@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/vflame6/sharefinder/utils"
 )
@@ -28,42 +27,48 @@ func SprintHostLine(h Host) string {
 	return result
 }
 
+// listingRow is the layout of one listing line.
+const listingRow = "%-4s  %8s  %-16s  %s\n"
+
+// writeListingHeader writes the column header of a file listing.
+func writeListingHeader(b *strings.Builder) {
+	fmt.Fprintf(b, listingRow, "Type", "Size", "LastWriteTime", "Name")
+	fmt.Fprintf(b, listingRow, "----", "----", "-------------", "----")
+}
+
+// writeFiles writes one listing line per file.
+func writeFiles(b *strings.Builder, files []File) {
+	for _, file := range files {
+		lastWrite := file.LastModified.Format(dateTimeFormat)
+		fmt.Fprintf(b, listingRow, file.Type, utils.BytesToHumanReadableSize(file.Size), lastWrite, file.Name)
+	}
+}
+
+// SprintFiles formats a file listing. It runs in linear time: 80,000 files
+// used to take over a minute with string concatenation.
 func SprintFiles(files []File) string {
-	var shareListResult string
-
-	if len(files) > 0 {
-		for _, file := range files {
-			// Microsoft handles time as number of 100-nanosecond intervals since January 1, 1601 UTC
-			// So to get a timestamp with unix time, subtract difference in 100-nanosecond intervals
-			// and divide by 10 to convert to microseconds
-			lastWrite := time.Time.Format(file.LastModified, dateTimeFormat)
-			fileSize := utils.BytesToHumanReadableSize(file.Size)
-			shareListResult += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", file.Type, fileSize, lastWrite, file.Name)
-		}
-	}
-	return shareListResult
+	var b strings.Builder
+	b.Grow(len(files) * 64)
+	writeFiles(&b, files)
+	return b.String()
 }
 
+// SprintDirectories formats the listing of each directory.
 func SprintDirectories(ip, share string, dirs []Directory) string {
-	var shareListResult string
-
-	if len(dirs) > 0 {
-		for _, dir := range dirs {
-			shareListResult += fmt.Sprintf("Listing directory %s\\%s\\%s\n", ip, share, dir.Name)
-			shareListResult += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "Type", "Size", "LastWriteTime", "Name")
-			shareListResult += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "----", "----", "-------------", "----")
-			for _, file := range dir.Files {
-				lastWrite := time.Time.Format(file.LastModified, dateTimeFormat)
-				fileSize := utils.BytesToHumanReadableSize(file.Size)
-				shareListResult += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", file.Type, fileSize, lastWrite, file.Name)
-			}
-			shareListResult += "\n"
-		}
-	}
-	return shareListResult
+	var b strings.Builder
+	writeDirectories(&b, ip, share, dirs)
+	return b.String()
 }
 
-// sharePermissions renders a share's access as READ plus its write labels.
+func writeDirectories(b *strings.Builder, ip, share string, dirs []Directory) {
+	for _, dir := range dirs {
+		fmt.Fprintf(b, "Listing directory %s\\%s\\%s\n", ip, share, dir.Name)
+		writeListingHeader(b)
+		writeFiles(b, dir.Files)
+		b.WriteString("\n")
+	}
+}
+
 func sharePermissions(share Share) string {
 	var permissions []string
 	if share.ReadPermission {
@@ -78,9 +83,8 @@ func sharePermissions(share Share) string {
 	return strings.Join(permissions, ",")
 }
 
+// SprintHost formats the share table of a host.
 func SprintHost(h Host, exclude []string) string {
-	var result string
-
 	// widen the permissions column for labels such as WRITE (SUBDIR)
 	width := 16
 	for _, share := range h.Shares {
@@ -90,38 +94,32 @@ func SprintHost(h Host, exclude []string) string {
 	}
 	row := "%-16s %-" + strconv.Itoa(width) + "s %-16s\n"
 
-	result += fmt.Sprintf("\n"+row, "Share", "Permissions", "Description")
-	result += fmt.Sprintf(row, strings.Repeat("-", 5), strings.Repeat("-", 11), strings.Repeat("-", 10))
-
+	var b strings.Builder
+	b.WriteString("\n")
+	fmt.Fprintf(&b, row, "Share", "Permissions", "Description")
+	fmt.Fprintf(&b, row, strings.Repeat("-", 5), strings.Repeat("-", 11), strings.Repeat("-", 10))
 	for _, share := range h.Shares {
 		if slices.Contains(exclude, share.ShareName) {
 			continue
 		}
-		result += fmt.Sprintf(row, share.ShareName, sharePermissions(share), share.Description)
+		fmt.Fprintf(&b, row, share.ShareName, sharePermissions(share), share.Description)
 	}
-	result += "\n"
-
-	return result
+	b.WriteString("\n")
+	return b.String()
 }
 
+// SprintShares formats the listings of the readable shares of a host.
 func SprintShares(h Host, exclude []string) string {
-	var result string
-
+	var b strings.Builder
 	for _, share := range h.Shares {
-		if !share.ReadPermission {
+		if !share.ReadPermission || slices.Contains(exclude, share.ShareName) {
 			continue
 		}
-		if slices.Contains(exclude, share.ShareName) {
-			continue
-		}
-
-		result += fmt.Sprintf("Listing share %s\\%s\n", h.IP, share.ShareName)
-		result += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "Type", "Size", "LastWriteTime", "Name")
-		result += fmt.Sprintf("%-4s  %8s  %-16s  %s\n", "----", "----", "-------------", "----")
-		result += SprintFiles(share.Files)
-		result += "\n"
-		result += SprintDirectories(h.IP, share.ShareName, share.Directories)
+		fmt.Fprintf(&b, "Listing share %s\\%s\n", h.IP, share.ShareName)
+		writeListingHeader(&b)
+		writeFiles(&b, share.Files)
+		b.WriteString("\n")
+		writeDirectories(&b, h.IP, share.ShareName, share.Directories)
 	}
-
-	return result
+	return b.String()
 }
