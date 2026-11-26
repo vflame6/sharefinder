@@ -10,6 +10,7 @@ type Config struct {
 
 	OutputRaw  string // -o/--output
 	OutputXML  string // --output-xml
+	OutputJSON string // --output-json
 	OutputAll  string // --output-all
 	OutputHTML bool   // --html
 	Force      bool   // --force: overwrite existing output files

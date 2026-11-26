@@ -19,6 +19,7 @@ type Options struct {
 	Exclude            []string   // --exclude
 	ExcludeHosts       *TargetSet // --exclude-hosts
 	FileTXT            *os.File
+	FileJSON           *os.File // --output-json
 	FileXML            *os.File
 	FollowLinks        bool          // --follow-links
 	Forest             bool          // --forest (hunt only)
@@ -33,6 +34,7 @@ type Options struct {
 	NullSession        bool
 	OutputRawFileName  string
 	OutputXMLFileName  string
+	OutputJSONFileName string
 	OutputHTML         bool // --html
 	OutputHTMLFileName string
 	Password           string         // --password
@@ -41,5 +43,6 @@ type Options struct {
 	Timeout            time.Duration  // --timeout
 	Username           string         // part of --username
 	WriteCheck         WriteCheckMode // --write-check
+	Sink               Sink           // where results go; built by StartOutputs
 	Writer             *OutputWriter
 }

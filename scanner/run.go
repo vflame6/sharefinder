@@ -66,7 +66,7 @@ func (s *Scanner) worker(ctx context.Context, targets <-chan DNHost) {
 			if !ok {
 				return
 			}
-			s.scanHost(ctx, host)
+			s.processHost(ctx, host)
 		}
 	}
 }

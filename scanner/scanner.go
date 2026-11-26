@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +21,8 @@ type Scanner struct {
 	TimeStart   time.Time
 	TimeEnd     time.Time
 	Threads     int
+	Version     string // sharefinder version, for the outputs
+	Interrupted bool   // the scan was stopped by Ctrl+C
 
 	closeOnce sync.Once
 	scanned   sync.Map // addresses already scanned, for deduplication
@@ -46,30 +50,61 @@ func (s *Scanner) CloseOutputter() {
 	s.closeOnce.Do(s.closeOutputs)
 }
 
+// StartOutputs builds the sinks for the opened output files: the console
+// (and -o text file), XML and JSONL. Call it once the identity is known; it
+// does nothing when Options.Sink is already set.
+func (s *Scanner) StartOutputs() {
+	o := s.Options
+	if o.Sink != nil {
+		return
+	}
+	sinks := MultiSink{NewTextSink(fileOrNil(o.FileTXT))}
+	if o.FileXML != nil {
+		sinks = append(sinks, NewXMLSink(o.FileXML, ""))
+	}
+	if o.FileJSON != nil {
+		sinks = append(sinks, NewJSONLSink(o.FileJSON, ScanRecord{
+			ScanID:   NewScanID(),
+			Time:     s.TimeStart,
+			Version:  s.Version,
+			Command:  strings.Join(MaskCredentials(s.CommandLine), " "),
+			Identity: o.Identity(),
+		}))
+	}
+	o.Sink = sinks
+}
+
+// fileOrNil keeps a nil *os.File from becoming a non-nil io.Writer.
+func fileOrNil(f *os.File) io.Writer {
+	if f == nil {
+		return nil
+	}
+	return f
+}
+
 func (s *Scanner) closeOutputs() {
 	if s.TimeEnd.IsZero() {
 		s.TimeEnd = time.Now()
 	}
-	if s.Options.FileTXT != nil {
-		_ = s.Options.FileTXT.Close()
+	// a run that never started (e.g. hunt failed in LDAP) still terminates
+	// its XML and JSONL files
+	s.StartOutputs()
+	if err := s.Options.Sink.Close(EndRecord{Time: s.TimeEnd, Interrupted: s.Interrupted}); err != nil {
+		logger.Error(err)
 	}
-	if s.Options.FileXML != nil {
-		err := s.Options.Writer.WriteXMLFooter(s.TimeEnd, s.Options.FileXML)
+	for _, f := range []*os.File{s.Options.FileTXT, s.Options.FileXML, s.Options.FileJSON} {
+		if f != nil {
+			_ = f.Close()
+		}
+	}
+
+	if s.Options.OutputHTML && s.Options.OutputXMLFileName != "" {
+		xmlFile, err := s.Options.Writer.ReadFile(s.Options.OutputXMLFileName)
 		if err != nil {
 			logger.Error(err)
 		}
-		_ = s.Options.FileXML.Close()
-
-		if s.Options.OutputHTML {
-			xmlFile, err := s.Options.Writer.ReadFile(s.Options.OutputXMLFileName)
-			if err != nil {
-				logger.Error(err)
-			}
-
-			err = s.OutputHTML(xmlFile)
-			if err != nil {
-				logger.Error(err)
-			}
+		if err := s.OutputHTML(xmlFile); err != nil {
+			logger.Error(err)
 		}
 	}
 }

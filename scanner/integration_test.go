@@ -1,12 +1,14 @@
 package scanner
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -74,6 +76,7 @@ func scanXML(t *testing.T, ctx context.Context, o *Options) (*SharefinderRun, er
 	o.FileXML, o.OutputXMLFileName = f, path
 
 	s := NewScanner(o, nil, time.Now(), 2)
+	s.StartOutputs()
 	runErr := s.Run(ctx, TargetsFromList([]DNHost{{IP: net.ParseIP("127.0.0.1")}}))
 	s.CloseOutputter()
 
@@ -279,6 +282,40 @@ func TestIntegration_CancelDuringRecursiveListing(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 3500*time.Millisecond {
 		t.Fatalf("Run returned %v after start, want within 2s of the cancel", elapsed)
+	}
+}
+
+func TestIntegration_JSONL(t *testing.T) {
+	srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares()})
+	o := asUser(integrationOptions(srv.Port(), 5*time.Second), testPassword)
+	o.List = true
+	var buf bytes.Buffer
+	o.Sink = NewJSONLSink(&buf, ScanRecord{ScanID: NewScanID(), Identity: o.Identity()})
+
+	s := NewScanner(o, nil, time.Now(), 2)
+	if err := s.Run(context.Background(), TargetsFromList([]DNHost{{IP: net.ParseIP("127.0.0.1")}})); err != nil {
+		t.Fatal(err)
+	}
+	s.CloseOutputter()
+
+	// jq -r 'select(.type=="share" and .write) | .unc'
+	var writable, files []string
+	for _, rec := range jsonLines(t, buf.String()) {
+		if rec["type"] == "share" && rec["write"] == true {
+			writable = append(writable, rec["unc"].(string))
+		}
+		if rec["type"] == "file" {
+			files = append(files, rec["unc"].(string))
+			if rec["identity"] != testUser || rec["scan_id"] == "" || rec["host"] != "127.0.0.1" {
+				t.Errorf("file record lacks scan_id, identity or host: %v", rec)
+			}
+		}
+	}
+	if strings.Join(writable, ",") != "//127.0.0.1/DATA" {
+		t.Fatalf("writable shares = %v, want [//127.0.0.1/DATA]", writable)
+	}
+	if !slices.Contains(files, "//127.0.0.1/DATA/readme.txt") {
+		t.Fatalf("file records = %v, want //127.0.0.1/DATA/readme.txt among them", files)
 	}
 }
 

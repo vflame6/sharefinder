@@ -27,6 +27,7 @@ var (
 	// file output flags
 	outputRawFlag  = app.Flag("output", "Filename to write output in raw format").Short('o').Default("").String()
 	outputXMLFlag  = app.Flag("output-xml", "Filename to write XML formatted output").Default("").String()
+	outputJSONFlag = app.Flag("output-json", "Filename to write JSONL output: one record per line, written as results arrive").Default("").String()
 	outputAllFlag  = app.Flag("output-all", "Filename to write output in all formats").Default("").String()
 	outputHTMLFlag = app.Flag("html", "Generate HTML report (requires XML output)").Default("false").Bool()
 	forceFlag      = app.Flag("force", "Overwrite existing output files").Bool()
@@ -114,6 +115,7 @@ func main() {
 		TimeStart:       time.Now(),
 		OutputRaw:       *outputRawFlag,
 		OutputXML:       *outputXMLFlag,
+		OutputJSON:      *outputJSONFlag,
 		OutputAll:       *outputAllFlag,
 		OutputHTML:      *outputHTMLFlag,
 		Force:           *forceFlag,

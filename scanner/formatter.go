@@ -17,7 +17,7 @@ var (
 // SprintHostLine formats the one-line summary of a scanned host. The session
 // type and admin status are left out when unknown.
 func SprintHostLine(h Host) string {
-	result := fmt.Sprintf("[+] %s: %s (name:%s) (domain:%s) (signing:%v)", h.IP, h.Version, h.Hostname, h.Domain, h.Signing)
+	result := fmt.Sprintf("[+] %s: %s (name:%s) (domain:%s) (signing:%v)", h.IP, printable(h.Version), printable(h.Hostname), printable(h.Domain), h.Signing)
 	if h.Session != "" {
 		result += fmt.Sprintf(" (session:%s)", h.Session)
 	}
@@ -40,7 +40,7 @@ func writeListingHeader(b *strings.Builder) {
 func writeFiles(b *strings.Builder, files []File) {
 	for _, file := range files {
 		lastWrite := file.LastModified.Format(dateTimeFormat)
-		fmt.Fprintf(b, listingRow, file.Type, utils.BytesToHumanReadableSize(file.Size), lastWrite, file.Name)
+		fmt.Fprintf(b, listingRow, file.Type, utils.BytesToHumanReadableSize(file.Size), lastWrite, printable(file.Name))
 	}
 }
 
@@ -102,7 +102,7 @@ func SprintHost(h Host, exclude []string) string {
 		if slices.Contains(exclude, share.ShareName) {
 			continue
 		}
-		fmt.Fprintf(&b, row, share.ShareName, sharePermissions(share), share.Description)
+		fmt.Fprintf(&b, row, printable(share.ShareName), sharePermissions(share), printable(share.Description))
 	}
 	b.WriteString("\n")
 	return b.String()

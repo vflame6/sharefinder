@@ -21,6 +21,8 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 	var outputRawFileName string
 	var outputXMLFileName string
 	var outputHTMLFileName string
+	var outputJSONFileName string
+	var fileJSON *os.File
 	var file *os.File
 	var fileXML *os.File
 	var err error
@@ -33,8 +35,8 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		return nil, errors.New("cannot use --html without --output-xml")
 	}
 
-	if (cfg.OutputXML != "" || cfg.OutputRaw != "" || outputHTML) && cfg.OutputAll != "" {
-		return nil, errors.New("cannot use --output-all with --output-raw, --output-xml or --html")
+	if (cfg.OutputXML != "" || cfg.OutputRaw != "" || cfg.OutputJSON != "" || outputHTML) && cfg.OutputAll != "" {
+		return nil, errors.New("cannot use --output-all with -o, --output-xml, --output-json or --html")
 	}
 
 	// recursive output is available only if the list option is specified
@@ -89,6 +91,7 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		outputHTML = true
 		outputRawFileName = scanner.OutputPath(cfg.OutputAll, ".txt")
 		outputXMLFileName = scanner.OutputPath(cfg.OutputAll, ".xml")
+		outputJSONFileName = scanner.OutputPath(cfg.OutputAll, ".jsonl")
 		outputHTMLFileName = scanner.OutputPath(cfg.OutputAll, ".html")
 	default:
 		if cfg.OutputRaw != "" {
@@ -97,12 +100,15 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		if cfg.OutputXML != "" {
 			outputXMLFileName = scanner.OutputPath(cfg.OutputXML, ".xml")
 		}
+		if cfg.OutputJSON != "" {
+			outputJSONFileName = scanner.OutputPath(cfg.OutputJSON, ".jsonl")
+		}
 		if outputHTML {
 			outputHTMLFileName = scanner.OutputPath(cfg.OutputXML, ".html")
 		}
 	}
 	var outputs []string
-	for _, name := range []string{outputRawFileName, outputXMLFileName, outputHTMLFileName} {
+	for _, name := range []string{outputRawFileName, outputXMLFileName, outputJSONFileName, outputHTMLFileName} {
 		if name != "" {
 			outputs = append(outputs, name)
 		}
@@ -115,6 +121,13 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 	if outputRawFileName != "" {
 		logger.Debugf("Writing raw output to %s", outputRawFileName)
 		file, err = outputWriter.CreateFile(outputRawFileName, false)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if outputJSONFileName != "" {
+		logger.Debugf("Writing JSONL output to %s", outputJSONFileName)
+		fileJSON, err = outputWriter.CreateFile(outputJSONFileName, false)
 		if err != nil {
 			return nil, err
 		}
@@ -162,6 +175,8 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		OutputHTMLFileName: outputHTMLFileName,
 		OutputRawFileName:  outputRawFileName,
 		OutputXMLFileName:  outputXMLFileName,
+		FileJSON:           fileJSON,
+		OutputJSONFileName: outputJSONFileName,
 		Password:           "",
 		Recurse:            cfg.Recurse,
 		SmbPort:            cfg.SmbPort,
@@ -172,12 +187,15 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 
 	// create and return a scanner object
 	s := scanner.NewScanner(options, cfg.CommandLine, cfg.TimeStart, cfg.Threads)
+	s.Version = cfg.Version
 	return s, nil
 }
 
 // runScan enumerates the hosts produce sends and logs how the module ended.
 func runScan(ctx context.Context, s *scanner.Scanner, module string, produce scanner.Producer) error {
+	s.StartOutputs()
 	err := s.Run(ctx, produce)
+	s.Interrupted = ctx.Err() != nil
 	s.TimeEnd = time.Now()
 	if ctx.Err() != nil || err != nil {
 		logger.Warnf("Stopped %s module at %s", module, s.TimeEnd.Format("02/01/2006 15:04:05"))

@@ -33,7 +33,10 @@ type Host struct {
 	Signing  bool      `xml:"signing,attr"`
 	Session  string    `xml:"session,attr,omitempty"`
 	Admin    *bool     `xml:"admin,attr,omitempty"`
-	Shares   []Share   `xml:"share"`
+	// FQDN is the host's DNS name when known: the target name, or the NTLM
+	// DNS computer name. UNC paths use it.
+	FQDN   string  `xml:"fqdn,attr,omitempty"`
+	Shares []Share `xml:"share"`
 }
 
 func (h Host) AdminStatus() string {
@@ -95,15 +98,25 @@ func (r *SharefinderRun) AdminHostCount() int {
 }
 
 type Share struct {
-	ShareName       string      `xml:"share_name,attr"`
-	Description     string      `xml:"description,attr"`
-	ReadPermission  bool        `xml:"read_permission,attr"`
-	WritePermission bool        `xml:"write_permission,attr"`
-	Truncated       bool        `xml:"truncated,attr,omitempty"`
-	WriteAccess     string      `xml:"write_access,attr,omitempty"`
-	TypeID          uint32      `xml:"-"`
-	Directories     []Directory `xml:"directory"`
-	Files           []File      `xml:"file"`
+	ShareName       string `xml:"share_name,attr"`
+	Description     string `xml:"description,attr"`
+	ReadPermission  bool   `xml:"read_permission,attr"`
+	WritePermission bool   `xml:"write_permission,attr"`
+	Truncated       bool   `xml:"truncated,attr,omitempty"`
+	WriteAccess     string `xml:"write_access,attr,omitempty"`
+	// Partial marks a share whose listing was cut short by Ctrl+C.
+	Partial bool `xml:"partial,attr,omitempty"`
+	// Directories and Files are filled when an XML file is read back; a scan
+	// streams listings to the outputs instead of keeping them here.
+	Directories []Directory `xml:"directory"`
+	Files       []File      `xml:"file"`
+
+	TypeID    uint32 `xml:"-"`
+	ShareType string `xml:"-"` // disk, printer, device or ipc
+	Listed    bool   `xml:"-"` // a listing was attempted
+	FileCount int64  `xml:"-"`
+	DirCount  int64  `xml:"-"`
+	ListError string `xml:"-"`
 }
 
 type Directory struct {
