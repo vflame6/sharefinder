@@ -105,12 +105,15 @@ from the section of the released version.
   The search of the forest root also returned the computers of its child
   domains, which were then counted and scanned twice. Each domain is now asked
   on one of its own DCs; the Global Catalog is used, with a warning, only for a
-  domain none of whose DCs answers.
+  domain none of whose DCs answers, or with `-k`, whose tickets are for the
+  user's own realm, and only that domain's own computers are taken from it.
 - `hunt -k` was refused by Active Directory ("AcceptSecurityContext error,
   data 57"): the Kerberos request asked for mutual authentication without
   requiring it.
 - `hunt -k --proxy` sent the Kerberos exchanges of the LDAP bind straight to
   the KDC instead of through the proxy; they now go through it, over TCP.
+- A Kerberos reply from the LDAP server with a truncated encrypted part
+  crashed `hunt -k`; it is refused.
 - `--debug` reported "failed to disconnect tree" for every share that go-smb
   had already disconnected.
 
