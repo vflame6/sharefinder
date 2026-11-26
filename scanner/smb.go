@@ -2,9 +2,11 @@ package scanner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/jfjallid/go-smb/dcerpc"
@@ -22,6 +24,9 @@ type Connection struct {
 	session *smb.Connection
 	// SessionType is "user", "guest" or "null": what the server granted.
 	SessionType string
+	// SigningRequired is the server's requirement from the negotiation:
+	// go-smb reports false after a null or guest logon, which never signs.
+	SigningRequired bool
 }
 
 func logCloseError(action string, err error) {
@@ -38,21 +43,37 @@ func NewSMBConnection(ctx context.Context, host DNHost, o *Options) (*Connection
 	options := GetSMBOptions(ctx, host, o)
 	options.ManualLogin = true
 
-	// dial and negotiate; no credentials are sent yet
+	// dial and negotiate; no credentials are sent yet. A host whose port
+	// answers but does not negotiate SMB2 is reported, not taken for
+	// unreachable.
+	var signingRequired bool
 	negotiate := func() (sessionConn, error) {
-		session, err := smb.NewConnection(options)
+		opts, dialer := options, &dialRecorder{Dialer: o.Dialer}
+		if o.Dialer != nil {
+			opts.ProxyDialer = dialer
+		}
+		session, err := smb.NewConnection(opts)
 		if err != nil {
 			if session != nil {
 				// go-smb hands back a half-open connection on error
 				session.Close()
 			}
-			return nil, err
+			stage := StageConnect
+			if dialer.connected.Load() {
+				stage = StageNegotiate
+			}
+			return nil, &StageError{Stage: stage, Host: host.Address(), Err: err}
+		}
+		// before the logon, this is the server's SecurityMode
+		signingRequired = session.IsSigningRequired()
+		if o.OnNegotiated != nil {
+			o.OnNegotiated(host.Address(), signingRequired)
 		}
 		return smbSession{session}, nil
 	}
 	first, err := negotiate()
 	if err != nil {
-		return nil, &StageError{Stage: StageConnect, Host: host.Address(), Err: err}
+		return nil, err
 	}
 
 	// a connection that waits at the auth guard for half the I/O timeout may
@@ -65,11 +86,32 @@ func NewSMBConnection(ctx context.Context, host DNHost, o *Options) (*Connection
 	}
 
 	conn := &Connection{
-		host:        host.Address(),
-		session:     session.conn.(smbSession).Connection,
-		SessionType: sessionType,
+		host:            host.Address(),
+		session:         session.conn.(smbSession).Connection,
+		SessionType:     sessionType,
+		SigningRequired: signingRequired,
 	}
 	return conn, nil
+}
+
+// dialRecorder notes that the TCP connection was made, so a failure after it
+// (the port answered, SMB negotiation failed) is told apart from an
+// unreachable host.
+type dialRecorder struct {
+	*Dialer
+	connected atomic.Bool
+}
+
+func (d *dialRecorder) Dial(network, address string) (net.Conn, error) {
+	return d.DialContext(context.Background(), network, address)
+}
+
+func (d *dialRecorder) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	conn, err := d.Dialer.DialContext(ctx, network, address)
+	if err == nil {
+		d.connected.Store(true)
+	}
+	return conn, err
 }
 
 // GetSMBOptions builds the go-smb options for host from the scanner options.
@@ -80,7 +122,6 @@ func GetSMBOptions(ctx context.Context, host DNHost, o *Options) smb.Options {
 		Host:                  host.Address(),
 		Port:                  o.SmbPort,
 		RequireMessageSigning: false,
-		ForceSMB2:             false,
 		DialTimeout:           o.Timeout,
 		ProxyDialer:           o.Dialer,
 	}
@@ -110,7 +151,7 @@ func GetSMBOptions(ctx context.Context, host DNHost, o *Options) smb.Options {
 			User:        o.Username,
 			Password:    o.Password,
 			Hash:        o.HashBytes,
-			AESKey:      nil,
+			AESKey:      o.AESKey,
 			SPN:         "cifs/" + hostname,
 			DCIP:        dcIPStr,
 			DialTimeout: o.Timeout,
@@ -327,17 +368,17 @@ func (conn *Connection) CheckReadAccess(share string) error {
 	return err
 }
 
+// statusPrivilegeNotHeld (STATUS_PRIVILEGE_NOT_HELD) has no sentinel in go-smb.
+const statusPrivilegeNotHeld uint32 = 0xc0000061
+
+// isExpectedSMBWriteDeniedError reports a write probe the server refused:
+// access denied or privilege not held.
 func isExpectedSMBWriteDeniedError(err error) bool {
-	if err == nil {
-		return false
+	if errors.Is(err, smb.StatusMap[smb.StatusAccessDenied]) {
+		return true
 	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "0xc0000061") ||
-		strings.Contains(msg, "status_privilege_not_held") ||
-		strings.Contains(msg, "privilege not held") ||
-		strings.Contains(msg, "0xc0000022") ||
-		strings.Contains(msg, "status_access_denied") ||
-		strings.Contains(msg, "access denied")
+	var statusErr *smb.NTStatusError
+	return errors.As(err, &statusErr) && statusErr.Status == statusPrivilegeNotHeld
 }
 
 // WalkShare connects to share and lists it within lim; see walkShare.

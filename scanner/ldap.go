@@ -59,6 +59,8 @@ type LDAPOptions struct {
 	// LDAP without TLS when LDAPS and StartTLS both fail.
 	AllowPlaintext bool
 	Dialer         *Dialer
+	// AESKey is the Kerberos AES key of the user (--aes-key)
+	AESKey []byte
 }
 
 // ldapTransport is how the LDAP connection is protected.
@@ -232,7 +234,8 @@ func dialLDAP(ctx context.Context, o LDAPOptions) (*ldap.Conn, ldapTransport, er
 	return withTimeout(l), transportPlain, nil
 }
 
-// newGSSAPIClient builds a Kerberos client from KRB5CCNAME or the password.
+// newGSSAPIClient builds a Kerberos client from the AES key, KRB5CCNAME or the
+// password.
 func newGSSAPIClient(o LDAPOptions) (*gssapi.Client, error) {
 	if o.DCHostname == "" {
 		return nil, fmt.Errorf("dcHostname is required for Kerberos (used as KDC and SPN host)")
@@ -240,12 +243,20 @@ func newGSSAPIClient(o LDAPOptions) (*gssapi.Client, error) {
 
 	// build krb5 config in memory — no temp files
 	realm := strings.ToUpper(o.Domain)
-	krb5Conf, err := newKrb5Config(realm, o.Host.String())
+	krb5Conf, err := newKrb5Config(realm, o.Host.String(), o.AESKey)
 	if err != nil {
 		return nil, fmt.Errorf("krb5 config: %w", err)
 	}
 
-	// try ccache first (KRB5CCNAME), fall back to password-based TGT
+	// an AES key given with --aes-key first, then the ccache (KRB5CCNAME),
+	// then the password
+	if len(o.AESKey) > 0 {
+		kt, err := aesKeytab(o.Username, realm, o.AESKey)
+		if err != nil {
+			return nil, fmt.Errorf("gssapi: %w", err)
+		}
+		return &gssapi.Client{Client: client.NewWithKeytab(o.Username, realm, kt, krb5Conf)}, nil
+	}
 	if ccachePath, ccErr := ccachePathFromEnv(); ccErr == nil {
 		ccache, err := credentials.LoadCCache(ccachePath)
 		if err != nil {
@@ -260,7 +271,7 @@ func newGSSAPIClient(o LDAPOptions) (*gssapi.Client, error) {
 	if o.Password != "" {
 		return &gssapi.Client{Client: client.NewWithPassword(o.Username, realm, o.Password, krb5Conf)}, nil
 	}
-	return nil, fmt.Errorf("kerberos requires either KRB5CCNAME ccache or -p password")
+	return nil, fmt.Errorf("kerberos requires --aes-key, a KRB5CCNAME ccache or a password")
 }
 
 func (c *LDAPConnection) Close() error {
@@ -292,10 +303,20 @@ func ccachePathFromEnv() (string, error) {
 	return cc, nil
 }
 
-// newKrb5Config builds a minimal krb5 config in memory for the given AD realm and KDC address.
-func newKrb5Config(realm, kdcAddr string) (*config.Config, error) {
+// newKrb5Config builds a minimal krb5 config in memory for the given AD realm
+// and KDC address. With an AES key the AS exchange asks only for that key's
+// etype: the KDC lists AES256 first for accounts that have it, and an AES128
+// key would find no match.
+func newKrb5Config(realm, kdcAddr string, aesKey []byte) (*config.Config, error) {
+	var etypes string
+	switch len(aesKey) {
+	case 16:
+		etypes = "  default_tkt_enctypes = aes128-cts-hmac-sha1-96\n"
+	case 32:
+		etypes = "  default_tkt_enctypes = aes256-cts-hmac-sha1-96\n"
+	}
 	confStr := fmt.Sprintf(`[libdefaults]
-  default_realm = %s
+%s  default_realm = %s
   dns_lookup_kdc = false
   dns_canonicalize_hostname = false
   rdns = false
@@ -306,12 +327,14 @@ func newKrb5Config(realm, kdcAddr string) (*config.Config, error) {
 [domain_realm]
   .%s = %s
   %s = %s
-`, realm, realm, kdcAddr, strings.ToLower(realm), realm, strings.ToLower(realm), realm)
+`, etypes, realm, realm, kdcAddr, strings.ToLower(realm), realm, strings.ToLower(realm), realm)
 
 	return config.NewFromString(confStr)
 }
 
-func (conn *LDAPConnection) SearchComputers(baseDN string) (*ldap.SearchResult, error) {
+// SearchComputers lists the computers under baseDN that match filter (see
+// computerFilter), with their DNS name and operating system.
+func (conn *LDAPConnection) SearchComputers(baseDN, filter string) (*ldap.SearchResult, error) {
 	searchRequest := ldap.NewSearchRequest(
 		baseDN,
 		ldap.ScopeWholeSubtree,
@@ -319,8 +342,8 @@ func (conn *LDAPConnection) SearchComputers(baseDN string) (*ldap.SearchResult, 
 		math.MaxInt32,
 		0,
 		false,
-		"(objectCategory=Computer)",
-		[]string{"dNSHostName"},
+		filter,
+		[]string{"dNSHostName", "operatingSystem", "operatingSystemVersion", "lastLogonTimestamp", "userAccountControl"},
 		nil,
 	)
 	sr, err := conn.connection.SearchWithPaging(searchRequest, math.MaxInt32)
@@ -328,6 +351,43 @@ func (conn *LDAPConnection) SearchComputers(baseDN string) (*ldap.SearchResult, 
 		return nil, err
 	}
 	return sr, nil
+}
+
+// SearchDFSServers returns the servers DFS links point to under baseDN: the
+// targets of msDFS-Linkv2 objects and the remoteServerName of legacy fTDfs
+// objects. Values that cannot be read are skipped.
+func (conn *LDAPConnection) SearchDFSServers(baseDN string) ([]string, error) {
+	searchRequest := ldap.NewSearchRequest(
+		baseDN,
+		ldap.ScopeWholeSubtree,
+		ldap.NeverDerefAliases,
+		math.MaxInt32,
+		0,
+		false,
+		"(|(objectClass=msDFS-Linkv2)(objectClass=fTDfs))",
+		[]string{"msDFS-TargetListv2", "remoteServerName"},
+		nil,
+	)
+	sr, err := conn.connection.SearchWithPaging(searchRequest, math.MaxInt32)
+	if err != nil {
+		return nil, err
+	}
+	var servers []string
+	for _, entry := range sr.Entries {
+		if blob := entry.GetRawAttributeValue("msDFS-TargetListv2"); len(blob) > 0 {
+			targets, err := parseDFSTargetList(blob)
+			if err != nil {
+				logger.Debugf("Skipping the DFS link %s: %v", printable(entry.DN), err)
+			}
+			servers = append(servers, targets...)
+		}
+		for _, v := range entry.GetAttributeValues("remoteServerName") {
+			if server, ok := parseRemoteServerName(v); ok {
+				servers = append(servers, server)
+			}
+		}
+	}
+	return servers, nil
 }
 
 func (conn *LDAPConnection) SearchForestDomains() ([]DomainPartition, error) {

@@ -22,8 +22,16 @@ func (s *Scanner) Run(ctx context.Context, produce Producer) error {
 	stop := context.AfterFunc(ctx, s.Options.Dialer.CloseAll)
 	defer stop()
 
-	// Too many rejected logons stop the whole run, not only the host.
-	if guard := s.Options.AuthGuard; guard != nil {
+	// Too many rejected logons stop the whole run, not only the host; in a
+	// matrix each user has a guard of its own.
+	guards := []*AuthGuard{s.Options.AuthGuard}
+	for _, id := range s.Options.Matrix {
+		guards = append(guards, id.Guard)
+	}
+	for _, guard := range guards {
+		if guard == nil {
+			continue
+		}
 		go func() {
 			select {
 			case <-guard.Done():
@@ -33,13 +41,37 @@ func (s *Scanner) Run(ctx context.Context, produce Producer) error {
 		}()
 	}
 
+	if s.Options.Progress {
+		stopProgress := s.startProgress()
+		defer stopProgress()
+	}
+
+	// producer -> discovery sweep (its own large pool) -> SMB workers; with
+	// --no-discovery every target goes straight to an SMB worker
 	targets := make(chan DNHost, 256)
+	queue, enumerate := (<-chan DNHost)(targets), s.processHost
+	sweepDone := make(chan struct{})
+	if s.Options.Discovery.Enabled {
+		live := make(chan DNHost, 256)
+		queue, enumerate = live, s.enumerateHost // the sweep admitted them
+		go func() {
+			defer close(sweepDone)
+			s.sweep(ctx, targets, live)
+			close(live)
+		}()
+	} else {
+		close(sweepDone)
+	}
+
+	// each host worker holds a slot while it works; extra connections that
+	// list a host's shares in parallel take free slots
+	s.slots = make(slots, max(s.Threads, 1))
 	var wg sync.WaitGroup
 	for i := 0; i < s.Threads; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			s.worker(ctx, targets)
+			s.worker(ctx, queue, enumerate)
 		}()
 	}
 
@@ -49,6 +81,7 @@ func (s *Scanner) Run(ctx context.Context, produce Producer) error {
 	}
 	close(targets)
 	wg.Wait()
+	<-sweepDone
 
 	if ctx.Err() != nil {
 		return context.Cause(ctx)
@@ -56,17 +89,23 @@ func (s *Scanner) Run(ctx context.Context, produce Producer) error {
 	return err
 }
 
-// worker enumerates targets until the channel is drained or ctx is done.
-func (s *Scanner) worker(ctx context.Context, targets <-chan DNHost) {
+// worker enumerates hosts from queue until it is drained or ctx is done.
+func (s *Scanner) worker(ctx context.Context, queue <-chan DNHost, enumerate func(context.Context, DNHost)) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case host, ok := <-targets:
+		case host, ok := <-queue:
 			if !ok {
 				return
 			}
-			s.scanHost(ctx, host)
+			select {
+			case s.slots <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
+			enumerate(ctx, host)
+			s.slots.release()
 		}
 	}
 }

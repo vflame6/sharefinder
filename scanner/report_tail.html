@@ -1,0 +1,159 @@
+<script>
+(function () {
+    'use strict';
+
+    // Every value below comes from the JSON blocks and reaches the page through
+    // textContent or DataTable.render.text(): names are data, never markup.
+    function block(id) {
+        return JSON.parse(document.getElementById(id).textContent);
+    }
+    var summary = block('sf-summary');
+    var hosts = block('sf-hosts');
+    var shares = block('sf-shares');
+    var files = block('sf-files');
+
+    function setText(id, value) {
+        document.getElementById(id).textContent = String(value);
+    }
+
+    function humanSize(s) {
+        var sizes = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB'];
+        if (s < 1000) {
+            return s + ' B';
+        }
+        var e = Math.min(Math.floor(Math.log(s) / Math.log(1000)), sizes.length - 1);
+        var val = s / Math.pow(1000, e);
+        return (val < 10 ? val.toFixed(1) : val.toFixed(0)) + ' ' + sizes[e];
+    }
+
+    function shortTime(iso) {
+        return iso ? iso.replace('T', ' ').replace('Z', '') : '';
+    }
+
+    // summary
+    var meta = 'sharefinder ' + (summary.version || '') + ' · ' + shortTime(summary.start) + ' – ' +
+        (summary.end ? shortTime(summary.end) : 'unfinished') + ' UTC';
+    if (summary.identity) {
+        meta += ' · as ' + summary.identity;
+    }
+    setText('sf-meta', meta);
+    if (summary.command) {
+        setText('sf-command', 'sharefinder ' + summary.command);
+        document.getElementById('sf-command-box').hidden = false;
+    }
+    var warnings = [];
+    if (!summary.complete) {
+        warnings.push('The scan did not finish: this report shows what was written before it stopped.');
+    } else if (summary.interrupted) {
+        warnings.push('The scan was interrupted: results are partial.');
+    }
+    if (summary.skipped > 0) {
+        warnings.push(summary.skipped + ' unreadable line(s) of the scan file were skipped.');
+    }
+    warnings.forEach(function (text) {
+        var div = document.createElement('div');
+        div.className = 'alert alert-warning py-2';
+        div.textContent = text;
+        document.getElementById('sf-warnings').appendChild(div);
+    });
+    ['hosts', 'shares', 'readable', 'writable', 'admin', 'files'].forEach(function (name) {
+        setText('sf-count-' + name, Number(summary[name]).toLocaleString('en-US'));
+    });
+
+    var text = DataTable.render.text();
+
+    // badge renders a boolean column: fixed labels only, so no data is markup
+    function badge(yes, no, yesClass, noClass) {
+        return function (data, type) {
+            var label = data === true ? yes : data === false ? no : 'Unknown';
+            if (type !== 'display') {
+                return label;
+            }
+            var cls = data === true ? yesClass : data === false ? noClass : 'text-bg-light text-muted border';
+            return '<span class="badge ' + cls + '">' + label + '</span>';
+        };
+    }
+
+    function size(data, type) {
+        return type === 'display' || type === 'filter' ? humanSize(data) : data;
+    }
+
+    function date(data, type) {
+        return type === 'display' || type === 'filter' ? shortTime(data) : data;
+    }
+
+    new DataTable('#table-hosts', {
+        data: hosts,
+        lengthMenu: [[20, 100, -1], [20, 100, 'All']],
+        columns: [
+            {type: 'string', render: text},
+            {type: 'string', render: text},
+            {type: 'string', render: text},
+            {type: 'string', render: text},
+            {type: 'string', render: badge('Required', 'Not required', 'text-bg-success', 'text-bg-warning')},
+            {type: 'string', render: text},
+            {type: 'string', render: text},
+            {type: 'string', render: badge('Yes', 'No', 'text-bg-danger', 'text-bg-secondary')},
+            {type: 'num'},
+            {type: 'string', render: text}
+        ]
+    });
+
+    new DataTable('#table-shares', {
+        data: shares,
+        lengthMenu: [[20, 100, -1], [20, 100, 'All']],
+        columns: [
+            {type: 'string', render: text},
+            {type: 'string', render: text},
+            {type: 'string', render: text},
+            {type: 'string', render: text},
+            {type: 'string', render: text},
+            {type: 'string', render: badge('Yes', 'No', 'text-bg-warning', 'text-bg-light border')},
+            {type: 'string', render: badge('Yes', 'No', 'text-bg-danger', 'text-bg-light border')},
+            {type: 'string', render: text},
+            {type: 'num'},
+            {type: 'string', render: text},
+            {type: 'string', render: text}
+        ],
+        createdRow: function (row, data) {
+            if (data[6] === true) {
+                row.classList.add('table-danger');
+            } else if (data[5] === true) {
+                row.classList.add('table-warning');
+            }
+        }
+    });
+
+    // Millions of rows: rows are drawn only when shown, columns have fixed
+    // types so nothing is detected, and a large table searches on Enter.
+    new DataTable('#table-files', {
+        data: files,
+        deferRender: true,
+        order: [],
+        search: {return: files.length > 100000},
+        lengthMenu: [20, 100, 1000],
+        columns: [
+            {type: 'string', render: text},
+            {type: 'string', render: text},
+            {type: 'string', render: text, className: 'sf-path'},
+            {type: 'num', render: size},
+            {type: 'date', render: date},
+            {type: 'string', render: text}
+        ]
+    });
+})();
+</script>
+
+<footer class="footer">
+    <div class="container">
+        <p class="text-muted">
+            This report was generated by <a href="https://github.com/vflame6/sharefinder">sharefinder</a>.
+            <br>
+            Designed and built by Maksim Radaev (<a href="https://maksimradaev.com/about-me/">@vflame6</a>).
+            <br>
+        </p>
+    </div>
+</footer>
+
+</body>
+</html>

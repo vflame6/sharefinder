@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -12,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/vflame6/sharefinder/logger"
 )
 
 // silentScanner returns a scanner whose targets all point at a listener that
@@ -113,22 +114,15 @@ func TestRun_ProducerErrorStopsRun(t *testing.T) {
 	}
 }
 
-// captureStdout returns what fn printed to os.Stdout.
-func captureStdout(t *testing.T, fn func()) string {
+// captureLog returns everything the logger printed, results and messages,
+// while fn ran.
+func captureLog(t *testing.T, fn func()) string {
 	t.Helper()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	orig := os.Stdout
-	os.Stdout = w
-	defer func() { os.Stdout = orig }()
-
-	fn()
-
-	_ = w.Close()
 	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
+	prevOut, prevErr := logger.Log.Out, logger.Log.Err
+	logger.SetWriters(&buf, &buf)
+	defer logger.SetWriters(prevOut, prevErr)
+	fn()
 	return buf.String()
 }
 
@@ -145,7 +139,7 @@ func TestCloseOutputter_Idempotent(t *testing.T) {
 	s := NewScanner(&Options{FileXML: f, OutputXMLFileName: path, Writer: writer}, nil, time.Now(), 1)
 
 	s.CloseOutputter()
-	if out := captureStdout(t, s.CloseOutputter); out != "" {
+	if out := captureLog(t, s.CloseOutputter); out != "" {
 		t.Fatalf("second CloseOutputter printed %q, want nothing", out)
 	}
 

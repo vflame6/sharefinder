@@ -8,10 +8,16 @@ type Config struct {
 	CommandLine []string
 	TimeStart   time.Time
 
-	OutputRaw  string // -o/--output
-	OutputXML  string // --output-xml
-	OutputAll  string // --output-all
-	OutputHTML bool   // --html
+	OutputRaw   string // -o/--output
+	OutputXML   string // --output-xml
+	OutputJSON  string // --output-json
+	OutputCSV   string // --output-csv
+	OutputUNC   string // --output-unc
+	OutputRelay string // --output-relay-list
+	OutputAll   string // --output-all
+	OutputHTML  bool   // --html
+	Force       bool   // --force: overwrite existing output files
+	Resume      string // --resume: the JSONL file of an interrupted scan
 
 	Threads   int           // --threads
 	Timeout   time.Duration // --timeout: connect timeout
@@ -19,14 +25,23 @@ type Config struct {
 	SmbPort   int           // --smb-port
 	Proxy     string        // --proxy
 
+	// discovery sweep; the *Set fields say whether the user gave the flag, as
+	// --proxy changes their defaults
+	Discovery           bool // --[no-]discovery
+	DiscoveryThreads    int  // --discovery-threads
+	DiscoveryThreadsSet bool
+	ConnectTimeout      time.Duration // --connect-timeout
+	ConnectTimeoutSet   bool
+
 	MaxAuthFailures int    // --max-auth-failures
 	WriteCheck      string // --write-check
 
-	Exclude      string // --exclude
-	ExcludeHosts string // --exclude-hosts
-	List         bool   // --list
-	Recurse      bool   // --recurse
-	Depth        int    // --depth
-	FollowLinks  bool   // --follow-links
-	MaxFiles     int    // --max-files
+	Exclude         string // --exclude
+	ExcludeHosts    string // --exclude-hosts
+	List            bool   // --list
+	Recurse         bool   // --recurse
+	Depth           int    // --depth
+	FollowLinks     bool   // --follow-links
+	MaxFiles        int    // --max-files
+	MaxConnsPerHost int    // --max-conns-per-host
 }

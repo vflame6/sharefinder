@@ -1,0 +1,66 @@
+package scanner
+
+import (
+	"bytes"
+	"encoding/xml"
+	"strings"
+	"testing"
+
+	"github.com/jfjallid/go-smb/smb"
+)
+
+func TestDialectLabel(t *testing.T) {
+	for d, want := range map[uint16]string{
+		smb.DialectSmb_2_0_2: "2.0.2",
+		smb.DialectSmb_2_1:   "2.1",
+		smb.DialectSmb_3_0:   "3.0",
+		smb.DialectSmb_3_0_2: "3.0.2",
+		smb.DialectSmb_3_1_1: "3.1.1",
+		smb.DialectSmb2_ALL:  "", // the wildcard is never a negotiated dialect
+		0:                    "",
+		0x0399:               "",
+	} {
+		if got := dialectLabel(d); got != want {
+			t.Errorf("dialectLabel(0x%04x) = %q, want %q", d, got, want)
+		}
+	}
+}
+
+func TestSprintHostLine_Dialect(t *testing.T) {
+	line := SprintHostLine(Host{IP: "10.0.0.5", Version: "Windows Server 2022", Hostname: "FS01", Domain: "corp.local", Dialect: "3.1.1", Session: "user"})
+	if !strings.Contains(line, "(signing:false) (dialect:3.1.1) (session:user)") {
+		t.Fatalf("host line: %q", line)
+	}
+	if line := SprintHostLine(Host{IP: "10.0.0.5"}); strings.Contains(line, "dialect") {
+		t.Fatalf("an unknown dialect is left out: %q", line)
+	}
+}
+
+func TestXMLHost_Identity(t *testing.T) {
+	out, err := xml.Marshal(Host{IP: "10.0.0.5", Identity: "guest"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), `identity="guest"`) {
+		t.Fatalf("a matrix host says whose view it is: %s", out)
+	}
+	if out, _ := xml.Marshal(Host{IP: "10.0.0.5"}); strings.Contains(string(out), "identity") {
+		t.Fatalf("a single-identity scan keeps the legacy shape: %s", out)
+	}
+}
+
+func TestRelaySink(t *testing.T) {
+	var buf bytes.Buffer
+	sink := NewRelaySink(&buf)
+	// fed by the negotiation, whatever the logon gives afterwards
+	sink.Negotiated("10.0.0.5", false)
+	sink.Negotiated("10.0.0.6", true)
+	sink.Negotiated("10.0.0.7", false)
+	sink.Negotiated("10.0.0.5", false) // the same host again (another identity, a redial)
+	if err := sink.Close(EndRecord{}); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := buf.String(), "10.0.0.5\n10.0.0.7\n"; got != want {
+		t.Fatalf("relay list = %q, want %q", got, want)
+	}
+}

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/xml"
 	"path/filepath"
-	"strconv"
 	"time"
 )
 
@@ -31,79 +30,44 @@ type Host struct {
 	Hostname string    `xml:"hostname,attr"`
 	Domain   string    `xml:"domain,attr"`
 	Signing  bool      `xml:"signing,attr"`
+	Dialect  string    `xml:"dialect,attr,omitempty"` // negotiated SMB dialect, such as 3.1.1
 	Session  string    `xml:"session,attr,omitempty"`
 	Admin    *bool     `xml:"admin,attr,omitempty"`
-	Shares   []Share   `xml:"share"`
-}
+	// FQDN is the DNS name the host was scanned by, when the target was a
+	// name (given by the user or found by hunt). UNC paths use it, else the
+	// IP: the name a server reports for itself may point to another host.
+	FQDN   string  `xml:"fqdn,attr,omitempty"`
+	Shares []Share `xml:"share"`
 
-func (h Host) AdminStatus() string {
-	if h.Admin == nil {
-		return "unknown"
-	}
-	return strconv.FormatBool(*h.Admin)
-}
-
-// HostCount returns the number of enumerated hosts.
-func (r *SharefinderRun) HostCount() int {
-	return len(r.Hosts)
-}
-
-// ShareCount returns the total number of shares discovered across all hosts.
-func (r *SharefinderRun) ShareCount() int {
-	n := 0
-	for _, h := range r.Hosts {
-		n += len(h.Shares)
-	}
-	return n
-}
-
-// ReadableShareCount returns shares with read permission.
-func (r *SharefinderRun) ReadableShareCount() int {
-	n := 0
-	for _, h := range r.Hosts {
-		for _, s := range h.Shares {
-			if s.ReadPermission {
-				n++
-			}
-		}
-	}
-	return n
-}
-
-// WritableShareCount returns shares with write permission.
-func (r *SharefinderRun) WritableShareCount() int {
-	n := 0
-	for _, h := range r.Hosts {
-		for _, s := range h.Shares {
-			if s.WritePermission {
-				n++
-			}
-		}
-	}
-	return n
-}
-
-// AdminHostCount returns hosts where the user has local admin access.
-func (r *SharefinderRun) AdminHostCount() int {
-	n := 0
-	for _, h := range r.Hosts {
-		if h.Admin != nil && *h.Admin {
-			n++
-		}
-	}
-	return n
+	// Declared names every share the server listed that the scan covers,
+	// checked or not; Error says why the shares could not be listed.
+	Declared []string `xml:"-"`
+	Error    string   `xml:"-"`
+	// Identity is who the host was scanned as, when it differs from the
+	// scan's (matrix): one host element per identity
+	Identity string `xml:"identity,attr,omitempty"`
 }
 
 type Share struct {
-	ShareName       string      `xml:"share_name,attr"`
-	Description     string      `xml:"description,attr"`
-	ReadPermission  bool        `xml:"read_permission,attr"`
-	WritePermission bool        `xml:"write_permission,attr"`
-	Truncated       bool        `xml:"truncated,attr,omitempty"`
-	WriteAccess     string      `xml:"write_access,attr,omitempty"`
-	TypeID          uint32      `xml:"-"`
-	Directories     []Directory `xml:"directory"`
-	Files           []File      `xml:"file"`
+	ShareName       string `xml:"share_name,attr"`
+	Description     string `xml:"description,attr"`
+	ReadPermission  bool   `xml:"read_permission,attr"`
+	WritePermission bool   `xml:"write_permission,attr"`
+	Truncated       bool   `xml:"truncated,attr,omitempty"`
+	WriteAccess     string `xml:"write_access,attr,omitempty"`
+	// Partial marks a share whose listing was cut short by Ctrl+C.
+	Partial bool `xml:"partial,attr,omitempty"`
+	// Directories and Files are filled when an XML file is read back; a scan
+	// streams listings to the outputs instead of keeping them here.
+	Directories []Directory `xml:"directory"`
+	Files       []File      `xml:"file"`
+
+	TypeID    uint32 `xml:"-"`
+	ShareType string `xml:"-"` // disk, printer, device or ipc
+	Listed    bool   `xml:"-"` // a listing was attempted
+	FileCount int64  `xml:"-"`
+	DirCount  int64  `xml:"-"`
+	ListError string `xml:"-"`
 }
 
 type Directory struct {

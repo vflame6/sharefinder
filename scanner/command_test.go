@@ -37,6 +37,31 @@ func TestMaskCredentials(t *testing.T) {
 			want: []string{"auth", "-H", "***", "1.2.3.4"},
 		},
 		{
+			name: "AES key",
+			in:   []string{"auth", "--aes-key=abcd", "-k", "--aes-key", "ef01", "1.2.3.4"},
+			want: []string{"auth", "--aes-key=***", "-k", "--aes-key", "***", "1.2.3.4"},
+		},
+		{
+			name: "short flags with the value attached",
+			in:   []string{"auth", "-pSuperSecret1", "-Hdeadbeef", "1.2.3.4"},
+			want: []string{"auth", "-p***", "-H***", "1.2.3.4"},
+		},
+		{
+			name: "password bundled after a boolean short flag",
+			in:   []string{"auth", "-kpSuperSecret1", "1.2.3.4"},
+			want: []string{"auth", "-kp***", "1.2.3.4"},
+		},
+		{
+			name: "password flag last in a bundle takes the next argument",
+			in:   []string{"auth", "-kp", "SuperSecret1", "1.2.3.4"},
+			want: []string{"auth", "-kp", "***", "1.2.3.4"},
+		},
+		{
+			name: "other short flags with attached values are kept",
+			in:   []string{"auth", "-utester", "-oscan", "1.2.3.4"},
+			want: []string{"auth", "-utester", "-oscan", "1.2.3.4"},
+		},
+		{
 			name: "long hash with equals",
 			in:   []string{"auth", "--hashes=deadbeef", "1.2.3.4"},
 			want: []string{"auth", "--hashes=***", "1.2.3.4"},
@@ -57,9 +82,10 @@ func TestMaskCredentials(t *testing.T) {
 			want: []string{"auth", "-p", "***", "-H", "***"},
 		},
 		{
-			name: "positional containing -p is not treated as flag",
+			// kingpin reads -pa as -p with the value "a"
+			name: "-pa is the password a",
 			in:   []string{"auth", "1.2.3.4", "-pa", "value"},
-			want: []string{"auth", "1.2.3.4", "-pa", "value"},
+			want: []string{"auth", "1.2.3.4", "-p***", "value"},
 		},
 	}
 

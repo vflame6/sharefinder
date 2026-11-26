@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/jfjallid/go-smb/dcerpc/mssrvs"
 	"github.com/jfjallid/go-smb/smb"
@@ -124,7 +123,7 @@ func (conn *Connection) checkWriteMask(share string) []string {
 		opts.CreateOpts = smb.FileDirectoryFile
 		f, err := conn.session.OpenFileExt(share, "", opts)
 		if err != nil {
-			logger.Debugf("no %s on %s\\%s (mask 0x%08x): %v", probe.label, conn.host, share, probe.mask, err)
+			logger.Debugf("no %s on %s\\%s (mask 0x%08x): %v", probe.label, conn.host, printable(share), probe.mask, err)
 			continue
 		}
 		logCloseError("failed to close share root of "+share, f.CloseFile())
@@ -166,7 +165,7 @@ func probeWriteFile(p fileProber, host, share, name string) bool {
 		return len(data), nil
 	})
 	leftover := func(why error) {
-		logger.Error(fmt.Errorf("write probe file \\\\%s\\%s\\%s may remain: %w", host, share, name, why))
+		logger.Error(fmt.Errorf("write probe file \\\\%s\\%s\\%s may remain: %w", host, printable(share), name, why))
 	}
 
 	if err == nil {
@@ -177,7 +176,7 @@ func probeWriteFile(p fileProber, host, share, name string) bool {
 	}
 	if isExpectedSMBWriteDeniedError(err) {
 		// the create itself was refused: nothing exists
-		logger.Debugf("write probe denied on share %s\\%s: %v", host, share, err)
+		logger.Debugf("write probe denied on share %s\\%s: %v", host, printable(share), err)
 		return false
 	}
 
@@ -186,10 +185,10 @@ func probeWriteFile(p fileProber, host, share, name string) bool {
 	delErr := p.DeleteFile(share, name)
 	switch {
 	case delErr == nil:
-		logger.Debugf("write probe on %s\\%s failed after creating its file (%v); file removed", host, share, err)
+		logger.Debugf("write probe on %s\\%s failed after creating its file (%v); file removed", host, printable(share), err)
 		return true
 	case isNotFoundError(delErr):
-		logger.Debugf("write probe failed on share %s\\%s: %v", host, share, err)
+		logger.Debugf("write probe failed on share %s\\%s: %v", host, printable(share), err)
 		return false
 	default:
 		leftover(fmt.Errorf("write failed (%v), delete failed: %w", err, delErr))
@@ -199,8 +198,7 @@ func probeWriteFile(p fileProber, host, share, name string) bool {
 
 // isNotFoundError reports STATUS_OBJECT_NAME_NOT_FOUND.
 func isNotFoundError(err error) bool {
-	return errors.Is(err, smb.StatusMap[smb.StatusObjectNameNotFound]) ||
-		strings.Contains(strings.ToLower(err.Error()), "0xc0000034")
+	return errors.Is(err, smb.StatusMap[smb.StatusObjectNameNotFound])
 }
 
 func contains(list []string, s string) bool {

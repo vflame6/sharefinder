@@ -1,0 +1,33 @@
+sharefinder for Debian
+----------------------
+
+Vendored modules
+
+  The Go modules sharefinder depends on are vendored into the orig tarball:
+  several of them (go-smb and the forks of gokrb5 and gofork it uses, golog,
+  mstypes, ndr) are not packaged in Debian. Build the orig tarball of version
+  X.Y.Z with:
+
+    git clone --branch vX.Y.Z https://github.com/vflame6/sharefinder.git sharefinder-X.Y.Z
+    cd sharefinder-X.Y.Z
+    go mod vendor
+    cd ..
+    tar --exclude-vcs -czf sharefinder_X.Y.Z.orig.tar.gz sharefinder-X.Y.Z
+
+  debian/rules builds with GOFLAGS=-mod=vendor and GOTOOLCHAIN=local, so only
+  the vendored sources and the packaged Go toolchain are used. go.mod
+  requires Go 1.26 or later.
+
+Embedded files
+
+  The HTML report embeds scanner/vendor.html (Bootstrap, Bootstrap Icons,
+  jQuery and DataTables, minified, all MIT) and scanner/report_head.html and
+  scanner/report_tail.html, so DH_GOLANG_INSTALL_ALL copies every file into
+  the build tree.
+
+Tests
+
+  The test suite starts SMB servers on 127.0.0.1 and dials reserved
+  addresses (192.0.2.0/24, 203.0.113.0/24) that must not answer.
+
+ -- vflame6 <vflame6@users.noreply.github.com>  Thu, 26 Nov 2026 12:00:00 +0000
