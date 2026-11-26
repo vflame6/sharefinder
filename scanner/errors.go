@@ -58,6 +58,15 @@ var ErrGuestFallback = errors.New("server mapped the logon to the Guest account"
 // --max-auth-failures rejected logons have been sent.
 var ErrAuthLimitReached = errors.New("authentication failure limit reached")
 
+// hostRejection marks credentials refused by a host whose accounts are not
+// the credential's own: a host outside the credential's domain, or any host
+// with --local-auth. Once a logon has succeeded such a refusal says nothing
+// about the account and does not count towards --max-auth-failures.
+type hostRejection struct{ err error }
+
+func (e *hostRejection) Error() string { return e.err.Error() }
+func (e *hostRejection) Unwrap() error { return e.err }
+
 // rejectionStatuses are the NTSTATUS codes go-smb maps to sentinel errors
 // that mean the credentials were refused (and may count towards a lockout).
 var rejectionStatuses = []uint32{

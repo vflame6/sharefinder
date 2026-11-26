@@ -171,6 +171,38 @@ func TestAuthGuard_Disabled(t *testing.T) {
 	}
 }
 
+func TestAuthGuard_HostRejectionAfterSuccessIsNotCounted(t *testing.T) {
+	guard := NewAuthGuard(1)
+	if err := guard.Do(context.Background(), func() error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	// a NAS outside the domain refuses the (valid) domain credentials
+	err := guard.Do(context.Background(), func() error { return &hostRejection{err: logonFailure()} })
+	if err == nil {
+		t.Fatal("the host's rejection must still be returned")
+	}
+	if guard.Failures() != 0 || guard.Err() != nil {
+		t.Fatalf("a host-level rejection after a successful logon must not stop the scan (failures %d, tripped %v)", guard.Failures(), guard.Err())
+	}
+}
+
+func TestAuthGuard_HostRejectionBeforeSuccessCounts(t *testing.T) {
+	guard := NewAuthGuard(1)
+	_ = guard.Do(context.Background(), func() error { return &hostRejection{err: logonFailure()} })
+	if guard.Failures() != 1 || guard.Err() == nil {
+		t.Fatal("before any logon succeeded, every rejection must count: the password may be wrong")
+	}
+}
+
+func TestAuthGuard_DomainRejectionAfterSuccessCounts(t *testing.T) {
+	guard := NewAuthGuard(1)
+	_ = guard.Do(context.Background(), func() error { return nil })
+	_ = guard.Do(context.Background(), func() error { return logonFailure() })
+	if guard.Err() == nil {
+		t.Fatal("a rejection from a host in the credential's domain must still stop the scan (password changed or account locked)")
+	}
+}
+
 func TestAuthGuard_LimitErrorNamesHostAndReason(t *testing.T) {
 	guard := NewAuthGuard(1)
 	_ = guard.Do(context.Background(), func() error {

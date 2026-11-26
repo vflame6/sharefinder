@@ -85,6 +85,11 @@ func (g *AuthGuard) record(probe bool, err error) {
 	case err == nil:
 		g.verified = true
 	case IsCredentialRejection(err):
+		var hostOnly *hostRejection
+		if g.verified && errors.As(err, &hostOnly) {
+			// the credentials work; this host just does not know the account
+			break
+		}
 		g.failures++
 		if g.max > 0 && g.failures >= g.max && g.tripped == nil {
 			g.tripped = &authLimitError{failures: g.failures, max: g.max, last: err}

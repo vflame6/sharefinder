@@ -47,7 +47,7 @@ func NewSMBConnection(ctx context.Context, host DNHost, o *Options) (*Connection
 		return nil, &StageError{Stage: StageConnect, Host: host.Address(), Err: err}
 	}
 
-	sessionType, err := establishSession(ctx, session, o.Mode, o.AuthGuard, host.Address())
+	sessionType, err := establishSession(ctx, smbSession{session}, o.Mode, o.AuthGuard, host.Address(), accountScope{Domain: o.Domain, LocalAuth: o.LocalAuth})
 	if err != nil {
 		session.Close()
 		return nil, err
