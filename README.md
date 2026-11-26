@@ -83,10 +83,11 @@ Flags:
                                 format IP:PORT
       --[no-]disable-discovery  Do not probe the SMB port of every target first:
                                 enumerate every target
-      --discovery-threads=50    Number of concurrent port probes
+      --discovery-threads=64    Number of concurrent port probes
       --connect-timeout=2s      Time to wait for the SMB port to answer a probe
-      --max-auth-failures=1     Stop the scan after this many rejected logons;
-                                0 disables the guard
+      --max-auth-failures=0     Stop the scan after this many rejected logons,
+                                sending logons one at a time until one succeeds
+                                (0 = no limit)
   -e, --exclude="IPC$,NETLOGON,ADMIN$,print$,C$"
                                 Exclude list
       --exclude-hosts=""        Skip these targets: IPs, CIDRs, ranges,
@@ -162,11 +163,11 @@ sharefinder diff q3.jsonl q4.jsonl
 
 ### Large networks
 
-- **Discovery:** a TCP probe of the SMB port goes first, 50 at a time with a
+- **Discovery:** a TCP probe of the SMB port goes first, 64 at a time with a
   2 s timeout (`--discovery-threads`, `--connect-timeout`), also through
   `--proxy`, and only hosts that answer wait for an SMB worker. A mostly
-  empty /24 sweeps in about 10 seconds; for a /16, `--discovery-threads 500`
-  takes about 4 minutes instead of 45. `--disable-discovery` sends every
+  empty /24 sweeps in about 8 seconds; for a /16, `--discovery-threads 512`
+  takes about 4 minutes instead of 34. `--disable-discovery` sends every
   target straight to SMB.
 - **Shares in parallel:** a host's shares are listed over up to
   `--max-conns-per-host` connections (default 2) while `--threads` allows.
@@ -195,8 +196,9 @@ PUBLIC            null:R  guest:R  jdoe:R  svc_backup:R
 
 `R` is read, `W` write, `-` no access and `x` a refused logon. `-p`, `-H` and
 `--aes-key` pair with the `-u` in the same position; `--no-null` and
-`--no-guest` leave those sessions out. Each account has its own lockout
-guard. The JSONL output records every identity's view.
+`--no-guest` leave those sessions out. With `--max-auth-failures`, each
+account has its own lockout guard. The JSONL output records every identity's
+view.
 
 ### Authentication
 
@@ -233,13 +235,15 @@ without their operating system, and `--active-within` does not filter them.
 
 ### Safe defaults
 
-- **Account lockout:** with a wrong password only one logon is sent; the scan
-  stops after `--max-auth-failures` rejected logons (default 1). A server that
-  maps a failed logon to its Guest account counts as a rejection, and every
-  host line shows the session type it was scanned with (`user`, `guest`,
-  `null`). Once the credentials have worked, hosts outside the account's
-  domain (and every host with `--local-auth`) that refuse them are reported
-  per host instead of stopping the scan.
+- **Account lockout:** off by default: logons go to every target at once, so
+  a wrong password reaches all of them. `--max-auth-failures N` sends logons
+  one at a time until one succeeds, so a wrong password reaches one host, and
+  stops the scan after N rejected logons; `--max-auth-failures 1` stops at the
+  first. A server that maps a failed logon to its Guest account counts as a
+  rejection, and every host line shows the session type it was scanned with
+  (`user`, `guest`, `null`). Once the credentials have worked, hosts outside
+  the account's domain (and every host with `--local-auth`) that refuse them
+  are reported per host instead of stopping the scan.
 - **Write check:** `--write-check file` (default) creates and deletes a random
   file in each disk share root. `--write-check mask` only opens the share root
   with write access rights and leaves nothing behind; `--write-check off` skips

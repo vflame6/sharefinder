@@ -21,10 +21,14 @@ from the section of the released version.
   5 was the default. A directory that lists exactly what a directory above
   it listed, which a link back up the tree does, is not listed again, so the
   walk ends without a depth limit; the scan warns when it cuts such a loop.
-- The discovery sweep runs 50 probes at a time with a 2 s timeout
+- The discovery sweep runs 64 probes at a time with a 2 s timeout
   (`--discovery-threads`, `--connect-timeout`), through `--proxy` too; it ran
   500 at a time with 1 s, and 50 with `--timeout` through `--proxy`.
   `--disable-discovery` replaces `--no-discovery`.
+- `--max-auth-failures` is 0 by default: logons go to every target at once
+  and a wrong password reaches all of them, which can lock the account out.
+  `--max-auth-failures 1`, the default until now, sends logons one at a time
+  until one succeeds and stops the scan at the first rejected logon.
 - `hunt --resolver` says in its help what it does: the DNS server that
   resolves the computer names, the DC by default.
 
