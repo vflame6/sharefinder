@@ -104,7 +104,7 @@ var (
 	huntDcHostnameFlag  = huntCommand.Flag("dc-hostname", "Hostname of domain controller for Kerberos authentication").String()
 	huntAllowPlainFlag  = huntCommand.Flag("allow-plaintext-ldap", "Allow a simple bind, which sends the password, over LDAP without TLS when LDAPS and StartTLS fail").Bool()
 	huntIncludeDisabled = huntCommand.Flag("include-disabled", "Also scan computers whose account is disabled").Bool()
-	huntActiveWithin    = huntCommand.Flag("active-within", "Scan only computers that logged on within this time, such as 90d, 12w or 36h (lastLogonTimestamp, which lags up to 14 days)").PlaceHolder("90d").String()
+	huntActiveWithin    = huntCommand.Flag("active-within", "Scan only computers that logged on within this time, such as 90d, 12w or 36h (default: no limit; lastLogonTimestamp lags up to 14 days)").PlaceHolder("DURATION").String()
 	huntLDAPOnly        = huntCommand.Flag("ldap-only", "Print the computers (name, address, operating system) and stop: no SMB, no port sweep").Bool()
 
 	// matrix command
