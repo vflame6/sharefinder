@@ -177,9 +177,9 @@ func TestReport_Counts(t *testing.T) {
 	}
 }
 
-// The report shows each host with its shares and the listing of each share,
-// directory by directory, as the reports before 1.5.0 did: the entries carry
-// their path inside the share, directories included.
+// The report shows each host with its shares and each listed share as a tree
+// of its folders and files, which the page script builds from the entries:
+// they carry their path inside the share, directories included.
 func TestReport_ListingByHost(t *testing.T) {
 	var buf bytes.Buffer
 	sink := newTestJSONLSink(&buf)
@@ -255,6 +255,18 @@ func TestReport_ScriptWritesNoMarkup(t *testing.T) {
 	for _, call := range []string{"innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval("} {
 		if strings.Contains(reportTail, call) {
 			t.Errorf("the report script uses %s", call)
+		}
+	}
+}
+
+// The report is a single file: its styles load nothing from beside it, such
+// as an icon font in a fonts directory, which a browser would fail to find
+// and so draw no icons.
+func TestReport_LoadsNoFiles(t *testing.T) {
+	// a CSS url(), not a script's method such as DataTables' ajax.url()
+	for _, m := range regexp.MustCompile(`(?:^|[^.\w$])url\(\s*["']?([^)"']*)`).FindAllStringSubmatch(HTMLHeader+reportHead+reportTail, -1) {
+		if !strings.HasPrefix(m[1], "data:") && !strings.HasPrefix(m[1], "#") {
+			t.Errorf("the report loads %q", m[1])
 		}
 	}
 }
