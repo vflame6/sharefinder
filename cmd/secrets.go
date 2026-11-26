@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 
-	"github.com/vflame6/sharefinder/logger"
 	"golang.org/x/term"
 )
 
@@ -75,8 +74,9 @@ func resolvePassword(flagValue string, flagSet bool, hash, aesKey string, kerber
 		return password, nil
 	}
 	if !src.isTTY() {
-		logger.Debugf("No password given and stdin is not a terminal: logging on with an empty password (set -p or %s)", PasswordEnv)
-		return "", nil
+		// an empty password would count a failed logon against the account
+		// on every unattended run (cron, sudo dropping the variable, ssh)
+		return "", fmt.Errorf("no password: give -p, -H, --aes-key or %s, or run on a terminal to be asked (-p '' tests an empty password)", PasswordEnv)
 	}
 	password, err := src.prompt("Password: ")
 	if err != nil {

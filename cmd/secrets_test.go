@@ -54,7 +54,6 @@ func TestResolvePassword(t *testing.T) {
 		{name: "a Kerberos ccache needs no password", kerberos: true, env: env{"KRB5CCNAME": "/tmp/krb5cc_1000"}, tty: true, want: ""},
 		{name: "a ccache does not apply to NTLM", env: env{"KRB5CCNAME": "/tmp/krb5cc_1000"}, tty: true, want: "typed", prompted: true},
 		{name: "prompt on a terminal", tty: true, want: "typed", prompted: true},
-		{name: "no terminal: empty password", tty: false, want: ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -69,6 +68,17 @@ func TestResolvePassword(t *testing.T) {
 				t.Fatalf("resolvePassword = %q, %v (prompted %v); want %q (prompted %v)", got, err, prompted, tt.want, tt.prompted)
 			}
 		})
+	}
+
+	// cron, sudo dropping the variable, ssh without -t: an empty password
+	// would count one failed logon against the account on every run
+	noTerminal := secretSource{
+		getenv: func(string) string { return "" },
+		isTTY:  func() bool { return false },
+		prompt: func(string) (string, error) { t.Fatal("no prompt without a terminal"); return "", nil },
+	}
+	if _, err := resolvePassword("", false, "", "", false, noTerminal); err == nil || !strings.Contains(err.Error(), PasswordEnv) || !strings.Contains(err.Error(), "-p ''") {
+		t.Fatalf("no password and no terminal must stop the run, saying how to give one: %v", err)
 	}
 
 	failing := secretSource{
