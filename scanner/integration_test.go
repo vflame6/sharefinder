@@ -779,7 +779,7 @@ func TestIntegration_UNCNamesTheScannedAddress(t *testing.T) {
 func TestIntegration_OutputFormats(t *testing.T) {
 	srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares()})
 	dir := t.TempDir()
-	// --html without --output-json renders from a temporary JSONL file
+	// --output-html without --output-json renders from a temporary JSONL file
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)
 	o := asUser(integrationOptions(srv.Port(), 5*time.Second), testPassword)

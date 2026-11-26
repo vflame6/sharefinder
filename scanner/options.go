@@ -45,7 +45,7 @@ type Options struct {
 	OutputRawFileName  string
 	OutputXMLFileName  string
 	OutputJSONFileName string
-	OutputHTML         bool // --html
+	OutputHTML         bool // --output-html
 	OutputHTMLFileName string
 	Password           string         // --password
 	Progress           bool           // draw a progress line: stderr is a terminal, no --quiet or --debug

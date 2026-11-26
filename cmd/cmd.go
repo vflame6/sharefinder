@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"cmp"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -35,15 +34,12 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 	var fileXML *os.File
 	var err error
 
-	outputHTML := cfg.OutputHTML
-
-	// the HTML report is named after the JSONL or XML output
-	if outputHTML && cfg.OutputJSON == "" && cfg.OutputXML == "" && cfg.Resume == "" {
-		return nil, errors.New("cannot use --html without --output-json, --resume or --output-xml: the report is named after them")
-	}
+	// the HTML report is rendered from the JSONL output, or from a temporary
+	// JSONL file without --output-json
+	outputHTML := cfg.OutputHTML != ""
 
 	if (cfg.OutputXML != "" || cfg.OutputRaw != "" || cfg.OutputJSON != "" || cfg.OutputCSV != "" || cfg.OutputUNC != "" || cfg.OutputRelay != "" || outputHTML) && cfg.OutputAll != "" {
-		return nil, errors.New("cannot use --output-all with -o, --output-xml, --output-json, --output-csv, --output-unc, --output-relay-list or --html")
+		return nil, errors.New("cannot use --output-all with -o, --output-xml, --output-json, --output-csv, --output-unc, --output-relay-list or --output-html")
 	}
 
 	// --resume continues only the JSONL file: the text, XML, CSV and UNC files
@@ -57,7 +53,7 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 			{cfg.OutputUNC != "", "--output-unc"}, {cfg.OutputRelay != "", "--output-relay-list"}, {cfg.OutputAll != "", "--output-all"},
 		} {
 			if out.set {
-				return nil, fmt.Errorf("--resume continues only the JSONL file and cannot be combined with %s; use --html, or the report command once the scan is complete", out.flag)
+				return nil, fmt.Errorf("--resume continues only the JSONL file and cannot be combined with %s; use --output-html, or the report command once the scan is complete", out.flag)
 			}
 		}
 	}
@@ -150,8 +146,7 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 			outputRelayFileName = scanner.OutputPath(cfg.OutputRelay, ".relay.txt")
 		}
 		if outputHTML {
-			base := cmp.Or(cfg.OutputJSON, cfg.Resume, cfg.OutputXML)
-			outputHTMLFileName = scanner.OutputPath(base, ".html")
+			outputHTMLFileName = scanner.OutputPath(cfg.OutputHTML, ".html")
 		}
 	}
 	// --resume continues the JSONL file of an interrupted scan: it is the
@@ -315,9 +310,9 @@ func discoveryConfig(cfg Config) (scanner.SweepConfig, error) {
 // paced, not what it finds; the value says whether the flag takes one.
 var resumeIgnored = map[string]bool{
 	"--resume": true, "-o": true, "--output": true, "--output-xml": true, "--output-json": true,
-	"--output-csv": true, "--output-unc": true, "--output-all": true, "--threads": true,
-	"--discovery-threads": true, "--connect-timeout": true, "--max-conns-per-host": true,
-	"--quiet": false, "--debug": false, "--force": false, "--html": false, "--discovery": false,
+	"--output-csv": true, "--output-unc": true, "--output-relay-list": true, "--output-html": true,
+	"--output-all": true, "--threads": true, "--discovery-threads": true, "--connect-timeout": true,
+	"--max-conns-per-host": true, "--quiet": false, "--debug": false, "--force": false, "--discovery": false,
 }
 
 // resumeCommand is a command line as --resume compares it: credentials

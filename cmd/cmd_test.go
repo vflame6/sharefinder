@@ -143,33 +143,55 @@ func TestCreateScanner_CSVAndUNCOutputs(t *testing.T) {
 	}
 }
 
-func TestCreateScanner_HTMLNames(t *testing.T) {
+// --output-html names the report like every other output, and needs no
+// other output: without --output-json the report is rendered from a
+// temporary JSONL file.
+func TestCreateScanner_OutputHTML(t *testing.T) {
 	dir := t.TempDir()
-	cfg := validConfig()
-	cfg.OutputHTML = true
-	if _, err := CreateScanner(cfg); err == nil || !strings.Contains(err.Error(), "--output-json") {
-		t.Fatalf("--html alone must ask for a file name, got %v", err)
+	for name, want := range map[string]string{
+		"report":      "report.html",
+		"report.html": "report.html",
+	} {
+		cfg := validConfig()
+		cfg.OutputHTML = filepath.Join(dir, name)
+		s, err := CreateScanner(cfg)
+		if err != nil {
+			t.Fatalf("--output-html %s alone: %v", name, err)
+		}
+		if !s.Options.OutputHTML || s.Options.OutputHTMLFileName != filepath.Join(dir, want) {
+			t.Fatalf("--output-html %s writes %q (enabled %v), want %s", name, s.Options.OutputHTMLFileName, s.Options.OutputHTML, want)
+		}
+		s.CloseOutputter()
+		if _, err := os.Stat(filepath.Join(dir, want)); err != nil {
+			t.Fatalf("--output-html %s: %v", name, err)
+		}
+		_ = os.Remove(filepath.Join(dir, want))
 	}
 
-	cfg.OutputJSON = filepath.Join(dir, "scan.jsonl")
+	// with --output-json too, the report is still named by --output-html
+	cfg := validConfig()
+	cfg.OutputJSON, cfg.OutputHTML = filepath.Join(dir, "scan.jsonl"), filepath.Join(dir, "client")
 	s, err := CreateScanner(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := s.Options.OutputHTMLFileName, filepath.Join(dir, "scan.html"); got != want {
-		t.Fatalf("--output-json scan.jsonl --html writes %s, want %s", got, want)
+	if got, want := s.Options.OutputHTMLFileName, filepath.Join(dir, "client.html"); got != want {
+		t.Fatalf("--output-json scan.jsonl --output-html client writes %s, want %s", got, want)
 	}
 	s.CloseOutputter()
 
-	xml := validConfig()
-	xml.OutputHTML, xml.OutputXML = true, filepath.Join(dir, "legacy")
-	if s, err = CreateScanner(xml); err != nil {
-		t.Fatalf("--output-xml with --html keeps working: %v", err)
+	// an existing report is not overwritten without --force
+	cfg = validConfig()
+	cfg.OutputHTML = filepath.Join(dir, "client.html")
+	if _, err := CreateScanner(cfg); err == nil || !strings.Contains(err.Error(), "client.html") {
+		t.Fatalf("an existing --output-html file must be refused, got %v", err)
 	}
-	if got, want := s.Options.OutputHTMLFileName, filepath.Join(dir, "legacy.html"); got != want {
-		t.Fatalf("HTML name = %s, want %s", got, want)
+
+	both := validConfig()
+	both.OutputAll, both.OutputHTML = filepath.Join(dir, "all"), filepath.Join(dir, "x.html")
+	if _, err := CreateScanner(both); err == nil || !strings.Contains(err.Error(), "--output-html") {
+		t.Fatalf("--output-all with --output-html must be refused, got %v", err)
 	}
-	s.CloseOutputter()
 }
 
 func TestExecuteReport(t *testing.T) {
@@ -369,6 +391,17 @@ func TestCreateScanner_Resume(t *testing.T) {
 	}
 }
 
+// --resume warns when the scan file was written by another command. Output
+// flags and their values do not make a command another one.
+func TestResumeCommand_IgnoresOutputs(t *testing.T) {
+	base := []string{"hunt", "-u", `corp\jdoe`, "-p", "secret", "10.0.0.5"}
+	with := []string{"hunt", "--output-html", "client.html", "--output-relay-list", "relay.txt", "--output-json=scan.jsonl",
+		"-u", `corp\jdoe`, "-p", "secret", "10.0.0.5"}
+	if a, b := resumeCommand(base), resumeCommand(with); a != b {
+		t.Errorf("output flags made another command:\n%s\n%s", a, b)
+	}
+}
+
 func TestCreateScanner_ResumeRefusesOutputsItCannotContinue(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "scan.jsonl")
@@ -397,14 +430,14 @@ func TestCreateScanner_ResumeRefusesOutputsItCannotContinue(t *testing.T) {
 
 	// the HTML report is built from the whole JSONL file, so it is complete
 	cfg := validConfig()
-	cfg.Resume, cfg.OutputHTML = path, true
+	cfg.Resume, cfg.OutputHTML = path, filepath.Join(dir, "resumed")
 	s, err := CreateScanner(cfg)
 	if err != nil {
-		t.Fatalf("--resume with --html: %v", err)
+		t.Fatalf("--resume with --output-html: %v", err)
 	}
 	s.CloseOutputter()
-	if _, err := os.Stat(filepath.Join(dir, "scan.html")); err != nil {
-		t.Fatalf("--resume scan.jsonl --html writes scan.html: %v", err)
+	if _, err := os.Stat(filepath.Join(dir, "resumed.html")); err != nil {
+		t.Fatalf("--resume scan.jsonl --output-html resumed writes resumed.html: %v", err)
 	}
 }
 

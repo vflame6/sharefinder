@@ -15,7 +15,7 @@ type Config struct {
 	OutputUNC   string // --output-unc
 	OutputRelay string // --output-relay-list
 	OutputAll   string // --output-all
-	OutputHTML  bool   // --html
+	OutputHTML  string // --output-html
 	Force       bool   // --force: overwrite existing output files
 	Resume      string // --resume: the JSONL file of an interrupted scan
 
