@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jfjallid/go-smb/dcerpc/mssrvs"
 	"github.com/jfjallid/go-smb/smb"
 	"github.com/vflame6/sharefinder/logger"
 	"github.com/vflame6/sharefinder/utils"
@@ -76,34 +77,7 @@ func enumerateHost(ctx context.Context, host DNHost, options *Options) (Host, er
 	logger.Debugf("Successfully listed shares on %s (%s)", host.Address(), host.Hostname)
 
 	// get permissions on shares
-	for _, share := range shares {
-		if ctx.Err() != nil {
-			break
-		}
-		// check if share is in exclude list
-		if slices.Contains(options.Exclude, share.Name) {
-			continue
-		}
-
-		var singleShare Share
-		singleShare.ShareName = share.Name
-		singleShare.Description = share.Comment
-		singleShare.TypeID = share.TypeId
-
-		// check read and write access
-		err := conn.CheckReadAccess(share.Name)
-		if err == nil {
-			singleShare.ReadPermission = true
-		}
-		// only disk shares hold files; a test file on a print queue is a print job
-		if isDiskShare(share.TypeId) {
-			labels := conn.CheckWriteAccess(share.Name, options.WriteCheck)
-			singleShare.WritePermission = len(labels) > 0
-			singleShare.WriteAccess = strings.Join(labels, ",")
-		}
-
-		shareResult = append(shareResult, singleShare)
-	}
+	shareResult = checkShares(ctx, conn, shares, options)
 
 	// list share if such option is specified
 	if options.List {
@@ -121,6 +95,41 @@ func enumerateHost(ctx context.Context, host DNHost, options *Options) (Host, er
 	}
 	hostResult.Shares = append(hostResult.Shares, shareResult...)
 	return hostResult, nil
+}
+
+// shareChecker tests access to one share of a connected host.
+type shareChecker interface {
+	CheckReadAccess(share string) error
+	CheckWriteAccess(share string, mode WriteCheckMode) []string
+}
+
+// checkShares tests read and write access on every share that is not
+// excluded. A share whose checks were cut short by cancellation is left out:
+// the permissions it would show are not findings, only closed connections.
+func checkShares(ctx context.Context, c shareChecker, shares []mssrvs.NetShare, options *Options) []Share {
+	var result []Share
+	for _, share := range shares {
+		if ctx.Err() != nil {
+			break
+		}
+		if slices.Contains(options.Exclude, share.Name) {
+			continue
+		}
+
+		checked := Share{ShareName: share.Name, Description: share.Comment, TypeID: share.TypeId}
+		checked.ReadPermission = c.CheckReadAccess(share.Name) == nil
+		// only disk shares hold files; a test file on a print queue is a print job
+		if isDiskShare(share.TypeId) {
+			labels := c.CheckWriteAccess(share.Name, options.WriteCheck)
+			checked.WritePermission = len(labels) > 0
+			checked.WriteAccess = strings.Join(labels, ",")
+		}
+		if ctx.Err() != nil {
+			break
+		}
+		result = append(result, checked)
+	}
+	return result
 }
 
 // listShare lists a readable share within limits into share.Files (the root)
