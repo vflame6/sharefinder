@@ -39,6 +39,17 @@ from the section of the released version.
 - `--resume scan.jsonl` continues an interrupted `--output-json` scan: finished
   hosts are not contacted again and finished shares are neither checked nor
   listed again.
+- `sharefinder matrix`: a null session, a guest session and every given
+  account are tested on each host in one pass, printed as one row per share
+  (`DATA  null:R  guest:R  tester:RW`). Each account has its own lockout guard.
+- `--aes-key` for Kerberos (SMB and LDAP), a password prompt when `-p` is not
+  given, and the `SHAREFINDER_PASSWORD` environment variable.
+- The negotiated SMB dialect is reported (host line, JSONL, XML, HTML), and
+  `--output-relay-list` writes the hosts that do not require signing.
+- `hunt` skips disabled computer accounts (`--include-disabled` keeps them),
+  takes `--active-within 90d`, adds the servers DFS links point to, shows the
+  operating system recorded in AD, and `--ldap-only` lists the computers
+  without scanning them.
 - Homebrew: the repository is its own tap
   (`brew tap vflame6/sharefinder https://github.com/vflame6/sharefinder`); each
   release commits the updated cask to `Casks/`.
@@ -78,6 +89,8 @@ from the section of the released version.
   servers could reach the terminal through warnings and errors; every message
   now shows them escaped.
 - `--threads 0` hung; it is refused.
+- Null and guest scans reported `signing:false` for every host; the signing
+  requirement now comes from the negotiation, for every session type.
 
 ## [1.4.1] - 2026-11-26
 
