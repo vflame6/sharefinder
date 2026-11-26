@@ -345,6 +345,9 @@ func TestIntegration_UNCNamesTheScannedAddress(t *testing.T) {
 func TestIntegration_OutputFormats(t *testing.T) {
 	srv := smbtest.Start(t, smbtest.Config{User: testUser, Password: testPassword, Shares: labShares()})
 	dir := t.TempDir()
+	// --html without --output-json renders from a temporary JSONL file
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
 	o := asUser(integrationOptions(srv.Port(), 5*time.Second), testPassword)
 	o.List = true
 	txtPath := filepath.Join(dir, "out.txt")
@@ -354,11 +357,11 @@ func TestIntegration_OutputFormats(t *testing.T) {
 	}
 	o.FileTXT, o.OutputRawFileName = txt, txtPath
 	o.OutputHTML, o.OutputHTMLFileName = true, filepath.Join(dir, "out.html")
-	csvPath, uncPath := filepath.Join(dir, "out.csv"), filepath.Join(dir, "out.unc.txt")
+	csvPath, uncFile := filepath.Join(dir, "out.csv"), filepath.Join(dir, "out.unc.txt")
 	if o.FileCSV, err = o.Writer.CreateFile(csvPath, false); err != nil {
 		t.Fatal(err)
 	}
-	if o.FileUNC, err = o.Writer.CreateFile(uncPath, false); err != nil {
+	if o.FileUNC, err = o.Writer.CreateFile(uncFile, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -374,8 +377,16 @@ func TestIntegration_OutputFormats(t *testing.T) {
 		t.Fatalf("text output lacks the listing: %v\n%s", err, raw)
 	}
 	html, err := os.ReadFile(o.OutputHTMLFileName)
-	if err != nil || !strings.Contains(string(html), "Sharefinder Scan Report") || !strings.Contains(string(html), "readme.txt") {
-		t.Fatalf("HTML report missing or incomplete: %v", err)
+	if err != nil || !strings.Contains(string(html), "Sharefinder Scan Report") {
+		t.Fatalf("HTML report missing: %v", err)
+	}
+	var files [][]any
+	jsonBlock(t, string(html), "sf-files", &files)
+	if !slices.ContainsFunc(files, func(row []any) bool { return row[1] == "DATA" && row[2] == "readme.txt" }) {
+		t.Fatalf("HTML report lacks DATA/readme.txt: %v", files)
+	}
+	if left, _ := filepath.Glob(filepath.Join(tmp, "*")); len(left) > 0 {
+		t.Errorf("the temporary JSONL must be removed, found %v", left)
 	}
 	csvData, err := os.ReadFile(csvPath)
 	if err != nil {
@@ -389,7 +400,7 @@ func TestIntegration_OutputFormats(t *testing.T) {
 	if !slices.ContainsFunc(rows, func(row []string) bool { return slices.Equal(row, wantRow) }) {
 		t.Errorf("CSV lacks the DATA row: %q", rows)
 	}
-	unc, err := os.ReadFile(uncPath)
+	unc, err := os.ReadFile(uncFile)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/signal"
 	"sync/atomic"
@@ -31,7 +32,7 @@ var (
 	outputCSVFlag  = app.Flag("output-csv", "Filename to write CSV output: one row per share").Default("").String()
 	outputUNCFlag  = app.Flag("output-unc", "Filename to write the readable shares as //host/share lines, for content scanners").Default("").String()
 	outputAllFlag  = app.Flag("output-all", "Filename to write output in all formats").Default("").String()
-	outputHTMLFlag = app.Flag("html", "Generate HTML report (requires XML output)").Default("false").Bool()
+	outputHTMLFlag = app.Flag("html", "Write an HTML report named after --output-json or --output-xml").Default("false").Bool()
 	forceFlag      = app.Flag("force", "Overwrite existing output files").Bool()
 
 	// connection flags
@@ -87,6 +88,11 @@ var (
 	huntKerberosFlag   = huntCommand.Flag("kerberos", "Use Kerberos authentication").Short('k').Bool()
 	huntDcHostnameFlag = huntCommand.Flag("dc-hostname", "Hostname of domain controller for Kerberos authentication").String()
 	huntAllowPlainFlag = huntCommand.Flag("allow-plaintext-ldap", "Allow a simple bind, which sends the password, over LDAP without TLS when LDAPS and StartTLS fail").Bool()
+
+	// report command
+	// render the HTML report of a JSONL file
+	reportCommand  = app.Command("report", "Write the HTML report of an --output-json file, named after it or after -o")
+	reportInputArg = reportCommand.Arg("jsonl", "JSONL file written by --output-json").Required().ExistingFile()
 )
 
 func main() {
@@ -108,6 +114,17 @@ func main() {
 	err := logger.SetLoggerOptions(*debugFlag, *quietFlag)
 	if err != nil {
 		logger.Fatal(err)
+	}
+
+	// the report command reads a finished scan file: no scanner is set up
+	if command == reportCommand.FullCommand() {
+		if *outputXMLFlag != "" || *outputJSONFlag != "" || *outputCSVFlag != "" || *outputUNCFlag != "" || *outputAllFlag != "" || *outputHTMLFlag {
+			logger.Fatal(errors.New("report writes only the HTML report: name it with -o"))
+		}
+		if err := cmd.ExecuteReport(*reportInputArg, *outputRawFlag, *forceFlag); err != nil {
+			logger.Fatal(err)
+		}
+		return
 	}
 
 	// set up a scanner

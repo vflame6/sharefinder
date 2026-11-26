@@ -33,10 +33,9 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 
 	outputHTML := cfg.OutputHTML
 
-	// HTML output is available only if basic output is specified
-	// it is done like that because HTML file is generated based on generated XML
-	if outputHTML && cfg.OutputXML == "" {
-		return nil, errors.New("cannot use --html without --output-xml")
+	// the HTML report is named after the JSONL or XML output
+	if outputHTML && cfg.OutputJSON == "" && cfg.OutputXML == "" {
+		return nil, errors.New("cannot use --html without --output-json or --output-xml: the report is named after them")
 	}
 
 	if (cfg.OutputXML != "" || cfg.OutputRaw != "" || cfg.OutputJSON != "" || cfg.OutputCSV != "" || cfg.OutputUNC != "" || outputHTML) && cfg.OutputAll != "" {
@@ -116,7 +115,11 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 			outputUNCFileName = scanner.OutputPath(cfg.OutputUNC, ".unc.txt")
 		}
 		if outputHTML {
-			outputHTMLFileName = scanner.OutputPath(cfg.OutputXML, ".html")
+			base := cfg.OutputJSON
+			if base == "" {
+				base = cfg.OutputXML
+			}
+			outputHTMLFileName = scanner.OutputPath(base, ".html")
 		}
 	}
 	var outputs []string

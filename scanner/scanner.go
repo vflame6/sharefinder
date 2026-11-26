@@ -27,6 +27,7 @@ type Scanner struct {
 
 	closeOnce sync.Once
 	scanned   sync.Map // addresses already scanned, for deduplication
+	tempJSON  string   // JSONL file created only to render --html, removed at the end
 }
 
 type DNHost struct {
@@ -58,6 +59,15 @@ func (s *Scanner) StartOutputs() {
 	o := s.Options
 	if o.Sink != nil {
 		return
+	}
+	// the HTML report is rendered from JSONL: without --output-json, a
+	// temporary JSONL file is written and removed once the report is done
+	if o.OutputHTML && o.FileJSON == nil {
+		if f, err := os.CreateTemp("", "sharefinder-*.jsonl"); err != nil {
+			logger.Error(fmt.Errorf("cannot write the HTML report: %w", err))
+		} else {
+			o.FileJSON, o.OutputJSONFileName, s.tempJSON = f, f.Name(), f.Name()
+		}
 	}
 	sinks := MultiSink{NewTextSink(fileOrNil(o.FileTXT))}
 	if o.FileXML != nil {
@@ -105,15 +115,28 @@ func (s *Scanner) closeOutputs() {
 		}
 	}
 
-	if s.Options.OutputHTML && s.Options.OutputXMLFileName != "" {
-		xmlFile, err := s.Options.Writer.ReadFile(s.Options.OutputXMLFileName)
-		if err != nil {
-			logger.Error(err)
-		}
-		if err := s.OutputHTML(xmlFile); err != nil {
-			logger.Error(err)
+	if s.Options.OutputHTML && s.Options.OutputJSONFileName != "" {
+		if err := s.writeHTMLReport(); err != nil {
+			logger.Error(fmt.Errorf("writing the HTML report: %w", err))
 		}
 	}
+	if s.tempJSON != "" {
+		_ = os.Remove(s.tempJSON)
+	}
+}
+
+// writeHTMLReport renders the HTML report from the scan's JSONL output.
+func (s *Scanner) writeHTMLReport() error {
+	logger.Debugf("Generating HTML report. Output file: %s", s.Options.OutputHTMLFileName)
+	f, err := s.Options.Writer.CreateFile(s.Options.OutputHTMLFileName, false)
+	if err != nil {
+		return err
+	}
+	if err := WriteReport(s.Options.OutputJSONFileName, f); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 // TargetsFromList returns a Producer that sends hosts in order.
@@ -315,26 +338,4 @@ func (s *Scanner) ldapOptions(host net.IP, dcHostname string, useGC bool) LDAPOp
 		AllowPlaintext: s.Options.AllowPlaintextLDAP,
 		Dialer:         s.Options.Dialer,
 	}
-}
-
-// OutputHTML is used to generate HTML output from XML output
-func (s *Scanner) OutputHTML(data []byte) error {
-	// parse XML data
-	result, err := ParseSharefinderRun(data)
-	if err != nil {
-		return err
-	}
-
-	// create the HTML file and write to it
-	logger.Debugf("Generating HTML report. Output file: %s", s.Options.OutputHTMLFileName)
-	fileHTML, err := s.Options.Writer.CreateFile(s.Options.OutputHTMLFileName, false)
-	if err != nil {
-		return err
-	}
-	err = s.Options.Writer.WriteHTML(result, fileHTML)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }

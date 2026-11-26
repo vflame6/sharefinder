@@ -125,6 +125,86 @@ func TestCreateScanner_CSVAndUNCOutputs(t *testing.T) {
 	}
 }
 
+func TestCreateScanner_HTMLNames(t *testing.T) {
+	dir := t.TempDir()
+	cfg := validConfig()
+	cfg.OutputHTML = true
+	if _, err := CreateScanner(cfg); err == nil || !strings.Contains(err.Error(), "--output-json") {
+		t.Fatalf("--html alone must ask for a file name, got %v", err)
+	}
+
+	cfg.OutputJSON = filepath.Join(dir, "scan.jsonl")
+	s, err := CreateScanner(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := s.Options.OutputHTMLFileName, filepath.Join(dir, "scan.html"); got != want {
+		t.Fatalf("--output-json scan.jsonl --html writes %s, want %s", got, want)
+	}
+	s.CloseOutputter()
+
+	xml := validConfig()
+	xml.OutputHTML, xml.OutputXML = true, filepath.Join(dir, "legacy")
+	if s, err = CreateScanner(xml); err != nil {
+		t.Fatalf("--output-xml with --html keeps working: %v", err)
+	}
+	if got, want := s.Options.OutputHTMLFileName, filepath.Join(dir, "legacy.html"); got != want {
+		t.Fatalf("HTML name = %s, want %s", got, want)
+	}
+	s.CloseOutputter()
+}
+
+func TestExecuteReport(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "scan.jsonl")
+	scan := `{"type":"scan","scan_id":"01JDK4","time":"2026-11-26T10:00:00Z","identity":"tester"}` + "\n" +
+		`{"type":"host","scan_id":"01JDK4","time":"2026-11-26T10:00:00Z","identity":"tester","host":"10.0.0.5","unc":"//10.0.0.5","signing":false,"shares":["Data"]}` + "\n"
+	if err := os.WriteFile(input, []byte(scan), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ExecuteReport(input, "", false); err != nil {
+		t.Fatal(err)
+	}
+	html, err := os.ReadFile(filepath.Join(dir, "scan.html"))
+	if err != nil || !strings.Contains(string(html), `"10.0.0.5"`) {
+		t.Fatalf("report scan.jsonl must write scan.html with the host: %v", err)
+	}
+
+	if err := ExecuteReport(input, "", false); err == nil || !strings.Contains(err.Error(), "--force") {
+		t.Fatalf("an existing report must not be overwritten without --force, got %v", err)
+	}
+	if err := ExecuteReport(input, "", true); err != nil {
+		t.Fatalf("--force overwrites: %v", err)
+	}
+
+	if err := ExecuteReport(input, filepath.Join(dir, "client"), false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "client.html")); err != nil {
+		t.Fatalf("-o client writes client.html: %v", err)
+	}
+
+	same := filepath.Join(dir, "same.html")
+	if err := os.WriteFile(same, []byte(scan), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ExecuteReport(same, "", true); err == nil {
+		t.Fatal("the report must never overwrite its own input")
+	}
+
+	bad := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(bad, []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ExecuteReport(bad, "", false); err == nil {
+		t.Fatal("a file without scan records must be refused")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "notes.html")); err == nil {
+		t.Fatal("a failed report must not leave a file behind")
+	}
+}
+
 func TestCreateScanner_AcceptsDisabledIOTimeout(t *testing.T) {
 	cfg := validConfig()
 	cfg.IOTimeout = 0

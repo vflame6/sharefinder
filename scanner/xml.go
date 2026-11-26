@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/xml"
 	"path/filepath"
-	"strconv"
 	"time"
 )
 
@@ -38,64 +37,6 @@ type Host struct {
 	// IP: the name a server reports for itself may point to another host.
 	FQDN   string  `xml:"fqdn,attr,omitempty"`
 	Shares []Share `xml:"share"`
-}
-
-func (h Host) AdminStatus() string {
-	if h.Admin == nil {
-		return "unknown"
-	}
-	return strconv.FormatBool(*h.Admin)
-}
-
-// HostCount returns the number of enumerated hosts.
-func (r *SharefinderRun) HostCount() int {
-	return len(r.Hosts)
-}
-
-// ShareCount returns the total number of shares discovered across all hosts.
-func (r *SharefinderRun) ShareCount() int {
-	n := 0
-	for _, h := range r.Hosts {
-		n += len(h.Shares)
-	}
-	return n
-}
-
-// ReadableShareCount returns shares with read permission.
-func (r *SharefinderRun) ReadableShareCount() int {
-	n := 0
-	for _, h := range r.Hosts {
-		for _, s := range h.Shares {
-			if s.ReadPermission {
-				n++
-			}
-		}
-	}
-	return n
-}
-
-// WritableShareCount returns shares with write permission.
-func (r *SharefinderRun) WritableShareCount() int {
-	n := 0
-	for _, h := range r.Hosts {
-		for _, s := range h.Shares {
-			if s.WritePermission {
-				n++
-			}
-		}
-	}
-	return n
-}
-
-// AdminHostCount returns hosts where the user has local admin access.
-func (r *SharefinderRun) AdminHostCount() int {
-	n := 0
-	for _, h := range r.Hosts {
-		if h.Admin != nil && *h.Admin {
-			n++
-		}
-	}
-	return n
 }
 
 type Share struct {

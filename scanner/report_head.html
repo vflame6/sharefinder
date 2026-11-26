@@ -1,0 +1,122 @@
+    <style>
+        body {
+            padding-top: 56px; /* Adjusts for the fixed navbar height */
+            background-color: #fafbfc;
+        }
+        .footer {
+            margin-top: 56px;
+            padding-top: 32px;
+            padding-bottom: 32px;
+            width: 100%;
+            background-color: #f5f5f5;
+        }
+        h2 {
+            padding-top: 24px;
+            scroll-margin-top: 56px;
+        }
+        .stat-card {
+            background: #fff;
+            border: 1px solid #e6e8eb;
+            border-radius: .5rem;
+            padding: .85rem 1rem;
+            height: 100%;
+        }
+        .stat-card .stat-label {
+            font-size: .75rem;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            color: #6c757d;
+        }
+        .stat-card .stat-value {
+            font-size: 1.6rem;
+            font-weight: 600;
+            line-height: 1.1;
+            margin-top: .15rem;
+        }
+        .stat-card.stat-warn .stat-value { color: #997404; }
+        .stat-card.stat-danger .stat-value { color: #b02a37; }
+        .stat-card.stat-success .stat-value { color: #146c43; }
+        .command-box {
+            background: #1e1e1e;
+            color: #f1f1f1;
+            border-radius: .5rem;
+            padding: .9rem 1.1rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: .9rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin: 0;
+        }
+        .command-box .cmd-prompt {
+            color: #6cb6ff;
+            user-select: none;
+        }
+        td.sf-path {
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+    </style>
+
+    <title>Sharefinder Scan Report</title>
+</head>
+
+<body>
+
+<nav class="navbar navbar-expand-md bg-secondary fixed-top">
+    <div class="container-md">
+        <a class="navbar-brand text-white" href="#">sharefinder</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav gap-2">
+                <li class="nav-item"><a class="nav-link text-white" href="#hosts">Hosts</a></li>
+                <li class="nav-item"><a class="nav-link text-white" href="#shares">Shares</a></li>
+                <li class="nav-item"><a class="nav-link text-white" href="#files">Files</a></li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<div id="content" class="container-md">
+    <div id="summary" class="mt-4 p-4 p-md-5 bg-light rounded">
+        <h1 class="mb-1">Sharefinder Scan Report</h1>
+        <p class="text-muted mb-4" id="sf-meta"></p>
+        <div id="sf-warnings"></div>
+        <div class="mb-4" id="sf-command-box" hidden>
+            <div class="text-muted small text-uppercase mb-1" style="letter-spacing:.04em;">Executed command</div>
+            <pre class="command-box"><span class="cmd-prompt">$ </span><span id="sf-command"></span></pre>
+        </div>
+        <div class="row g-2">
+            <div class="col-6 col-md"><div class="stat-card"><div class="stat-label">Hosts</div><div class="stat-value" id="sf-count-hosts"></div></div></div>
+            <div class="col-6 col-md"><div class="stat-card"><div class="stat-label">Shares</div><div class="stat-value" id="sf-count-shares"></div></div></div>
+            <div class="col-6 col-md"><div class="stat-card stat-warn"><div class="stat-label">Readable</div><div class="stat-value" id="sf-count-readable"></div></div></div>
+            <div class="col-6 col-md"><div class="stat-card stat-danger"><div class="stat-label">Writable</div><div class="stat-value" id="sf-count-writable"></div></div></div>
+            <div class="col-6 col-md"><div class="stat-card stat-success"><div class="stat-label">Admin</div><div class="stat-value" id="sf-count-admin"></div></div></div>
+            <div class="col-6 col-md"><div class="stat-card"><div class="stat-label">Files</div><div class="stat-value" id="sf-count-files"></div></div></div>
+        </div>
+    </div>
+
+    <h2 id="hosts">Hosts</h2>
+    <table id="table-hosts" class="table table-hover table-sm w-100">
+        <thead>
+        <tr><th>IP</th><th>Hostname</th><th>Domain</th><th>OS</th><th>Signing</th><th>Session</th><th>Admin</th><th>Shares</th></tr>
+        </thead>
+    </table>
+
+    <h2 id="shares">Shares</h2>
+    <table id="table-shares" class="table table-hover table-sm w-100">
+        <thead>
+        <tr><th>Host</th><th>Hostname</th><th>Share</th><th>Remark</th><th>Type</th><th>Read</th><th>Write</th><th>Write access</th><th>Files</th><th>Notes</th></tr>
+        </thead>
+    </table>
+
+    <h2 id="files">Files</h2>
+    <table id="table-files" class="table table-hover table-sm w-100">
+        <thead>
+        <tr><th>Host</th><th>Share</th><th>Path</th><th>Size</th><th>Last modified (UTC)</th><th>Tags</th></tr>
+        </thead>
+    </table>
+</div>
+

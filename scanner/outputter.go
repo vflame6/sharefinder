@@ -6,7 +6,6 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"html/template"
 	"io"
 
 	"os"
@@ -16,17 +15,11 @@ import (
 	"time"
 )
 
-// HTMLTemplate is just a string copy of template.html to include the template in the tool
-//
-//go:embed template.html
-var HTMLTemplate string
-
-// HTMLHeader is just a string copy of vendor.html with the same logic as HTMLTemplate
+// HTMLHeader is vendor.html: the head of the HTML report, with Bootstrap,
+// jQuery and DataTables inlined so the report works offline.
 //
 //go:embed vendor.html
 var HTMLHeader string
-
-var TEMPLATE = HTMLHeader + HTMLTemplate
 
 type OutputWriter struct {
 	mutex sync.Mutex
@@ -135,18 +128,4 @@ func (o *OutputWriter) WriteXMLFooter(timeEnd time.Time, writer io.Writer) error
 		return err
 	}
 	return bufWriter.Flush()
-}
-
-func (o *OutputWriter) WriteHTML(result *SharefinderRun, writer io.Writer) error {
-	t := template.New("HTML")
-	tmpl, err := t.Parse(TEMPLATE)
-	if err != nil {
-		return err
-	}
-	err = tmpl.Execute(writer, result)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
