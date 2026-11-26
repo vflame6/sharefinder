@@ -50,6 +50,9 @@ func CreateScanner(cfg Config) (*scanner.Scanner, error) {
 		return nil, errors.New("cannot use --recurse without --list")
 	}
 
+	if cfg.Threads < 1 {
+		return nil, errors.New("--threads must be at least 1")
+	}
 	if cfg.Timeout <= 0 {
 		return nil, errors.New("--timeout must be greater than 0")
 	}

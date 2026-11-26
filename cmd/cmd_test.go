@@ -40,6 +40,7 @@ func TestCreateScanner_RejectsBadTimeouts(t *testing.T) {
 		{"negative connect timeout", func(c *Config) { c.Timeout = -time.Second }, "--timeout"},
 		{"negative I/O timeout", func(c *Config) { c.IOTimeout = -time.Second }, "--io-timeout"},
 		{"no connection per host", func(c *Config) { c.MaxConnsPerHost = 0 }, "--max-conns-per-host"},
+		{"no threads", func(c *Config) { c.Threads = 0 }, "--threads"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
