@@ -7,6 +7,8 @@ from the section of the released version.
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-11-26
+
 ### Changed
 
 - The HTML report's By host section shows each listed share as a tree:
@@ -17,6 +19,11 @@ from the section of the released version.
   2,000 entries opens expanded; a larger one draws a folder when it is
   opened, 1,000 entries at a time, so a share's listing is no longer cut at
   5,000 entries. Expand all and Collapse all work per share.
+- In that tree, an entry the scan types as a link but which has a size,
+  such as a deduplicated or cloud-tiered file (the scan types every reparse
+  point as a link), is shown and counted as a file.
+- CI runs for pull requests only, on Linux and Windows; the release targets,
+  macOS among them, are cross-compiled instead of built on a macOS runner.
 
 ## [1.5.1] - 2026-11-26
 
