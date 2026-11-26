@@ -7,6 +7,8 @@ from the section of the released version.
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-11-26
+
 ### Changed
 
 - `--output-html NAME` replaces `--html`: the report is named like every
