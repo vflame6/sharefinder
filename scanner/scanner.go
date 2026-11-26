@@ -156,13 +156,16 @@ func TargetsFromList(hosts []DNHost) Producer {
 	}
 }
 
-// RunEnumerateDomainComputers is executed by hunt command to get a list of hosts
-func (s *Scanner) RunEnumerateDomainComputers(ctx context.Context) ([]DNHost, error) {
+// EnumerateDomainComputers lists the computers of the domain (or forest) by
+// their DNS names, without addresses, and returns the resolver that answers
+// for them: the domain's DNS (--resolver or the DC), over UDP, or over TCP when
+// UDP does not answer or --proxy is set. HuntTargets resolves the names.
+func (s *Scanner) EnumerateDomainComputers(ctx context.Context) ([]DNHost, *Resolver, error) {
 	// Regular LDAP for forest discovery: the GC's partial attribute set excludes
 	// crossRef.systemFlags, so a config-NC crossRef search on 3268 returns 0 hits.
 	ldapConn, err := NewLDAPConnection(ctx, s.ldapOptions(s.Options.DomainController, s.Options.DCHostname, false))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer func() {
 		if err := ldapConn.Close(); err != nil {
@@ -174,7 +177,7 @@ func (s *Scanner) RunEnumerateDomainComputers(ctx context.Context) ([]DNHost, er
 	if s.Options.Forest {
 		searchBases, err = ldapConn.SearchForestDomains()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	} else {
 		searchBases = []DomainPartition{{
@@ -184,7 +187,7 @@ func (s *Scanner) RunEnumerateDomainComputers(ctx context.Context) ([]DNHost, er
 	}
 
 	if len(searchBases) == 0 {
-		return nil, errors.New("no domain naming contexts found")
+		return nil, nil, errors.New("no domain naming contexts found")
 	}
 
 	// Prefer GC for cross-domain SearchComputers (one connection covers the forest).
@@ -204,8 +207,7 @@ func (s *Scanner) RunEnumerateDomainComputers(ctx context.Context) ([]DNHost, er
 		}
 	}
 
-	var results []DNHost
-	seenHosts := make(map[string]struct{})
+	var names []DNHost
 	var resolver net.IP
 	if s.Options.CustomResolver != nil {
 		resolver = s.Options.CustomResolver
@@ -220,7 +222,7 @@ func (s *Scanner) RunEnumerateDomainComputers(ctx context.Context) ([]DNHost, er
 		r = NewResolver("udp", resolver, s.Options.Timeout, nil)
 	}
 
-	for i, searchBase := range searchBases {
+	for _, searchBase := range searchBases {
 		logger.Warnf("Enumerating domain %s", searchBase.Name)
 		sr, err := queryConn.SearchComputers(searchBase.BaseDN)
 		if err != nil && isLDAPReferral(err) {
@@ -244,53 +246,31 @@ func (s *Scanner) RunEnumerateDomainComputers(ctx context.Context) ([]DNHost, er
 			continue
 		}
 
-		if i == 0 {
-			testEntry := sr.Entries[0].GetAttributeValue("dNSHostName")
-			if s.Options.Dialer.Proxied() {
-				_, err = r.LookupHost(ctx, testEntry)
-				if err != nil {
-					return nil, err
-				}
-			} else {
-				_, err = r.LookupHost(ctx, testEntry)
-				if err != nil {
-					r = NewResolver("tcp", resolver, s.Options.Timeout, nil)
-					_, err = r.LookupHost(ctx, testEntry)
-					if err != nil {
-						return nil, err
-					}
-				}
-			}
-		}
-
 		for _, entry := range sr.Entries {
-			if ctx.Err() != nil {
-				return nil, context.Cause(ctx)
+			if hostname := entry.GetAttributeValue("dNSHostName"); hostname != "" {
+				names = append(names, DNHost{Hostname: hostname})
 			}
-			hostname := entry.GetAttributeValue("dNSHostName")
-			if hostname == "" {
-				continue
-			}
-
-			possibleTarget, err := r.LookupHost(ctx, hostname)
-			if err != nil {
-				logger.Debug(err.Error())
-				continue
-			}
-			key := strings.ToLower(hostname) + "|" + possibleTarget.String()
-			if _, ok := seenHosts[key]; ok {
-				continue
-			}
-			seenHosts[key] = struct{}{}
-			results = append(results, DNHost{Hostname: hostname, IP: possibleTarget})
 		}
 	}
-
-	if len(results) == 0 {
-		return nil, errors.New("no domain computers found")
+	if ctx.Err() != nil {
+		return nil, nil, context.Cause(ctx)
+	}
+	if len(names) == 0 {
+		return nil, nil, errors.New("no domain computers found")
 	}
 
-	return results, nil
+	// choose the transport once, on the first name: UDP unless it does not
+	// answer, TCP through --proxy
+	if _, err := r.LookupHost(ctx, names[0].Hostname); err != nil {
+		if s.Options.Dialer.Proxied() {
+			return nil, nil, err
+		}
+		r = NewResolver("tcp", resolver, s.Options.Timeout, nil)
+		if _, err := r.LookupHost(ctx, names[0].Hostname); err != nil {
+			return nil, nil, err
+		}
+	}
+	return names, r, nil
 }
 
 // dialDCForDomain resolves domainName via DNS and opens a regular LDAP connection

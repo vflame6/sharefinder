@@ -514,14 +514,15 @@ func ExecuteHunt(ctx context.Context, s *scanner.Scanner, username, password, ha
 		logger.Warnf("Starting %s domain enumeration", s.Options.Domain)
 	}
 
-	// enumerate possible targets via domain controller
-	possibleTargets, err := s.RunEnumerateDomainComputers(ctx)
+	// list the domain computers via the domain controller; their names are
+	// resolved while the scan runs
+	computers, dns, err := s.EnumerateDomainComputers(ctx)
 	if err != nil {
 		return err
 	}
 
-	logger.Warnf("Found %d domain computers. Starting SMB shares enumeration...", len(possibleTargets))
-	s.Stats.Total.Store(int64(len(possibleTargets)))
+	logger.Warnf("Found %d domain computers. Starting SMB shares enumeration...", len(computers))
+	s.Stats.Total.Store(int64(len(computers)))
 
-	return runScan(ctx, s, "hunt", scanner.TargetsFromList(possibleTargets))
+	return runScan(ctx, s, "hunt", s.HuntTargets(computers, dns.LookupHost))
 }
