@@ -223,14 +223,14 @@ func (s *Scanner) EnumerateDomainComputers(ctx context.Context) ([]DNHost, *Reso
 	}
 
 	for _, searchBase := range searchBases {
-		logger.Warnf("Enumerating domain %s", searchBase.Name)
+		logger.Warnf("Enumerating domain %s", printable(searchBase.Name))
 		sr, err := queryConn.SearchComputers(searchBase.BaseDN)
 		if err != nil && isLDAPReferral(err) {
 			// Referral-chase fallback: connect directly to a DC of the referred domain.
-			logger.Warnf("Domain %s referred — chasing via direct DC connection", searchBase.Name)
+			logger.Warnf("Domain %s referred — chasing via direct DC connection", printable(searchBase.Name))
 			altConn, dialErr := s.dialDCForDomain(ctx, searchBase.Name, &r, resolver)
 			if dialErr != nil {
-				logger.Warnf("Skipping domain %s: %v", searchBase.Name, dialErr)
+				logger.Warnf("Skipping domain %s: %v", printable(searchBase.Name), dialErr)
 				continue
 			}
 			sr, err = altConn.SearchComputers(searchBase.BaseDN)
@@ -239,7 +239,7 @@ func (s *Scanner) EnumerateDomainComputers(ctx context.Context) ([]DNHost, *Reso
 			}
 		}
 		if err != nil {
-			logger.Warnf("Skipping domain %s: %v", searchBase.Name, err)
+			logger.Warnf("Skipping domain %s: %v", printable(searchBase.Name), err)
 			continue
 		}
 		if len(sr.Entries) == 0 {

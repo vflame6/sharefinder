@@ -69,7 +69,7 @@ func resolvePool(ctx context.Context, resolve func(context.Context, string) (net
 				if err != nil {
 					if ctx.Err() == nil {
 						nFailed.Add(1)
-						logger.Debugf("Cannot resolve %s: %v", host.Hostname, err)
+						logger.Debugf("Cannot resolve %s: %v", printable(host.Hostname), err)
 					}
 					continue
 				}

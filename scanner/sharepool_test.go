@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -46,6 +47,34 @@ func (c *slowConn) WalkShare(ctx context.Context, share string, lim ListLimits, 
 }
 
 func (c *slowConn) Close() { c.probe.closed.Add(1) }
+
+// failingConn fails a directory and then the whole listing.
+type failingConn struct{}
+
+func (failingConn) WalkShare(ctx context.Context, share string, lim ListLimits, recurse bool,
+	emit func(dir smb.SharedFile, depth int, entries []smb.SharedFile), onErr func(string, error)) (walkStats, error) {
+	onErr("IT\n[+] 10.6.6.6: fake finding", errors.New("access denied"))
+	return walkStats{Truncated: true}, errors.New("connection reset")
+}
+
+func (failingConn) Close() {}
+
+func TestListShare_WarningsEscapeNames(t *testing.T) {
+	h := &Host{IP: "10.0.0.5"}
+	share := &Share{ShareName: "Data\n[+] 10.6.6.6: fake share"}
+	var files atomic.Int64
+	out := captureLog(t, func() {
+		listShare(context.Background(), failingConn{}, MultiSink{}, h, share, ListLimits{MaxFiles: 10}, true, &files)
+	})
+	if strings.Contains(out, "\n[+]") {
+		t.Fatalf("a line break in a server-supplied name must not start a line of its own: %q", out)
+	}
+	for _, want := range []string{`Data\x0a[+] 10.6.6.6: fake share`, `IT\x0a[+] 10.6.6.6: fake finding`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("warnings lack the escaped name %q: %q", want, out)
+		}
+	}
+}
 
 // recordingSink counts finished shares and checks HostFinished comes last.
 type recordingSink struct {

@@ -169,7 +169,7 @@ func listShare(ctx context.Context, conn shareConn, sink Sink, h *Host, share *S
 	share.Listed = true
 	onErr := func(dir string, err error) {
 		if ctx.Err() == nil {
-			logger.Warnf("Failed to list directory %s\\%s\\%s: %v", h.IP, share.ShareName, dir, err)
+			logger.Warnf("Failed to list directory %s\\%s\\%s: %v", h.IP, printable(share.ShareName), printable(dir), err)
 		}
 	}
 	emit := listingEmitter(sink, h, share)
@@ -190,12 +190,12 @@ func listShare(ctx context.Context, conn shareConn, sink Sink, h *Host, share *S
 		share.Partial = true
 	case err != nil:
 		share.ListError = err.Error()
-		logger.Warnf("Failed to list share %s\\%s: %v", h.IP, share.ShareName, err)
+		logger.Warnf("Failed to list share %s\\%s: %v", h.IP, printable(share.ShareName), err)
 	}
 	if stats.Truncated {
-		logger.Warnf("\\\\%s\\%s: listing truncated at %d entries (--max-files)", h.IP, share.ShareName, limits.MaxFiles)
+		logger.Warnf("\\\\%s\\%s: listing truncated at %d entries (--max-files)", h.IP, printable(share.ShareName), limits.MaxFiles)
 	}
 	if stats.DepthLimited {
-		logger.Warnf("\\\\%s\\%s: directories deeper than --depth %d were not listed", h.IP, share.ShareName, limits.MaxDepth)
+		logger.Warnf("\\\\%s\\%s: directories deeper than --depth %d were not listed", h.IP, printable(share.ShareName), limits.MaxDepth)
 	}
 }

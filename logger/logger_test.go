@@ -104,6 +104,30 @@ func TestLoggerStatusRedraw(t *testing.T) {
 	}
 }
 
+func TestLoggerEscapesControlCharacters(t *testing.T) {
+	// a hostile server names a share so as to retitle and clear the terminal
+	hostile := "Data\x1b]0;pwned\x07\x1b[2J\r"
+	out, errOut := useBuffers(t, true, false)
+	Info("[+] " + hostile)
+	Warn("Failed to list share " + hostile)
+	Error(errors.New("listing " + hostile))
+	Debug("probing " + hostile)
+	for name, got := range map[string]string{"stdout": out.String(), "stderr": errOut.String()} {
+		if strings.ContainsAny(got, "\x1b\x07\r") {
+			t.Errorf("%s carries raw control characters: %q", name, got)
+		}
+		if !strings.Contains(got, `Data\x1b]0;pwned\x07\x1b[2J\x0d`) {
+			t.Errorf("%s must show them escaped: %q", name, got)
+		}
+	}
+	// line breaks and tabs that the messages themselves use stay
+	out.Reset()
+	Info("Share\tPermissions\ndata\tREAD")
+	if out.String() != "Share\tPermissions\ndata\tREAD\n" {
+		t.Errorf("tabs and newlines must stay: %q", out.String())
+	}
+}
+
 func TestLoggerStatusOffWritesNoControlSequences(t *testing.T) {
 	out, errOut := useBuffers(t, false, false)
 	RedrawStatus()

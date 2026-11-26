@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"unicode"
 
 	"github.com/jfjallid/golog"
 )
@@ -84,10 +85,39 @@ func SetLoggerOptions(debug, quiet bool) error {
 	}
 	for _, name := range goSmbLogPackages {
 		// go-smb's own messages are diagnostics, never results
-		golog.Get(name).SetLogLevel(libLevel).SetOutput(Log.Err)
+		golog.Get(name).SetLogLevel(libLevel).SetOutput(sanitizingWriter{Log.Err})
 	}
 
 	return nil
+}
+
+// sanitize escapes control characters other than newline and tab as \xNN:
+// share names, remarks and error texts come from scanned servers, which must
+// not be able to send escape sequences to the terminal.
+func sanitize(s string) string {
+	unsafe := func(r rune) bool { return unicode.IsControl(r) && r != '\n' && r != '\t' }
+	if strings.IndexFunc(s, unsafe) < 0 {
+		return s
+	}
+	var b strings.Builder
+	for _, r := range s {
+		if unsafe(r) {
+			fmt.Fprintf(&b, `\x%02x`, r)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// sanitizingWriter escapes control characters in what go-smb logs itself.
+type sanitizingWriter struct{ w io.Writer }
+
+func (s sanitizingWriter) Write(p []byte) (int, error) {
+	if _, err := io.WriteString(s.w, sanitize(string(p))); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }
 
 // writeResult prints a result on Out, ending it with exactly one newline
@@ -166,6 +196,7 @@ func above(write func()) {
 
 // Info prints a result. Results are never suppressed.
 func Info(msg string) {
+	msg = sanitize(msg)
 	Log.mutex.Lock()
 	defer Log.mutex.Unlock()
 	above(func() { writeResult(msg) })
@@ -181,6 +212,7 @@ func Warn(msg string) {
 	if Log.Quiet {
 		return
 	}
+	msg = sanitize(msg)
 	Log.mutex.Lock()
 	defer Log.mutex.Unlock()
 	above(func() { writeMessage(msg) })
@@ -196,6 +228,7 @@ func Debug(msg string) {
 	if !Log.Debug {
 		return
 	}
+	msg = sanitize(msg)
 	Log.mutex.Lock()
 	defer Log.mutex.Unlock()
 	above(func() { Log.logger.Println("[DEBUG] " + strings.TrimSpace(msg)) })
@@ -216,7 +249,7 @@ func Error(err error) {
 	}
 	Log.mutex.Lock()
 	defer Log.mutex.Unlock()
-	above(func() { writeMessage("[ERROR] " + strings.TrimSpace(err.Error())) })
+	above(func() { writeMessage("[ERROR] " + strings.TrimSpace(sanitize(err.Error()))) })
 }
 
 // Fatal prints an error on stderr and exits with status 1. It is never
@@ -224,7 +257,7 @@ func Error(err error) {
 func Fatal(err error) {
 	Log.mutex.Lock()
 	Log.clearStatus()
-	fmt.Fprintln(Log.Err, "[FATAL] "+err.Error())
+	fmt.Fprintln(Log.Err, "[FATAL] "+sanitize(err.Error()))
 	Log.mutex.Unlock()
 	os.Exit(1)
 }
