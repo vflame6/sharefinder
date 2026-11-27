@@ -5,9 +5,9 @@
 <h4 align="center">Active network shares enumeration tool.</h4>
 
 <p align="center">
-<a href="https://goreportcard.com/report/github.com/vflame6/sharefinder" target="_blank"><img src="https://goreportcard.com/badge/github.com/vflame6/sharefinder"></a>
-<a href="https://github.com/vflame6/sharefinder/issues"><img src="https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat"></a>
 <a href="https://github.com/vflame6/sharefinder/releases"><img src="https://img.shields.io/github/release/vflame6/sharefinder"></a>
+<a href="https://github.com/vflame6/sharefinder/blob/main/LICENSE"><img src="https://img.shields.io/github/license/vflame6/sharefinder"></a>
+<a href="https://github.com/vflame6/sharefinder/issues"><img src="https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat"></a>
 <a href="https://t.me/vflame6"><img src="https://img.shields.io/badge/Follow-@vflame6-33a3e1?style=flat&logo=telegram"></a>
 </p>
 
@@ -16,10 +16,6 @@ Created by Maksim Radaev/[@vflame6](https://github.com/vflame6)
 ---
 
 `sharefinder` is a network share discovery tool that enumerates shares, permissions and files in networks and domains.
-
-Authenticated scans report the target Windows version and build. When the account has local admin rights, Sharefinder also tries to refine that into the exact product/build from the remote registry.
-
-Authenticated scans also report SMB signing status and whether the supplied credentials have local admin rights on the target.
 
 ## Features
 
@@ -119,157 +115,7 @@ Commands:
   diff <old> <new>
 ```
 
-### Targets
-
-A target is an IP address, a CIDR (`10.0.0.0/24`; `/31` and `/32` work), a
-range (`10.0.0.1-50` or `10.0.0.1-10.0.0.50`), a hostname or FQDN, a
-comma-separated list of those, or a file with one or more per line (`#` starts
-a comment). Duplicates are scanned once. `--exclude-hosts` takes the same
-syntax and keeps targets out of scope, also when a hostname resolves into an
-excluded block.
-
-### Outputs
-
-Results go to stdout and everything else (banner, warnings, errors, the
-progress line and the closing summary) to stderr, so `sharefinder ... > out.txt`
-captures only results. On a terminal a progress line shows the elapsed time,
-targets done and total, reachable hosts, shares and files. Unreachable hosts
-are listed only with `--debug`; the summary counts them:
-`Summary: 254 targets, 12 reachable, 10 authenticated, 2 failed`.
-
-| Flag | Writes |
-|------|--------|
-| `-o NAME` | the console output as text, `NAME.txt` |
-| `--output-json NAME` | JSONL, `NAME.jsonl`: one `scan`, `host`, `share`, `file` or `end` record per line, written as results arrive, so a killed scan keeps what it found |
-| `--output-csv NAME` | one row per share, `NAME.csv`; cells that a spreadsheet would run as a formula are prefixed with `'` |
-| `--output-unc NAME` | `//host/share` for each readable disk share, `NAME.unc.txt`, for content scanners |
-| `--output-relay-list NAME` | the hosts that do not require SMB signing, `NAME.relay.txt`, for NTLM relay tools; taken from the negotiation, so also from null and guest scans whose logon is refused |
-| `--output-xml NAME` | the XML format of earlier versions, `NAME.xml` |
-| `--output-html NAME` | the HTML report, `NAME.html`: each host with its shares and each share's folders and files as a tree, and tables of all hosts, shares and files to search and sort |
-| `--output-all NAME` | all of the above |
-
-A known extension in `NAME` is replaced, not doubled, and existing files are
-not overwritten without `--force`. UNC paths name a host by the name it was
-scanned by, else by its IP address.
-
-```shell
-# writable shares, ready for the next tool
-jq -r 'select(.type=="share" and .write) | .unc' scan.jsonl
-# the HTML report of a scan, also of one that was cut short
-sharefinder report scan.jsonl --output-html client
-# what changed since the last scan
-sharefinder diff q3.jsonl q4.jsonl
-```
-
-### Large networks
-
-- **Discovery:** a TCP probe of the SMB port goes first, 64 at a time with a
-  2 s timeout (`--discovery-threads`, `--connect-timeout`), also through
-  `--proxy`, and only hosts that answer wait for an SMB worker. A mostly
-  empty /24 sweeps in about 8 seconds; for a /16, `--discovery-threads 512`
-  takes about 4 minutes instead of 34. `--disable-discovery` sends every
-  target straight to SMB.
-- **Shares in parallel:** a host's shares are listed over up to
-  `--max-conns-per-host` connections (default 2) while `--threads` allows.
-- **hunt** resolves computer names 32 at a time while the scan runs.
-- **Resume:** `--resume scan.jsonl` continues a scan that was interrupted or
-  killed: hosts it finished are not contacted again, shares it finished are
-  neither checked nor listed again, and the new results are appended to the
-  same file. Records of shares that were not finished are removed first. Only
-  the JSONL file is continued: add `--output-html`, or run `sharefinder report`
-  afterwards, for the report of the whole scan.
-- **Diff:** `sharefinder diff` lists new, removed and changed shares; shares
-  the newer scan did not check (it was stopped, or a host was not reached)
-  are listed apart and never as removed.
-
-### Access matrix
-
-`matrix` logs on to each host as a null session, a guest and every `-u`, and
-prints one row per share:
-
-```shell
-sharefinder matrix 10.0.0.0/24 -u 'CORP\jdoe' -p 'Passw0rd!' -u 'CORP\svc_backup' -p 'S3cret!'
-[+] 10.0.0.5: Windows Server 2022 Datacenter (name:FS01) (domain:corp.local) (signing:true) (dialect:3.1.1) (session:user)
-DATA              null:-  guest:R  jdoe:RW  svc_backup:RW
-PUBLIC            null:R  guest:R  jdoe:R  svc_backup:R
-```
-
-`R` is read, `W` write, `-` no access and `x` a refused logon. `-p`, `-H` and
-`--aes-key` pair with the `-u` in the same position; `--no-null` and
-`--no-guest` leave those sessions out. With `--max-auth-failures`, each
-account has its own lockout guard. The JSONL output records every identity's
-view.
-
-### Authentication
-
-`auth`, `hunt` and `matrix` take a password (`-p`), an NTLM hash (`-H`) or,
-with Kerberos (`-k`), an AES key (`--aes-key`, 32 or 64 hex characters) or a
-`KRB5CCNAME` ticket cache. Without `-p`, the password is read from the
-`SHAREFINDER_PASSWORD` variable or asked for on the terminal, so it stays out
-of the process list and the shell history. Without a terminal (cron, scripts)
-and without any of these, sharefinder stops instead of trying an empty
-password, which would count a failed logon against the account; `-p ''`
-tests an empty password on purpose. Through `--proxy`, the Kerberos exchanges
-with the KDC go through the proxy too.
-
-A ticket cache from impacket's getTGT serves both the LDAP bind of `hunt` and
-the SMB logons. With service tickets only (getST), `--dc-hostname` must be the
-host name in the `ldap/` ticket (usually the FQDN), and each host needs its
-own `cifs/` (or `host/`) ticket. go-smb reads a ticket cache for SMB on Linux
-only: on macOS and Windows the SMB logons need `-p`, `-H` or `--aes-key` (with
-`KRB5CCNAME` set, the password is not asked for).
-
-### Hunting a domain
-
-`hunt` lists the domain's computers over LDAP (`--forest` for every domain of
-the forest) and scans them as their names resolve: the DC resolves them, or
-the DNS server given with `--resolver`, asked over TCP through `--proxy`.
-Disabled computer accounts
-are skipped unless `--include-disabled`; `--active-within 90d` keeps the
-computers that logged on in the last 90 days. The servers that DFS links point
-to are added when they belong to a hunted domain; the others are named and
-left out of scope. The operating system recorded in AD is shown when the
-registry cannot be read. `--ldap-only` prints the computers and stops. With
-`-k`, the other domains of the forest are read from the Global Catalog:
-without their operating system, and `--active-within` does not filter them.
-
-### Safe defaults
-
-- **Account lockout:** off by default: logons go to every target at once, so
-  a wrong password reaches all of them. `--max-auth-failures N` sends logons
-  one at a time until one succeeds, so a wrong password reaches one host, and
-  stops the scan after N rejected logons; `--max-auth-failures 1` stops at the
-  first. A server that maps a failed logon to its Guest account counts as a
-  rejection, and every host line shows the session type it was scanned with
-  (`user`, `guest`, `null`). Once the credentials have worked, hosts outside
-  the account's domain (and every host with `--local-auth`) that refuse them
-  are reported per host instead of stopping the scan.
-- **Write check:** `--write-check file` (default) creates and deletes a random
-  file in each disk share root. `--write-check mask` only opens the share root
-  with write access rights and leaves nothing behind; `--write-check off` skips
-  the check.
-- **Recursion:** `--recurse` lists every level (`--depth 2` lists the share
-  root and one level below it) and can be capped per share with
-  `--max-files`. It descends into directory symlinks and junctions, such as
-  the domain folder in SYSVOL; `--disable-follow-links` skips them. A link
-  back up the tree is not followed round: a directory that lists exactly what
-  a directory above it listed is not listed again.
-- **Hung hosts and Ctrl+C:** every read and write is bounded by `--io-timeout`.
-  Ctrl+C stops the scan within seconds and still writes the partial results;
-  a second Ctrl+C exits at once.
-- **LDAP:** `hunt` never sends a password in clear text: without LDAPS or
-  StartTLS it binds with NTLM, and a simple bind over plain LDAP needs
-  `--allow-plaintext-ldap`. A failed Kerberos bind does not fall back to a
-  password bind.
-
 ## Installation
-
-With Homebrew (macOS and Linux), from v1.5.0; this repository is the tap:
-
-```shell
-brew tap vflame6/sharefinder https://github.com/vflame6/sharefinder
-brew install --cask vflame6/sharefinder/sharefinder
-```
 
 With Go, which needs **go1.26** or newer:
 
@@ -278,6 +124,13 @@ go install -v github.com/vflame6/sharefinder@latest
 ```
 
 Compiled versions are available on [Release Binaries](https://github.com/vflame6/sharefinder/releases) page.
+
+With Homebrew:
+
+```shell
+brew tap vflame6/sharefinder https://github.com/vflame6/sharefinder
+brew install --cask vflame6/sharefinder/sharefinder
+```
 
 Run the container image:
 
